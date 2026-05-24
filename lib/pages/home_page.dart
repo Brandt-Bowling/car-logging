@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/car.dart';
+import '../widgets/add_car_modal.dart';
 import 'car_details_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -88,8 +89,28 @@ class _HomePageState extends State<HomePage> {
               },
             ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Implement add car
+        onPressed: () async {
+          final newCar = await showModalBottomSheet<Car>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => const AddCarModal(),
+          );
+
+          if (newCar != null) {
+            setState(() {
+              _cars.add(newCar);
+            });
+
+            if (!context.mounted) return;
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Added ${newCar.make} ${newCar.model}'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
         },
         child: const Icon(Icons.add),
       ),
