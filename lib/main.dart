@@ -43,7 +43,7 @@ class CarLoggerApp extends StatelessWidget {
             colorScheme: lightColorScheme,
             useMaterial3: true,
             brightness: Brightness.light,
-            cardTheme: const CardTheme(
+            cardTheme: const CardThemeData(
               elevation: 4,
               shadowColor: Colors.black45,
             ),
@@ -63,7 +63,7 @@ class CarLoggerApp extends StatelessWidget {
             colorScheme: darkColorScheme,
             useMaterial3: true,
             brightness: Brightness.dark,
-            cardTheme: const CardTheme(
+            cardTheme: const CardThemeData(
               elevation: 4,
               shadowColor: Colors.black87,
             ),
