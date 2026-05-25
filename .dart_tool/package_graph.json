@@ -8,14 +8,13 @@
       "version": "1.0.0+1",
       "dependencies": [
         "cupertino_icons",
-        "dynamic_color",
+        "flutter",
+        "flutter_animate",
+        "uuid"
         "firebase_analytics",
         "firebase_core",
         "firebase_crashlytics",
-        "flutter",
-        "flutter_animate",
-        "intl",
-        "uuid"
+        "flutter"
       ],
       "devDependencies": [
         "flutter_lints",
@@ -48,15 +47,19 @@
       ]
     },
     {
-      "name": "intl",
-      "version": "0.20.2",
+      "name": "uuid",
+      "version": "4.5.3",
       "dependencies": [
-        "clock",
-        "meta",
-        "path"
+        "crypto",
+        "fixnum"
       ]
     },
     {
+      "name": "flutter_animate",
+      "version": "4.5.2",
+      "dependencies": [
+        "flutter",
+        "flutter_shaders"
       "name": "firebase_analytics",
       "version": "12.4.1",
       "dependencies": [
@@ -86,31 +89,6 @@
         "firebase_core_web",
         "flutter",
         "meta"
-      ]
-    },
-    {
-      "name": "dynamic_color",
-      "version": "1.8.1",
-      "dependencies": [
-        "flutter",
-        "flutter_test",
-        "material_color_utilities"
-      ]
-    },
-    {
-      "name": "uuid",
-      "version": "4.5.3",
-      "dependencies": [
-        "crypto",
-        "fixnum"
-      ]
-    },
-    {
-      "name": "flutter_animate",
-      "version": "4.5.2",
-      "dependencies": [
-        "flutter",
-        "flutter_shaders"
       ]
     },
     {
@@ -144,7 +122,7 @@
     },
     {
       "name": "meta",
-      "version": "1.17.0",
+      "version": "1.18.0",
       "dependencies": []
     },
     {
@@ -164,6 +142,14 @@
       ]
     },
     {
+      "name": "meta",
+      "version": "1.17.0",
+      "dependencies": []
+    },
+    {
+      "name": "collection",
+      "version": "1.19.1",
+      "dependencies": []
       "name": "vector_math",
       "version": "2.2.0",
       "dependencies": []
@@ -195,7 +181,7 @@
     },
     {
       "name": "matcher",
-      "version": "0.12.18",
+      "version": "0.12.19",
       "dependencies": [
         "async",
         "meta",
@@ -206,7 +192,7 @@
     },
     {
       "name": "test_api",
-      "version": "0.7.9",
+      "version": "0.7.11",
       "dependencies": [
         "async",
         "boolean_selector",
@@ -231,6 +217,25 @@
       ]
     },
     {
+      "name": "vector_math",
+      "version": "2.2.0",
+      "dependencies": []
+    },
+    {
+      "name": "stack_trace",
+      "version": "1.12.1",
+      "dependencies": [
+        "path"
+      ]
+    },
+    {
+      "name": "clock",
+      "version": "1.1.2",
+      "dependencies": []
+    },
+    {
+      "name": "fake_async",
+      "version": "1.3.3",
       "name": "firebase_analytics_web",
       "version": "0.6.1+7",
       "dependencies": [
@@ -243,6 +248,34 @@
       ]
     },
     {
+      "name": "path",
+      "version": "1.9.1",
+      "dependencies": []
+    },
+    {
+      "name": "matcher",
+      "version": "0.12.18",
+      "dependencies": [
+        "async",
+        "meta",
+        "stack_trace",
+        "term_glyph",
+        "test_api"
+      ]
+    },
+    {
+      "name": "test_api",
+      "version": "0.7.9",
+      "dependencies": [
+        "async",
+        "boolean_selector",
+        "collection",
+        "meta",
+        "source_span",
+        "stack_trace",
+        "stream_channel",
+        "string_scanner",
+        "term_glyph"
       "name": "firebase_analytics_platform_interface",
       "version": "6.0.1",
       "dependencies": [
@@ -277,36 +310,16 @@
       ]
     },
     {
+      "name": "sky_engine",
+      "version": "0.0.0",
+      "dependencies": []
+    },
+    {
       "name": "material_color_utilities",
       "version": "0.13.0",
       "dependencies": [
         "collection"
       ]
-    },
-    {
-      "name": "fixnum",
-      "version": "1.1.1",
-      "dependencies": []
-    },
-    {
-      "name": "crypto",
-      "version": "3.0.7",
-      "dependencies": [
-        "typed_data"
-      ]
-    },
-    {
-      "name": "flutter_shaders",
-      "version": "0.1.3",
-      "dependencies": [
-        "flutter",
-        "vector_math"
-      ]
-    },
-    {
-      "name": "sky_engine",
-      "version": "0.0.0",
-      "dependencies": []
     },
     {
       "name": "characters",
@@ -396,9 +409,40 @@
       ]
     },
     {
+      "name": "boolean_selector",
+      "version": "2.1.2",
+      "dependencies": [
+        "source_span",
+        "string_scanner"
+      ]
       "name": "web",
       "version": "1.1.1",
       "dependencies": []
+    },
+    {
+      "name": "vm_service",
+      "version": "15.2.0",
+      "dependencies": []
+    },
+    {
+      "name": "fixnum",
+      "version": "1.1.1",
+      "dependencies": []
+    },
+    {
+      "name": "flutter_shaders",
+      "version": "0.1.3",
+      "dependencies": [
+        "flutter",
+        "vector_math"
+      ]
+    },
+    {
+      "name": "crypto",
+      "version": "3.0.7",
+      "dependencies": [
+        "typed_data"
+      ]
     },
     {
       "name": "typed_data",
@@ -406,11 +450,6 @@
       "dependencies": [
         "collection"
       ]
-    },
-    {
-      "name": "vm_service",
-      "version": "15.2.0",
-      "dependencies": []
     }
   ],
   "configVersion": 1
