@@ -43,11 +43,41 @@ class CarLoggerApp extends StatelessWidget {
             colorScheme: lightColorScheme,
             useMaterial3: true,
             brightness: Brightness.light,
+            cardTheme: const CardThemeData(
+              elevation: 4,
+              shadowColor: Colors.black45,
+            ),
+            appBarTheme: const AppBarTheme(
+              elevation: 4,
+              shadowColor: Colors.black45,
+            ),
+            navigationBarTheme: const NavigationBarThemeData(
+              elevation: 4,
+              shadowColor: Colors.black45,
+            ),
+            floatingActionButtonTheme: const FloatingActionButtonThemeData(
+              elevation: 4,
+            ),
           ),
           darkTheme: ThemeData(
             colorScheme: darkColorScheme,
             useMaterial3: true,
             brightness: Brightness.dark,
+            cardTheme: const CardThemeData(
+              elevation: 4,
+              shadowColor: Colors.black87,
+            ),
+            appBarTheme: const AppBarTheme(
+              elevation: 4,
+              shadowColor: Colors.black87,
+            ),
+            navigationBarTheme: const NavigationBarThemeData(
+              elevation: 4,
+              shadowColor: Colors.black87,
+            ),
+            floatingActionButtonTheme: const FloatingActionButtonThemeData(
+              elevation: 4,
+            ),
           ),
           themeMode: ThemeMode.system,
           home: const HomePage(),
