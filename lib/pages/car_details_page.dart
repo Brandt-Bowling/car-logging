@@ -6,8 +6,9 @@ import 'tabs/glovebox_tab.dart';
 
 class CarDetailsPage extends StatefulWidget {
   final Car car;
+  final ValueChanged<Car>? onCarUpdated;
 
-  const CarDetailsPage({super.key, required this.car});
+  const CarDetailsPage({super.key, required this.car, this.onCarUpdated});
 
   @override
   State<CarDetailsPage> createState() => _CarDetailsPageState();
@@ -15,19 +16,34 @@ class CarDetailsPage extends StatefulWidget {
 
 class _CarDetailsPageState extends State<CarDetailsPage> {
   int _currentIndex = 0;
+  late Car _car;
+
+  @override
+  void initState() {
+    super.initState();
+    _car = widget.car;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.car.year} ${widget.car.make} ${widget.car.model}'),
+        title: Text('${_car.year} ${_car.make} ${_car.model}'),
       ),
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          MaintenanceTab(car: widget.car),
-          TiresTab(car: widget.car),
-          GloveboxTab(car: widget.car),
+          MaintenanceTab(car: _car),
+          TiresTab(car: _car),
+          GloveboxTab(
+            car: _car,
+            onCarUpdated: (updatedCar) {
+              setState(() {
+                _car = updatedCar;
+              });
+              widget.onCarUpdated?.call(updatedCar);
+            },
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(

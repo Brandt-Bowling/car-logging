@@ -47,7 +47,17 @@ class _HomePageState extends State<HomePage> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => CarDetailsPage(car: car),
+                          builder: (context) => CarDetailsPage(
+                            car: car,
+                            onCarUpdated: (updatedCar) {
+                              setState(() {
+                                final carIndex = _cars.indexWhere((c) => c.id == updatedCar.id);
+                                if (carIndex != -1) {
+                                  _cars[carIndex] = updatedCar;
+                                }
+                              });
+                            },
+                          ),
                         ),
                       );
                     },

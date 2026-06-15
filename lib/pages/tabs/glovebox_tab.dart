@@ -1,11 +1,62 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../models/car.dart';
 import '../../models/glovebox.dart';
 
 class GloveboxTab extends StatelessWidget {
   final Car car;
+  final ValueChanged<Car>? onCarUpdated;
 
-  const GloveboxTab({super.key, required this.car});
+  const GloveboxTab({
+    super.key,
+    required this.car,
+    this.onCarUpdated,
+  });
+
+  Future<void> _editOdometer(BuildContext context) async {
+    final controller = TextEditingController(
+      text: car.odometer != null ? car.odometer.toString() : '',
+    );
+
+    final newOdometer = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Odometer'),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Odometer (miles)',
+              hintText: 'e.g. 45000',
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = int.tryParse(controller.text);
+                if (value != null && value >= 0) {
+                  Navigator.pop(context, value);
+                } else if (controller.text.isEmpty) {
+                  Navigator.pop(context, null);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newOdometer != null && newOdometer != car.odometer) {
+      onCarUpdated?.call(car.copyWith(odometer: newOdometer));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,10 +74,14 @@ class GloveboxTab extends StatelessWidget {
           child: ListTile(
             leading: const Icon(Icons.speed),
             title: const Text('Odometer'),
-            subtitle: const Text('45,000 miles'),
+            subtitle: Text(
+              car.odometer != null
+                  ? '${NumberFormat.decimalPattern().format(car.odometer)} miles'
+                  : 'Not set',
+            ),
             trailing: IconButton(
               icon: const Icon(Icons.edit),
-              onPressed: () {},
+              onPressed: () => _editOdometer(context),
             ),
           ),
         ),
