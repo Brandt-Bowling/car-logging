@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/car.dart';
 import '../widgets/add_car_modal.dart';
 import 'car_details_page.dart';
+import '../services/storage_service.dart';
+import 'google_drive_sync_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -11,28 +13,40 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<Car> _cars = [
-    Car(
-      id: '1',
-      make: 'Toyota',
-      model: 'Camry',
-      year: 2020,
-      licensePlate: 'ABC-1234',
-    ),
-    Car(
-      id: '2',
-      make: 'Honda',
-      model: 'Civic',
-      year: 2018,
-      licensePlate: 'XYZ-9876',
-    ),
-  ];
+  List<Car> _cars = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCars();
+  }
+
+  void _loadCars() {
+    setState(() {
+      _cars = StorageService.getCars();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Cars'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.cloud_sync),
+            tooltip: 'Sync Google Drive',
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const GoogleDriveSyncPage(),
+                ),
+              );
+              _loadCars();
+            },
+          ),
+        ],
       ),
       body: _cars.isEmpty
           ? const Center(child: Text('No cars added yet.'))
@@ -108,9 +122,8 @@ class _HomePageState extends State<HomePage> {
           );
 
           if (newCar != null) {
-            setState(() {
-              _cars.add(newCar);
-            });
+            await StorageService.addCar(newCar);
+            _loadCars();
 
             if (!context.mounted) return;
 

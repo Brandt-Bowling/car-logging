@@ -19,25 +19,27 @@ class Car {
     this.odometer,
   });
 
-  Car copyWith({
-    String? id,
-    String? make,
-    String? model,
-    int? year,
-    String? imageUrl,
-    String? licensePlate,
-    String? vin,
-    int? odometer,
-  }) {
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'make': make,
+      'model': model,
+      'year': year,
+      'imageUrl': imageUrl,
+      'licensePlate': licensePlate,
+      'vin': vin,
+    };
+  }
+
+  factory Car.fromMap(Map<String, dynamic> map) {
     return Car(
-      id: id ?? this.id,
-      make: make ?? this.make,
-      model: model ?? this.model,
-      year: year ?? this.year,
-      imageUrl: imageUrl ?? this.imageUrl,
-      licensePlate: licensePlate ?? this.licensePlate,
-      vin: vin ?? this.vin,
-      odometer: odometer ?? this.odometer,
+      id: map['id'] ?? '',
+      make: map['make'] ?? '',
+      model: map['model'] ?? '',
+      year: map['year'] ?? 0,
+      imageUrl: map['imageUrl'],
+      licensePlate: map['licensePlate'],
+      vin: map['vin'],
     );
   }
 }
