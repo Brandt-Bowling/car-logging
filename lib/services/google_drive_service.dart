@@ -42,20 +42,48 @@ class GoogleDriveService {
     return drive.DriveApi(client);
   }
 
-  // Lists all folders in the user's Google Drive
-  static Future<List<drive.File>> listFolders() async {
+  // Lists folders inside a specific parent folder (defaults to 'root')
+  // Or filters globally by name if searchName is provided.
+  static Future<List<drive.File>> listFolders({
+    String parentId = 'root',
+    String? searchName,
+  }) async {
     try {
       final api = await getDriveApi();
+      
+      String query;
+      if (searchName != null && searchName.trim().isNotEmpty) {
+        final escapedName = searchName.replaceAll("'", "\\'");
+        query = "mimeType = 'application/vnd.google-apps.folder' and name contains '$escapedName' and trashed = false";
+      } else {
+        query = "mimeType = 'application/vnd.google-apps.folder' and '$parentId' in parents and trashed = false";
+      }
+
       final list = await api.files.list(
-        q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        q: query,
         spaces: 'drive',
-        pageSize: 100,
+        pageSize: 1000,
         $fields: 'files(id, name)',
       );
       return list.files ?? [];
     } catch (e) {
-      print('Error listing Google Drive folders: $e');
+      print('Error listing Google Drive folders (parentId: $parentId, search: $searchName): $e');
       return [];
+    }
+  }
+
+  // Fetches folder metadata by id
+  static Future<drive.File?> getFolderInfo(String folderId) async {
+    try {
+      final api = await getDriveApi();
+      final file = await api.files.get(
+        folderId,
+        $fields: 'id, name, parents',
+      ) as drive.File;
+      return file;
+    } catch (e) {
+      print('Error getting folder info ($folderId): $e');
+      return null;
     }
   }
 
