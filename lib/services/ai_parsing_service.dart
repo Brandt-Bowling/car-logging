@@ -16,24 +16,34 @@ class AiParsingService {
 
     if (apiKey != null && apiKey.isNotEmpty && fileBytes != null) {
       try {
-        return await _parseWithGemini(apiKey, mimeType, fileBytes);
+        final result = await _parseWithGemini(apiKey, mimeType, fileBytes);
+        result['source'] = 'gemini';
+        return result;
       } catch (e) {
         print('Gemini parsing failed, falling back to filename parsing: $e');
+        final result = _parseFromFileName(fileName);
+        result['source'] = 'filename';
+        result['error'] = e.toString();
+        return result;
       }
     }
 
     // Offline / Fallback parsing based on the filename
-    return _parseFromFileName(fileName);
+    final result = _parseFromFileName(fileName);
+    result['source'] = 'filename';
+    return result;
   }
 
+  // Parses receipt image/PDF using Gemini AI
   // Parses receipt image/PDF using Gemini AI
   static Future<Map<String, dynamic>> _parseWithGemini(
     String apiKey,
     String mimeType,
     Uint8List fileBytes,
   ) async {
+    const modelName = 'gemini-2.5-flash';
     final model = GenerativeModel(
-      model: 'gemini-1.5-flash',
+      model: modelName,
       apiKey: apiKey,
       generationConfig: GenerationConfig(responseMimeType: 'application/json'),
     );
@@ -41,11 +51,20 @@ class AiParsingService {
     final systemPrompt = '''
 You are an expert car maintenance assistant. Your task is to analyze the provided receipt (which may be an image, PDF, or document) and extract the relevant service fields as a structured JSON object.
 
-Extract the following fields:
+Be extremely thorough when looking for odometer and cost details in the document:
+
 1. title: A concise title summarizing the main service (e.g., "Oil Change", "Tire Rotation", "Brake Replacement", "State Inspection", "Battery Replacement").
-2. date: The date of the service in YYYY-MM-DD format. If not found, use today's date.
-3. odometer: The odometer reading (miles/km) as an integer. Do not include units. If not found, output null.
-4. cost: The total cost charged as a double. If not found, output null.
+2. date: The date of the service in YYYY-MM-DD format. Look for dates labeled "Date", "Service Date", "Invoice Date", "Transaction Date". If not found, use today's date.
+3. odometer: The odometer reading (miles or km) as an integer.
+   - Look for terms like: "Odometer", "Odo", "Odom", "Mileage", "Miles", "Km", "Kilometers", "In Odometer", "Out Odometer", "Vehicle Mileage", "Curr. Odo", "Reading", "Mileage In/Out", "Mileage In", "Mileage Out", "In/Out Mileage", "Odom In", "Odom Out", "Odometer In", "Odometer Out".
+   - Look for a 4-to-6 digit number near these terms.
+   - Do not include units or decimals. If not found, output null.
+4. cost: The total cost charged as a double.
+   - Look for terms like: "Total", "Grand Total", "Amount Due", "Total Paid", "Invoice Total", "Net Amount", "Amount", "Balance Due", "Paid", "Balance", "Total Invoice", "Invoice Amount", "Charges", "Total Charge".
+   - Check the bottom of the page or the final line of the summary table.
+   - Look for currency formatting (e.g., "\$123.45" or "123.45 USD") and extract just the numeric part as a double (e.g., 123.45).
+   - If there are multiple totals (e.g., Parts Total, Labor Total), pick the final grand total after tax and discounts.
+   - If not found, output null.
 5. description: A brief summary of the services performed and any recommendations or findings mentioned (max 2-3 sentences).
 
 Return ONLY a valid JSON object matching the format below:
@@ -72,13 +91,23 @@ Return ONLY a valid JSON object matching the format below:
       throw Exception('Received empty response from Gemini.');
     }
 
-    try {
-      final parsed = jsonDecode(text.trim());
-      if (parsed is Map) {
-        return Map<String, dynamic>.from(parsed);
+    var cleanedText = text.trim();
+    if (cleanedText.startsWith('```')) {
+      final lines = cleanedText.split('\n');
+      if (lines.isNotEmpty && lines.first.startsWith('```')) {
+        lines.removeAt(0);
       }
-    } catch (e) {
-      print('Failed to parse Gemini response as JSON: $text');
+      if (lines.isNotEmpty && lines.last.startsWith('```')) {
+        lines.removeLast();
+      }
+      cleanedText = lines.join('\n').trim();
+    }
+
+    final parsed = jsonDecode(cleanedText);
+    if (parsed is Map) {
+      final result = Map<String, dynamic>.from(parsed);
+      result['model_used'] = modelName;
+      return result;
     }
 
     throw Exception('Failed to get valid structured JSON from Gemini.');
