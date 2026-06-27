@@ -20,6 +20,8 @@ class _AddCarModalState extends State<AddCarModal> {
   String? _imageUrl;
   String? _licensePlate;
   String? _vin;
+  int? _odometer;
+  bool _isEv = false;
 
   void _submitForm() {
     if (_formKey.currentState!.validate()) {
@@ -33,6 +35,8 @@ class _AddCarModalState extends State<AddCarModal> {
         imageUrl: _imageUrl?.isEmpty ?? true ? null : _imageUrl,
         licensePlate: _licensePlate?.isEmpty ?? true ? null : _licensePlate,
         vin: _vin?.isEmpty ?? true ? null : _vin,
+        odometer: _odometer,
+        isEv: _isEv,
       );
 
       Navigator.pop(context, newCar);
@@ -188,6 +192,49 @@ class _AddCarModalState extends State<AddCarModal> {
                           delay: 500.ms,
                           child: TextFormField(
                             decoration: const InputDecoration(
+                              labelText: 'Current Odometer (miles)',
+                              hintText: 'e.g., 45000',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.speed),
+                            ),
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.next,
+                            validator: (value) {
+                              if (value != null && value.isNotEmpty) {
+                                final val = int.tryParse(value);
+                                if (val == null || val < 0) {
+                                  return 'Please enter a valid odometer reading';
+                                }
+                              }
+                              return null;
+                            },
+                            onSaved: (value) {
+                              if (value != null && value.isNotEmpty) {
+                                _odometer = int.tryParse(value);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildAnimatedField(
+                          delay: 550.ms,
+                          child: SwitchListTile(
+                            title: const Text('Electric Vehicle (EV)'),
+                            subtitle: const Text('Disables oil change reminders'),
+                            value: _isEv,
+                            secondary: const Icon(Icons.electric_car),
+                            onChanged: (bool value) {
+                              setState(() {
+                                _isEv = value;
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildAnimatedField(
+                          delay: 650.ms,
+                          child: TextFormField(
+                            decoration: const InputDecoration(
                               labelText: 'Image URL',
                               hintText: 'https://...',
                               border: OutlineInputBorder(),
@@ -201,7 +248,7 @@ class _AddCarModalState extends State<AddCarModal> {
                         ),
                         const SizedBox(height: 32),
                         _buildAnimatedField(
-                          delay: 600.ms,
+                          delay: 750.ms,
                           child: FilledButton.icon(
                             onPressed: _submitForm,
                             icon: const Icon(Icons.add),

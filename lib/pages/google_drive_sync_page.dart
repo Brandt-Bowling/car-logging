@@ -12,7 +12,8 @@ import '../services/google_drive_service.dart';
 import '../services/ai_parsing_service.dart';
 
 class GoogleDriveSyncPage extends StatefulWidget {
-  const GoogleDriveSyncPage({super.key});
+  final bool isTab;
+  const GoogleDriveSyncPage({super.key, this.isTab = false});
 
   @override
   State<GoogleDriveSyncPage> createState() => _GoogleDriveSyncPageState();
@@ -338,6 +339,7 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Google Drive Sync'),
+        automaticallyImplyLeading: !widget.isTab,
         actions: [
           if (_currentUser != null)
             IconButton(

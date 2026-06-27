@@ -7,6 +7,7 @@ class Car {
   final String? licensePlate;
   final String? vin;
   final int? odometer;
+  final bool isEv;
 
   Car({
     required this.id,
@@ -17,6 +18,7 @@ class Car {
     this.licensePlate,
     this.vin,
     this.odometer,
+    this.isEv = false,
   });
 
   Car copyWith({
@@ -28,6 +30,7 @@ class Car {
     String? licensePlate,
     String? vin,
     int? odometer,
+    bool? isEv,
   }) {
     return Car(
       id: id ?? this.id,
@@ -38,6 +41,7 @@ class Car {
       licensePlate: licensePlate ?? this.licensePlate,
       vin: vin ?? this.vin,
       odometer: odometer ?? this.odometer,
+      isEv: isEv ?? this.isEv,
     );
   }
 
@@ -51,6 +55,7 @@ class Car {
       'licensePlate': licensePlate,
       'vin': vin,
       'odometer': odometer,
+      'isEv': isEv,
     };
   }
 
@@ -64,6 +69,7 @@ class Car {
       licensePlate: map['licensePlate'],
       vin: map['vin'],
       odometer: map['odometer'],
+      isEv: map['isEv'] ?? false,
     );
   }
 }
