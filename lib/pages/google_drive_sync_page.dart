@@ -12,7 +12,8 @@ import '../services/google_drive_service.dart';
 import '../services/ai_parsing_service.dart';
 
 class GoogleDriveSyncPage extends StatefulWidget {
-  const GoogleDriveSyncPage({super.key});
+  final bool isTab;
+  const GoogleDriveSyncPage({super.key, this.isTab = false});
 
   @override
   State<GoogleDriveSyncPage> createState() => _GoogleDriveSyncPageState();
@@ -24,9 +25,11 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
   bool _isLoadingFolders = false;
   bool _isScanningFiles = false;
 
+  List<drive.File> _folders = [];
   List<drive.File> _driveFiles = [];
   Set<String> _importedFileIds = {};
   List<Car> _cars = [];
+  final Set<String> _selectedFileIds = {};
 
   String? _selectedFolderId;
   String? _selectedFolderName;
@@ -54,7 +57,9 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
           _onAuthenticated();
         } else {
           setState(() {
+            _folders = [];
             _driveFiles = [];
+            _selectedFileIds.clear();
           });
         }
       }
@@ -125,6 +130,8 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
         _selectedFolderId = null;
         _selectedFolderName = null;
         _driveFiles = [];
+        _folders = [];
+        _selectedFileIds.clear();
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -147,6 +154,7 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
 
     if (mounted) {
       setState(() {
+        _folders = folders;
         _isLoadingFolders = false;
       });
 
@@ -171,6 +179,7 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
       _selectedFolderId = folderId;
       _selectedFolderName = folderName;
       _driveFiles = [];
+      _selectedFileIds.clear();
     });
     await StorageService.saveSyncFolderId(folderId);
     await StorageService.saveSyncFolderName(folderName);
@@ -189,6 +198,7 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
       setState(() {
         _driveFiles = files;
         _importedFileIds = StorageService.getImportedFileIds();
+        _selectedFileIds.clear();
         _isScanningFiles = false;
       });
     }
@@ -198,79 +208,29 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
     _apiKeyController.text = _apiKey ?? '';
     showDialog(
       context: context,
-      builder: (context) {
-        final theme = Theme.of(context);
-        return AlertDialog(
-          title: const Text('Configure Gemini AI'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Enter your Gemini API Key to enable automated receipt parsing. If no key is provided, the app will parse dates, odometer readings, and costs offline using the receipt filenames.',
-                  style: TextStyle(fontSize: 13),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.secondaryContainer.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: theme.colorScheme.secondary.withOpacity(0.2),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.help_outline,
-                            size: 16,
-                            color: theme.colorScheme.secondary,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'How to get a free API Key:',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.secondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '1. Go to aistudio.google.com\n'
-                        '2. Sign in with your Google account\n'
-                        '3. Click "Get API Key" -> "Create API Key"\n'
-                        '4. Copy the key and paste it below',
-                        style: TextStyle(
-                          fontSize: 11,
-                          height: 1.4,
-                          color: theme.colorScheme.onSecondaryContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _apiKeyController,
-                  decoration: const InputDecoration(
-                    labelText: 'Gemini API Key',
-                    border: OutlineInputBorder(),
-                    hintText: 'AIzaSy...',
-                  ),
-                  obscureText: true,
-                ),
-              ],
+      builder: (context) => AlertDialog(
+        title: const Text('Configure Gemini AI'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your Gemini API Key to enable automated receipt parsing. If no key is provided, the app will parse dates, odometer readings, and costs offline using the receipt filenames.',
+              style: TextStyle(fontSize: 13),
             ),
-          ),
-          actions: [
+            const SizedBox(height: 16),
+            TextField(
+              controller: _apiKeyController,
+              decoration: const InputDecoration(
+                labelText: 'Gemini API Key',
+                border: OutlineInputBorder(),
+                hintText: 'AIzaSy...',
+              ),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
@@ -298,12 +258,270 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
             child: const Text('Save'),
           ),
         ],
-      );
-    },
-  );
-}
+      ),
+    );
+  }
 
   final TextEditingController _apiKeyController = TextEditingController();
+
+  Future<void> _updateCarOdometerIfNeeded(String carId, int odometer) async {
+    final carIndex = _cars.indexWhere((c) => c.id == carId);
+    if (carIndex != -1) {
+      final car = _cars[carIndex];
+      if (car.odometer == null || odometer > car.odometer!) {
+        final updatedCar = car.copyWith(odometer: odometer);
+        final updatedCars = List<Car>.from(_cars);
+        updatedCars[carIndex] = updatedCar;
+        await StorageService.saveCars(updatedCars);
+        if (mounted) {
+          setState(() {
+            _cars = updatedCars;
+          });
+        }
+      }
+    }
+  }
+
+  Future<void> _openBulkImportDialog(List<drive.File> files) async {
+    if (_cars.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add a vehicle first.')),
+      );
+      return;
+    }
+
+    String? selectedCarId = _cars.first.id;
+    bool isProcessing = false;
+    double progress = 0.0;
+    String currentFileName = '';
+    int currentFileIndex = 0;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            if (isProcessing) {
+              return AlertDialog(
+                title: const Text('Bulk Importing Receipts'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LinearProgressIndicator(value: progress),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Processing file ${currentFileIndex + 1} of ${files.length}',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      currentFileName,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return AlertDialog(
+              title: Text('Bulk Import (${files.length} files)'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCarId,
+                      decoration: const InputDecoration(
+                        labelText: 'Assign all to Car',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.directions_car),
+                      ),
+                      items: _cars.map((car) {
+                        return DropdownMenuItem<String>(
+                          value: car.id,
+                          child: Text('${car.year} ${car.make} ${car.model}'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          selectedCarId = val;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Files to import:',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: files.length,
+                        itemBuilder: (context, index) {
+                          final file = files[index];
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              _getFileTypeIcon(file.mimeType),
+                              size: 20,
+                            ),
+                            title: Text(
+                              file.name ?? 'Unnamed File',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: selectedCarId == null
+                      ? null
+                      : () async {
+                          setDialogState(() {
+                            isProcessing = true;
+                          });
+
+                          final apiKey = StorageService.getGeminiApiKey();
+                          final isGeminiActive = apiKey != null && apiKey.isNotEmpty;
+                          int successCount = 0;
+
+                          for (int i = 0; i < files.length; i++) {
+                            final file = files[i];
+                            setDialogState(() {
+                              currentFileIndex = i;
+                              currentFileName = file.name ?? 'Unknown';
+                              progress = i / files.length;
+                            });
+
+                            try {
+                              Uint8List? fileBytes;
+                              if (isGeminiActive && file.id != null) {
+                                fileBytes = await GoogleDriveService.downloadFile(file.id!);
+                              }
+
+                              final extractedData = await AiParsingService.parseReceipt(
+                                fileName: file.name ?? 'receipt.pdf',
+                                mimeType: file.mimeType ?? 'application/pdf',
+                                fileBytes: fileBytes,
+                              );
+
+                              final double? cost = double.tryParse(extractedData['cost']?.toString() ?? '');
+                              final int odometer = int.tryParse(extractedData['odometer']?.toString() ?? '') ?? 0;
+                              final DateTime date = DateTime.tryParse(extractedData['date']?.toString() ?? '') ?? DateTime.now();
+
+                              final record = MaintenanceRecord(
+                                id: const Uuid().v4(),
+                                carId: selectedCarId!,
+                                title: extractedData['title']?.toString().trim() ?? 'Maintenance Record',
+                                date: date,
+                                odometer: odometer,
+                                cost: cost,
+                                description: extractedData['description']?.toString().trim() ??
+                                    'Imported in bulk from file: ${file.name}',
+                                driveFileId: file.id,
+                              );
+
+                              await StorageService.addMaintenanceRecord(record);
+                              await StorageService.markFileAsImported(file.id!);
+                              await _updateCarOdometerIfNeeded(selectedCarId!, odometer);
+                              
+                              successCount++;
+                            } catch (e) {
+                              print('Failed to import ${file.name}: $e');
+                            }
+                          }
+
+                          if (mounted) {
+                            setState(() {
+                              _importedFileIds = StorageService.getImportedFileIds();
+                              _selectedFileIds.removeAll(files.map((f) => f.id).whereType<String>());
+                            });
+                          }
+
+                          if (context.mounted) {
+                            Navigator.pop(dialogContext); // Close dialog
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Successfully imported $successCount of ${files.length} receipts!'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                  child: const Text('Start Import'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildBulkActionRow(ThemeData theme) {
+    final newFiles = _driveFiles.where((f) => !_importedFileIds.contains(f.id)).toList();
+    if (newFiles.isEmpty) return const SizedBox.shrink();
+
+    final allSelected = newFiles.isNotEmpty &&
+        newFiles.every((f) => _selectedFileIds.contains(f.id));
+    final someSelected = newFiles.any((f) => _selectedFileIds.contains(f.id)) && !allSelected;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+      child: Row(
+        children: [
+          Checkbox(
+            value: allSelected ? true : (someSelected ? null : false),
+            tristate: true,
+            onChanged: (val) {
+              setState(() {
+                if (val == true) {
+                  for (final f in newFiles) {
+                    if (f.id != null) _selectedFileIds.add(f.id!);
+                  }
+                } else {
+                  _selectedFileIds.clear();
+                }
+              });
+            },
+          ),
+          Text(
+            'Select All New',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const Spacer(),
+          FilledButton.icon(
+            onPressed: _selectedFileIds.isEmpty
+                ? null
+                : () => _openBulkImportDialog(
+                      newFiles.where((f) => _selectedFileIds.contains(f.id)).toList(),
+                    ),
+            icon: const Icon(Icons.playlist_add),
+            label: Text('Bulk Import (${_selectedFileIds.length})'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _openImportReviewSheet(drive.File file) async {
     showModalBottomSheet(
@@ -316,8 +534,10 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
         onImportSuccess: (record) async {
           await StorageService.addMaintenanceRecord(record);
           await StorageService.markFileAsImported(file.id!);
+          await _updateCarOdometerIfNeeded(record.carId, record.odometer);
           setState(() {
             _importedFileIds.add(file.id!);
+            _selectedFileIds.remove(file.id!);
           });
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -338,6 +558,7 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Google Drive Sync'),
+        automaticallyImplyLeading: !widget.isTab,
         actions: [
           if (_currentUser != null)
             IconButton(
@@ -385,6 +606,10 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
                 ],
               ),
               const SizedBox(height: 8),
+              if (_driveFiles.isNotEmpty) ...[
+                _buildBulkActionRow(theme),
+                const SizedBox(height: 8),
+              ],
               _buildFilesList(theme),
             ],
           ],
@@ -491,7 +716,7 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
         title: const Text('Receipt Scanning (Gemini AI)'),
         subtitle: Text(
           hasKey
-              ? 'Active (Gemini 2.5 Flash)'
+              ? 'Active (Gemini 1.5 Flash)'
               : 'Inactive (Filename smart regex fallback active)',
           style: theme.textTheme.bodySmall?.copyWith(
             color: hasKey
@@ -509,8 +734,6 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
   }
 
   Widget _buildFolderSelectorCard(ThemeData theme) {
-    final hasFolder = _selectedFolderId != null;
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -521,68 +744,45 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
             const SizedBox(height: 12),
             if (_isLoadingFolders)
               const Center(child: LinearProgressIndicator())
-            else ...[
-              Row(
-                children: [
-                  Icon(
-                    hasFolder ? Icons.folder : Icons.folder_off,
-                    color: hasFolder ? Colors.amber : theme.colorScheme.outline,
-                    size: 40,
+            else if (_folders.isEmpty)
+              Text(
+                'No folders found in Google Drive. Please create a folder like "Car Maintenance" in your Drive first.',
+                style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
+              )
+            else
+              DropdownButtonFormField<String>(
+                initialValue: _selectedFolderId,
+                hint: const Text('Choose a folder...'),
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                ),
+                items: _folders.map((folder) {
+                  return DropdownMenuItem<String>(
+                    value: folder.id,
+                    child: Row(
                       children: [
-                        Text(
-                          hasFolder ? (_selectedFolderName ?? 'Selected Folder') : 'No Folder Selected',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: hasFolder ? FontWeight.bold : null,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          hasFolder
-                              ? 'Invoices and receipts inside this folder will be scanned.'
-                              : 'Select a folder containing your vehicle maintenance receipts.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
+                        const Icon(Icons.folder, color: Colors.amber, size: 20),
+                        const SizedBox(width: 8),
+                        Text(folder.name ?? 'Unnamed Folder'),
                       ],
                     ),
-                  ),
-                ],
+                  );
+                }).toList(),
+                onChanged: (id) {
+                  if (id != null) {
+                    final folder = _folders.firstWhere((f) => f.id == id);
+                    _selectFolder(id, folder.name ?? 'Drive Folder');
+                  }
+                },
               ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: _openFolderPicker,
-                    icon: const Icon(Icons.folder_open),
-                    label: Text(hasFolder ? 'Change Folder' : 'Select Folder'),
-                  ),
-                ],
-              ),
-            ],
           ],
         ),
       ),
     );
-  }
-
-  Future<void> _openFolderPicker() async {
-    final result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (context) => const _FolderPickerDialog(),
-    );
-
-    if (result != null && mounted) {
-      final id = result['id']!;
-      final name = result['name']!;
-      _selectFolder(id, name);
-    }
   }
 
   Widget _buildFilesList(ThemeData theme) {
@@ -628,12 +828,33 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
           final fileTypeIcon = _getFileTypeIcon(file.mimeType);
 
           return ListTile(
-            leading: Icon(
-              fileTypeIcon,
-              color: isImported
-                  ? theme.colorScheme.outline
-                  : theme.colorScheme.primary,
-            ),
+            leading: isImported
+                ? Icon(
+                    fileTypeIcon,
+                    color: theme.colorScheme.outline,
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: _selectedFileIds.contains(file.id),
+                        visualDensity: VisualDensity.compact,
+                        onChanged: (checked) {
+                          setState(() {
+                            if (checked == true) {
+                              _selectedFileIds.add(file.id!);
+                            } else {
+                              _selectedFileIds.remove(file.id!);
+                            }
+                          });
+                        },
+                      ),
+                      Icon(
+                        fileTypeIcon,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ],
+                  ),
             title: Text(
               file.name ?? 'Unnamed File',
               maxLines: 1,
@@ -718,8 +939,6 @@ class _ImportReviewModal extends StatefulWidget {
 class _ImportReviewModalState extends State<_ImportReviewModal> {
   bool _isLoading = true;
   String? _errorMessage;
-  String? _parsingSource;
-  String? _parsingError;
 
   // Form controllers
   final _formKey = GlobalKey<FormState>();
@@ -761,8 +980,6 @@ class _ImportReviewModalState extends State<_ImportReviewModal> {
 
       if (mounted) {
         setState(() {
-          _parsingSource = extractedData['source'] as String?;
-          _parsingError = extractedData['error'] as String?;
           _titleController.text = extractedData['title'] ?? '';
           _dateController.text = extractedData['date'] ?? '';
           _odometerController.text =
@@ -914,73 +1131,6 @@ class _ImportReviewModalState extends State<_ImportReviewModal> {
                 ),
               )
             else ...[
-              if (_parsingSource != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12.0),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: _parsingSource == 'gemini'
-                          ? theme.colorScheme.primaryContainer.withOpacity(0.3)
-                          : (_parsingError != null
-                              ? theme.colorScheme.errorContainer.withOpacity(0.3)
-                              : theme.colorScheme.secondaryContainer.withOpacity(0.3)),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _parsingSource == 'gemini'
-                            ? theme.colorScheme.primary.withOpacity(0.2)
-                            : (_parsingError != null
-                                ? theme.colorScheme.error.withOpacity(0.2)
-                                : theme.colorScheme.secondary.withOpacity(0.2)),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _parsingSource == 'gemini'
-                              ? Icons.auto_awesome
-                              : (_parsingError != null ? Icons.warning_amber_rounded : Icons.offline_pin_outlined),
-                          size: 18,
-                          color: _parsingSource == 'gemini'
-                              ? theme.colorScheme.primary
-                              : (_parsingError != null ? theme.colorScheme.error : theme.colorScheme.secondary),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _parsingSource == 'gemini'
-                                    ? 'Parsed successfully using Gemini AI ✨'
-                                    : (_parsingError != null
-                                        ? 'Gemini AI failed. Fell back to offline filename scan.'
-                                        : 'Parsed offline using filename scan.'),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                  color: _parsingSource == 'gemini'
-                                      ? theme.colorScheme.onPrimaryContainer
-                                      : (_parsingError != null ? theme.colorScheme.onErrorContainer : theme.colorScheme.onSecondaryContainer),
-                                ),
-                              ),
-                              if (_parsingError != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  _parsingError!,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: theme.colorScheme.error,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               if (_errorMessage != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12.0),
@@ -1125,252 +1275,6 @@ class _ImportReviewModalState extends State<_ImportReviewModal> {
                 ],
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FolderPickerDialog extends StatefulWidget {
-  const _FolderPickerDialog();
-
-  @override
-  State<_FolderPickerDialog> createState() => _FolderPickerDialogState();
-}
-
-class _FolderPickerDialogState extends State<_FolderPickerDialog> {
-  final List<Map<String, String>> _pathStack = [
-    {'id': 'root', 'name': 'My Drive'}
-  ];
-  List<drive.File> _folders = [];
-  bool _isLoading = false;
-  String? _errorMessage;
-  final TextEditingController _searchController = TextEditingController();
-  bool _isSearching = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCurrentFolders();
-  }
-
-  Future<void> _loadCurrentFolders() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    try {
-      final currentFolder = _pathStack.last;
-      final parentId = currentFolder['id']!;
-      final folders = await GoogleDriveService.listFolders(
-        parentId: parentId,
-        searchName: _isSearching ? _searchController.text : null,
-      );
-      setState(() {
-        _folders = folders;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to load folders: $e';
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _navigateToFolder(String id, String name) {
-    if (_isSearching) {
-      setState(() {
-        _isSearching = false;
-        _searchController.clear();
-        _pathStack.clear();
-        _pathStack.add({'id': 'root', 'name': 'My Drive'});
-        _pathStack.add({'id': id, 'name': name});
-      });
-    } else {
-      setState(() {
-        _pathStack.add({'id': id, 'name': name});
-      });
-    }
-    _loadCurrentFolders();
-  }
-
-  void _navigateUp() {
-    if (_pathStack.length > 1) {
-      setState(() {
-        _pathStack.removeLast();
-      });
-      _loadCurrentFolders();
-    }
-  }
-
-  void _jumpToPathIndex(int index) {
-    if (index >= 0 && index < _pathStack.length) {
-      setState(() {
-        _pathStack.removeRange(index + 1, _pathStack.length);
-      });
-      _loadCurrentFolders();
-    }
-  }
-
-  void _onSearchChanged() {
-    final query = _searchController.text.trim();
-    setState(() {
-      _isSearching = query.isNotEmpty;
-    });
-    _loadCurrentFolders();
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final currentFolderName = _pathStack.last['name']!;
-
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        height: MediaQuery.of(context).size.height * 0.7,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Select Google Drive Folder',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search folders by name...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          _onSearchChanged();
-                        },
-                      )
-                    : null,
-                border: const OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12)),
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-              onChanged: (_) => _onSearchChanged(),
-            ),
-            const SizedBox(height: 12),
-            if (!_isSearching)
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: List.generate(_pathStack.length, (index) {
-                    final isLast = index == _pathStack.length - 1;
-                    final folder = _pathStack[index];
-                    return Row(
-                      children: [
-                        if (index > 0)
-                          Icon(Icons.chevron_right, size: 16, color: theme.colorScheme.outline),
-                        InkWell(
-                          onTap: isLast ? null : () => _jumpToPathIndex(index),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                            child: Text(
-                              folder['name']!,
-                              style: TextStyle(
-                                color: isLast ? theme.colorScheme.primary : theme.colorScheme.outline,
-                                fontWeight: isLast ? FontWeight.bold : FontWeight.normal,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }),
-                ),
-              )
-            else
-              Text(
-                'Search Results',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
-              ),
-            const Divider(height: 16),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _errorMessage != null
-                      ? Center(child: Text(_errorMessage!, style: TextStyle(color: theme.colorScheme.error)))
-                      : _folders.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.folder_open, size: 48, color: theme.colorScheme.outline),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    _isSearching ? 'No matching folders found.' : 'No subfolders found here.',
-                                    style: TextStyle(color: theme.colorScheme.outline),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: _folders.length,
-                              itemBuilder: (context, index) {
-                                final folder = _folders[index];
-                                return ListTile(
-                                  leading: const Icon(Icons.folder, color: Colors.amber),
-                                  title: Text(folder.name ?? 'Unnamed Folder'),
-                                  trailing: const Icon(Icons.chevron_right, size: 16),
-                                  onTap: () => _navigateToFolder(folder.id!, folder.name ?? 'Drive Folder'),
-                                );
-                              },
-                            ),
-            ),
-            const Divider(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (!_isSearching && _pathStack.length > 1)
-                  TextButton.icon(
-                    onPressed: _navigateUp,
-                    icon: const Icon(Icons.arrow_upward, size: 16),
-                    label: const Text('Back'),
-                  )
-                else
-                  const SizedBox(),
-                FilledButton(
-                  onPressed: _isSearching
-                      ? null
-                      : () {
-                          final currentFolder = _pathStack.last;
-                          Navigator.pop(context, currentFolder);
-                        },
-                  child: Text(
-                    _isSearching ? 'Select a folder' : 'Select "$currentFolderName"',
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
