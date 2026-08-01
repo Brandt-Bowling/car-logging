@@ -13,8 +13,9 @@ void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const CarLoggerApp());
+    await tester.pumpAndSettle();
 
     // Verify that our home page is visible.
-    expect(find.text('My Cars'), findsOneWidget);
+    expect(find.text('My Garage'), findsOneWidget);
   });
 }
