@@ -66,3 +66,20 @@ To back up and sync your receipt images/PDFs:
 1. Tap **Sign In with Google** on the Sync Settings screen.
 2. Select or create a folder in your Google Drive where receipts will be stored (e.g., `Car Receipts`).
 3. Place your receipt files in that folder. The app will sync them and automatically run receipt parsing using Gemini AI (if configured) or the smart filename parser fallback.
+
+---
+
+## Deploying Updates to Firebase App Distribution
+
+Quickly push build updates to your registered testers:
+
+```bash
+# Push release build with auto-generated git release notes
+./scripts/distribute.sh
+
+# Push with custom release notes
+./scripts/distribute.sh "Updated UI layout and fixed sync bugs"
+```
+
+For full options (tester groups, CI setup), see [docs/firebase_distribution.md](docs/firebase_distribution.md).
+
