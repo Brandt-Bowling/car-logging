@@ -71,7 +71,7 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
 
   Future<void> _checkSignInSilently() async {
     try {
-      final account = await GoogleDriveService.signIn();
+      final account = await GoogleDriveService.signInSilently();
       if (account != null) {
         setState(() {
           _currentUser = account;

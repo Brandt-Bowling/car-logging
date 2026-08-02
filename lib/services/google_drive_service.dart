@@ -14,9 +14,20 @@ class GoogleDriveService {
 
   static Stream<GoogleSignInAccount?> get onCurrentUserChanged => _googleSignIn.onCurrentUserChanged;
 
+  /// Attempts silent sign-in only — no UI prompt. Use on page init.
+  static Future<GoogleSignInAccount?> signInSilently() async {
+    try {
+      return await _googleSignIn.signInSilently();
+    } catch (e) {
+      print('Silent sign-in failed: $e');
+      return null;
+    }
+  }
+
+  /// Interactive sign-in — shows the Google sign-in prompt.
+  /// Use only when the user explicitly requests sign-in.
   static Future<GoogleSignInAccount?> signIn() async {
     try {
-      // First try silent sign-in
       var account = await _googleSignIn.signInSilently();
       account ??= await _googleSignIn.signIn();
       return account;

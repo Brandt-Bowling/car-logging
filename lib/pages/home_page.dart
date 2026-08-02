@@ -1,3 +1,6 @@
+import 'dart:io' show File;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
@@ -130,6 +133,47 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Added ${newCar.make} ${newCar.model}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteCarFlow(Car car) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.delete_outline, color: Colors.red),
+        title: const Text('Remove Vehicle'),
+        content: Text(
+          'Are you sure you want to remove your ${car.year} ${car.make} ${car.model}? '
+          'This will also delete all associated maintenance records.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await StorageService.deleteCar(car.id);
+      _loadCars();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Removed ${car.make} ${car.model}'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -619,6 +663,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             ),
           );
         },
+        onLongPress: () => _deleteCarFlow(car),
         borderRadius: BorderRadius.circular(12.0),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -634,14 +679,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(8.0),
-                      image: car.imageUrl != null
-                          ? DecorationImage(
-                              image: NetworkImage(car.imageUrl!),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
+                      image: _getCarCardImage(car),
                     ),
-                    child: car.imageUrl == null
+                    child: car.imageUrl == null && car.localImagePath == null
                         ? Icon(Icons.directions_car, size: 30, color: theme.colorScheme.primary)
                         : null,
                   ),
@@ -805,5 +845,20 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         ],
       ),
     );
+  }
+
+  DecorationImage? _getCarCardImage(Car car) {
+    ImageProvider? provider;
+    if (car.localImagePath != null) {
+      if (kIsWeb) {
+        provider = NetworkImage(car.localImagePath!);
+      } else {
+        provider = FileImage(File(car.localImagePath!));
+      }
+    } else if (car.imageUrl != null) {
+      provider = NetworkImage(car.imageUrl!);
+    }
+    if (provider == null) return null;
+    return DecorationImage(image: provider, fit: BoxFit.cover);
   }
 }

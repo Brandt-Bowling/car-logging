@@ -56,6 +56,14 @@ class StorageService {
     await saveCars(cars);
   }
 
+  static Future<void> deleteCar(String carId) async {
+    final cars = getCars();
+    cars.removeWhere((car) => car.id == carId);
+    await saveCars(cars);
+    // Clean up associated maintenance records
+    await _prefs?.remove('$_keyRecordsPrefix$carId');
+  }
+
   // Maintenance Records
   static List<MaintenanceRecord> getMaintenanceRecords(String carId) {
     final data = _prefs?.getString('$_keyRecordsPrefix$carId');
