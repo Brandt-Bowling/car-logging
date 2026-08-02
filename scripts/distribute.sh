@@ -15,7 +15,7 @@ set -e
 APP_ID="1:28790911573:android:0e08bfb1f94d5b29b6dadc"
 APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
 RELEASE_NOTES=""
-TESTERS=""
+TESTERS="brandt.bowling@gmail.com"
 TESTER_GROUPS=""
 SKIP_BUILD=false
 
