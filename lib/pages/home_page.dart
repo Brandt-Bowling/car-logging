@@ -20,31 +20,18 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
+class _HomePageState extends State<HomePage> {
   List<Car> _cars = [];
   int _currentTab = 0;
   bool _isSpeedDialOpen = false;
-  late AnimationController _animationController;
-  late Animation<double> _rotationAnimation;
 
   @override
   void initState() {
     super.initState();
     _loadCars();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _rotationAnimation = Tween<double>(begin: 0.0, end: 0.125).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    ); // 0.125 turns = 45 degrees
   }
 
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
+
 
   void _loadCars() {
     setState(() {
@@ -55,11 +42,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   void _toggleSpeedDial() {
     setState(() {
       _isSpeedDialOpen = !_isSpeedDialOpen;
-      if (_isSpeedDialOpen) {
-        _animationController.forward();
-      } else {
-        _animationController.reverse();
-      }
     });
   }
 
@@ -67,7 +49,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     if (_isSpeedDialOpen) {
       setState(() {
         _isSpeedDialOpen = false;
-        _animationController.reverse();
       });
     }
   }
@@ -458,9 +439,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       floatingActionButton: FloatingActionButton(
         onPressed: _toggleSpeedDial,
         child: AnimatedRotation(
-          turns: _rotationAnimation.value,
+          turns: _isSpeedDialOpen ? 0.125 : 0.0,
           duration: const Duration(milliseconds: 250),
-          child: Icon(_isSpeedDialOpen ? Icons.close : Icons.add),
+          curve: Curves.easeOut,
+          child: const Icon(Icons.add),
         ),
       ),
     );

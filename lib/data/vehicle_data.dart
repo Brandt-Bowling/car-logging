@@ -175,7 +175,7 @@ const Map<String, List<String>> vehicleMakeModels = {
 const Map<String, String> defaultVehicleImages = {
   // Tesla
   'Tesla|Model 3':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/2019_Tesla_Model_3_Performance_AWD_Front.jpg/560px-2019_Tesla_Model_3_Performance_AWD_Front.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Blue_Tesla_Model_3.jpg/560px-Blue_Tesla_Model_3.jpg',
   'Tesla|Model Y':
       'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/2024_Tesla_Model_Y_Long_Range_in_Ultra_White%2C_front_6.15.2024.jpg/560px-2024_Tesla_Model_Y_Long_Range_in_Ultra_White%2C_front_6.15.2024.jpg',
   'Tesla|Model S':
@@ -216,6 +216,8 @@ const Map<String, String> defaultVehicleImages = {
       'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/2020_Chevrolet_Corvette_C8_Stingray_Coupe_in_Torch_Red%2C_front_10.3.20.jpg/560px-2020_Chevrolet_Corvette_C8_Stingray_Coupe_in_Torch_Red%2C_front_10.3.20.jpg',
   'Chevrolet|Silverado':
       'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/2019_Chevrolet_Silverado_LT_Trail_Boss%2C_front_5.3.19.jpg/560px-2019_Chevrolet_Silverado_LT_Trail_Boss%2C_front_5.3.19.jpg',
+  'Chevrolet|Sonic':
+      'https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/2017_Chevrolet_Sonic_LT_sedan_front_4.28.18.jpg/560px-2017_Chevrolet_Sonic_LT_sedan_front_4.28.18.jpg',
 
   // BMW
   'BMW|3 Series':
