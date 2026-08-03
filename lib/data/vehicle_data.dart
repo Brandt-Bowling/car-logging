@@ -217,7 +217,7 @@ const Map<String, String> defaultVehicleImages = {
   'Chevrolet|Silverado':
       'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/2019_Chevrolet_Silverado_LT_Trail_Boss%2C_front_5.3.19.jpg/560px-2019_Chevrolet_Silverado_LT_Trail_Boss%2C_front_5.3.19.jpg',
   'Chevrolet|Sonic':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/2017_Chevrolet_Sonic_LT_sedan_front_4.28.18.jpg/560px-2017_Chevrolet_Sonic_LT_sedan_front_4.28.18.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/2012_Chevrolet_Sonic_LTZ_sedan_front_--_04-09-2012.JPG/560px-2012_Chevrolet_Sonic_LTZ_sedan_front_--_04-09-2012.JPG',
 
   // BMW
   'BMW|3 Series':
