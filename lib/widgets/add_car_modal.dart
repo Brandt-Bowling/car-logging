@@ -187,54 +187,54 @@ class _AddCarModalState extends State<AddCarModal> {
       maxChildSize: 0.95,
       expand: false,
       builder: (context, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(28.0)),
-          ),
-          child: CustomScrollView(
-            controller: scrollController,
-            slivers: [
-              // Header
-              SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    const SizedBox(height: 12),
-                    Container(
-                      width: 48,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurfaceVariant
-                            .withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(2),
+        final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+        return AnimatedPadding(
+          padding: EdgeInsets.only(bottom: bottomInset),
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: Container(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28.0)),
+            ),
+            child: CustomScrollView(
+              controller: scrollController,
+              slivers: [
+                // Header
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 48,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurfaceVariant
+                              .withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Add New Vehicle',
-                      style: theme.textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Select your make and model to get started',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                      const SizedBox(height: 24),
+                      Text(
+                        'Add New Vehicle',
+                        style: theme.textTheme.headlineSmall,
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        'Select your make and model to get started',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
                 ),
-              ),
 
-              // Form content
-              SliverPadding(
-                padding: EdgeInsets.only(
-                  left: 24.0,
-                  right: 24.0,
-                  // Push content above the soft keyboard when it's open
-                  bottom: MediaQuery.of(context).viewInsets.bottom,
-                ),
+                // Form content
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 sliver: SliverToBoxAdapter(
                   child: Form(
                     key: _formKey,
@@ -362,9 +362,10 @@ class _AddCarModalState extends State<AddCarModal> {
               ),
             ],
           ),
-        );
-      },
-    );
+        ),
+      );
+    },
+  );
   }
 
   // ---------------------------------------------------------------------------
