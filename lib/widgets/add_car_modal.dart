@@ -234,7 +234,7 @@ class _AddCarModalState extends State<AddCarModal> {
 
                 // Form content
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 80.0),
                 sliver: SliverToBoxAdapter(
                   child: Form(
                     key: _formKey,

@@ -175,95 +175,95 @@ const Map<String, List<String>> vehicleMakeModels = {
 const Map<String, String> defaultVehicleImages = {
   // Tesla
   'Tesla|Model 3':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Blue_Tesla_Model_3.jpg/560px-Blue_Tesla_Model_3.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/0/0e/Blue_Tesla_Model_3.jpg',
   'Tesla|Model Y':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/2024_Tesla_Model_Y_Long_Range_in_Ultra_White%2C_front_6.15.2024.jpg/560px-2024_Tesla_Model_Y_Long_Range_in_Ultra_White%2C_front_6.15.2024.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/5/5c/2024_Tesla_Model_Y_Long_Range_in_Ultra_White%2C_front_6.15.2024.jpg',
   'Tesla|Model S':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/2018_Tesla_Model_S_75D.jpg/560px-2018_Tesla_Model_S_75D.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/1/15/2018_Tesla_Model_S_75D.jpg',
   'Tesla|Model X':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Tesla_Model_X_Geneva_2016.jpg/560px-Tesla_Model_X_Geneva_2016.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/5/53/Tesla_Model_X_Geneva_2016.jpg',
 
   // Toyota
   'Toyota|Camry':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/2018_Toyota_Camry_%28ASV70R%29_Ascent_sedan_%282018-08-27%29_01.jpg/560px-2018_Toyota_Camry_%28ASV70R%29_Ascent_sedan_%282018-08-27%29_01.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/a/ac/2018_Toyota_Camry_%28ASV70R%29_Ascent_sedan_%282018-08-27%29_01.jpg',
   'Toyota|Corolla':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/2019_Toyota_Corolla_Hybrid_Design_1.8.jpg/560px-2019_Toyota_Corolla_Hybrid_Design_1.8.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/d/d1/2019_Toyota_Corolla_Hybrid_Design_1.8.jpg',
   'Toyota|RAV4':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/2019_Toyota_RAV4_Adventure_%28facelift%29_front_8.24.19.jpg/560px-2019_Toyota_RAV4_Adventure_%28facelift%29_front_8.24.19.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/a/a6/2019_Toyota_RAV4_Adventure_%28facelift%29_front_8.24.19.jpg',
   'Toyota|Prius':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/7/71/2023_Toyota_Prius_Limited_%28XW60%29%2C_front_3.16.23.jpg/560px-2023_Toyota_Prius_Limited_%28XW60%29%2C_front_3.16.23.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/7/71/2023_Toyota_Prius_Limited_%28XW60%29%2C_front_3.16.23.jpg',
   'Toyota|Tacoma':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/2024_Toyota_Tacoma_TRD_Sport_Premium_in_Underground%2C_front_7.27.2024.jpg/560px-2024_Toyota_Tacoma_TRD_Sport_Premium_in_Underground%2C_front_7.27.2024.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/8/82/2024_Toyota_Tacoma_TRD_Sport_Premium_in_Underground%2C_front_7.27.2024.jpg',
 
   // Honda
   'Honda|Civic':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/2022_Honda_Civic_Touring_in_Meteorite_Gray_Metallic%2C_Front_Left%2C_12-25-2021.jpg/560px-2022_Honda_Civic_Touring_in_Meteorite_Gray_Metallic%2C_Front_Left%2C_12-25-2021.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/2/2c/2022_Honda_Civic_Touring_in_Meteorite_Gray_Metallic%2C_Front_Left%2C_12-25-2021.jpg',
   'Honda|Accord':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/2021_Honda_Accord_Sport_SE_%28facelift%29%2C_front_10.15.21.jpg/560px-2021_Honda_Accord_Sport_SE_%28facelift%29%2C_front_10.15.21.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/8/8b/2021_Honda_Accord_Sport_SE_%28facelift%29%2C_front_10.15.21.jpg',
   'Honda|CR-V':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/2023_Honda_CR-V_EX-L_in_Canyon_River_Blue%2C_Front_Left%2C_11-12-2022.jpg/560px-2023_Honda_CR-V_EX-L_in_Canyon_River_Blue%2C_Front_Left%2C_11-12-2022.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/e/e9/2023_Honda_CR-V_EX-L_in_Canyon_River_Blue%2C_Front_Left%2C_11-12-2022.jpg',
 
   // Ford
   'Ford|F-150':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/2021_Ford_F-150_Lariat_with_FX4_Off-Road_Package%2C_front_8.14.21.jpg/560px-2021_Ford_F-150_Lariat_with_FX4_Off-Road_Package%2C_front_8.14.21.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/1/1e/2021_Ford_F-150_Lariat_with_FX4_Off-Road_Package%2C_front_8.14.21.jpg',
   'Ford|Mustang':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/2024_Ford_Mustang_GT_Fastback_in_Vapor_Blue%2C_Front_Left%2C_07-20-2024.jpg/560px-2024_Ford_Mustang_GT_Fastback_in_Vapor_Blue%2C_Front_Left%2C_07-20-2024.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/1/1c/2024_Ford_Mustang_GT_Fastback_in_Vapor_Blue%2C_Front_Left%2C_07-20-2024.jpg',
   'Ford|Bronco':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/2021_Ford_Bronco_Badlands_Sasquatch_Package%2C_front_7.24.21.jpg/560px-2021_Ford_Bronco_Badlands_Sasquatch_Package%2C_front_7.24.21.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/4/46/2021_Ford_Bronco_Badlands_Sasquatch_Package%2C_front_7.24.21.jpg',
 
   // Chevrolet
   'Chevrolet|Corvette':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/2020_Chevrolet_Corvette_C8_Stingray_Coupe_in_Torch_Red%2C_front_10.3.20.jpg/560px-2020_Chevrolet_Corvette_C8_Stingray_Coupe_in_Torch_Red%2C_front_10.3.20.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/b/bf/2020_Chevrolet_Corvette_C8_Stingray_Coupe_in_Torch_Red%2C_front_10.3.20.jpg',
   'Chevrolet|Silverado':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/2019_Chevrolet_Silverado_LT_Trail_Boss%2C_front_5.3.19.jpg/560px-2019_Chevrolet_Silverado_LT_Trail_Boss%2C_front_5.3.19.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/c/cf/2019_Chevrolet_Silverado_LT_Trail_Boss%2C_front_5.3.19.jpg',
   'Chevrolet|Sonic':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/2012_Chevrolet_Sonic_1LT_hatchback_--_10-19-2011_front_1.jpg/560px-2012_Chevrolet_Sonic_1LT_hatchback_--_10-19-2011_front_1.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/f/f9/2012_Chevrolet_Sonic_1LT_hatchback_--_10-19-2011_front_1.jpg',
 
   // BMW
   'BMW|3 Series':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/2019_BMW_330i_M_Sport_automatic_2.0_Front.jpg/560px-2019_BMW_330i_M_Sport_automatic_2.0_Front.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/5/5e/2019_BMW_330i_M_Sport_automatic_2.0_Front.jpg',
 
   // Hyundai / Kia
   'Hyundai|Ioniq 5':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Hyundai_Ioniq_5_72%2C6_kWh_Allradantrieb_Uniq_%28NE1%29_%E2%80%93_f_20210612.jpg/560px-Hyundai_Ioniq_5_72%2C6_kWh_Allradantrieb_Uniq_%28NE1%29_%E2%80%93_f_20210612.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/f/f7/Hyundai_Ioniq_5_72%2C6_kWh_Allradantrieb_Uniq_%28NE1%29_%E2%80%93_f_20210612.jpg',
   'Kia|EV6':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/2022_Kia_EV6_Wind_AWD_in_Glacier%2C_front_6.25.22.jpg/560px-2022_Kia_EV6_Wind_AWD_in_Glacier%2C_front_6.25.22.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/7/7a/2022_Kia_EV6_Wind_AWD_in_Glacier%2C_front_6.25.22.jpg',
   'Kia|Telluride':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/7/76/2020_Kia_Telluride_S%2C_front_10.11.19.jpg/560px-2020_Kia_Telluride_S%2C_front_10.11.19.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/7/76/2020_Kia_Telluride_S%2C_front_10.11.19.jpg',
 
   // Subaru
   'Subaru|Outback':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/2020_Subaru_Outback_Touring_XT%2C_front_1.5.20.jpg/560px-2020_Subaru_Outback_Touring_XT%2C_front_1.5.20.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/e/e8/2020_Subaru_Outback_Touring_XT%2C_front_1.5.20.jpg',
   'Subaru|Crosstrek':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/2024_Subaru_Crosstrek_Premium_in_Oasis_Turquoise%2C_Front_Left%2C_09-09-2023.jpg/560px-2024_Subaru_Crosstrek_Premium_in_Oasis_Turquoise%2C_Front_Left%2C_09-09-2023.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/b/b6/2024_Subaru_Crosstrek_Premium_in_Oasis_Turquoise%2C_Front_Left%2C_09-09-2023.jpg',
 
   // Jeep
   'Jeep|Wrangler':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/2019_Jeep_Wrangler_Sahara_2.0L_front_4.28.19.jpg/560px-2019_Jeep_Wrangler_Sahara_2.0L_front_4.28.19.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/a/a2/2019_Jeep_Wrangler_Sahara_2.0L_front_4.28.19.jpg',
   'Jeep|Grand Cherokee':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/2022_Jeep_Grand_Cherokee_Summit_Reserve_4xe%2C_front_6.25.22.jpg/560px-2022_Jeep_Grand_Cherokee_Summit_Reserve_4xe%2C_front_6.25.22.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/7/72/2022_Jeep_Grand_Cherokee_Summit_Reserve_4xe%2C_front_6.25.22.jpg',
 
   // Porsche
   'Porsche|911':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Porsche_992_Carrera_4S_%28Crayon%29.jpg/560px-Porsche_992_Carrera_4S_%28Crayon%29.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/5/5b/Porsche_992_Carrera_4S_%28Crayon%29.jpg',
   'Porsche|Taycan':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Porsche_Taycan_at_IAA_2019_IMG_0250.jpg/560px-Porsche_Taycan_at_IAA_2019_IMG_0250.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/6/6e/Porsche_Taycan_at_IAA_2019_IMG_0250.jpg',
 
   // Volkswagen
   'Volkswagen|Golf GTI':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/2022_Volkswagen_Golf_GTI_in_Kings_Red_Metallic%2C_Front_Left%2C_11-20-2021.jpg/560px-2022_Volkswagen_Golf_GTI_in_Kings_Red_Metallic%2C_Front_Left%2C_11-20-2021.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/8/8c/2022_Volkswagen_Golf_GTI_in_Kings_Red_Metallic%2C_Front_Left%2C_11-20-2021.jpg',
 
   // Rivian
   'Rivian|R1T':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Rivian_R1T_Launch_Edition_FR_%28cropped%29.jpg/560px-Rivian_R1T_Launch_Edition_FR_%28cropped%29.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/1/13/Rivian_R1T_Launch_Edition_FR_%28cropped%29.jpg',
 
   // Nissan
   'Nissan|Rogue':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/2021_Nissan_Rogue_SV_in_Scarlet_Ember%2C_front_1.4.21.jpg/560px-2021_Nissan_Rogue_SV_in_Scarlet_Ember%2C_front_1.4.21.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/7/72/2021_Nissan_Rogue_SV_in_Scarlet_Ember%2C_front_1.4.21.jpg',
 
   // Mazda
   'Mazda|MX-5 Miata':
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Mazda_MX-5_ND_front.jpg/560px-Mazda_MX-5_ND_front.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/8/8c/Mazda_MX-5_ND_front.jpg',
 };
 
 // ---------------------------------------------------------------------------

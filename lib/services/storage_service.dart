@@ -29,7 +29,7 @@ class StorageService {
           model: 'Sonic',
           year: 2013,
           imageUrl:
-              'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/2012_Chevrolet_Sonic_1LT_hatchback_--_10-19-2011_front_1.jpg/560px-2012_Chevrolet_Sonic_1LT_hatchback_--_10-19-2011_front_1.jpg',
+              'https://upload.wikimedia.org/wikipedia/commons/f/f9/2012_Chevrolet_Sonic_1LT_hatchback_--_10-19-2011_front_1.jpg',
         ),
         Car(
           id: '2',
@@ -37,7 +37,7 @@ class StorageService {
           model: 'Model 3',
           year: 2018,
           imageUrl:
-              'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Blue_Tesla_Model_3.jpg/560px-Blue_Tesla_Model_3.jpg',
+              'https://upload.wikimedia.org/wikipedia/commons/0/0e/Blue_Tesla_Model_3.jpg',
           isEv: true,
         ),
       ];
