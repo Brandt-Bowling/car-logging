@@ -32,7 +32,7 @@ const Map<String, List<String>> vehicleMakeModels = {
   'Chevrolet': [
     'Blazer', 'Blazer EV', 'Bolt EUV', 'Bolt EV', 'Camaro',
     'Colorado', 'Corvette', 'Equinox', 'Equinox EV',
-    'Malibu', 'Silverado', 'Silverado EV',
+    'Malibu', 'Silverado', 'Silverado EV', 'Sonic',
     'Suburban', 'Tahoe', 'Trailblazer', 'Traverse', 'Trax',
   ],
   'Chrysler': [

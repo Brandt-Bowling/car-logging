@@ -229,7 +229,12 @@ class _AddCarModalState extends State<AddCarModal> {
 
               // Form content
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                padding: EdgeInsets.only(
+                  left: 24.0,
+                  right: 24.0,
+                  // Push content above the soft keyboard when it's open
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                ),
                 sliver: SliverToBoxAdapter(
                   child: Form(
                     key: _formKey,
