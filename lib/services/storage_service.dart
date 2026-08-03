@@ -29,7 +29,7 @@ class StorageService {
           model: 'Sonic',
           year: 2013,
           imageUrl:
-              'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/2012_Chevrolet_Sonic_LTZ_sedan_front_--_04-09-2012.JPG/560px-2012_Chevrolet_Sonic_LTZ_sedan_front_--_04-09-2012.JPG',
+              'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/2012_Chevrolet_Sonic_1LT_hatchback_--_10-19-2011_front_1.jpg/560px-2012_Chevrolet_Sonic_1LT_hatchback_--_10-19-2011_front_1.jpg',
         ),
         Car(
           id: '2',
