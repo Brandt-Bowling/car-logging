@@ -40,7 +40,7 @@ class CarLoggerApp extends StatelessWidget {
         }
 
         return MaterialApp(
-          title: 'Car Logger',
+          title: 'Garage Journal',
           theme: ThemeData(
             colorScheme: lightColorScheme,
             useMaterial3: true,
