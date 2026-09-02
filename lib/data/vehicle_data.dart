@@ -411,3 +411,15 @@ String? getDefaultImageUrl(String make, String model) {
 bool isKnownEv(String make, String model) {
   return knownEvModels.contains('$make|$model');
 }
+
+/// Cleans up Wikimedia image URLs (converting broken thumb URLs to direct file links).
+String sanitizeImageUrl(String url) {
+  if (url.contains('upload.wikimedia.org/wikipedia/commons/thumb/')) {
+    final regExp = RegExp(r'/wikipedia/commons/thumb/([^/]+/[^/]+)/[^/]+$');
+    if (regExp.hasMatch(url)) {
+      return url.replaceAllMapped(
+          regExp, (match) => '/wikipedia/commons/${match.group(1)}');
+    }
+  }
+  return url;
+}

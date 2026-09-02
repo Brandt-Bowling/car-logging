@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../data/vehicle_data.dart';
 import '../models/car.dart';
 import '../models/maintenance_record.dart';
 import '../widgets/add_car_modal.dart';
@@ -831,14 +832,17 @@ class _HomePageState extends State<HomePage> {
 
   DecorationImage? _getCarCardImage(Car car) {
     ImageProvider? provider;
-    if (car.localImagePath != null) {
+    if (car.localImagePath != null && car.localImagePath!.isNotEmpty) {
       if (kIsWeb) {
         provider = NetworkImage(car.localImagePath!);
       } else {
         provider = FileImage(File(car.localImagePath!));
       }
-    } else if (car.imageUrl != null) {
-      provider = NetworkImage(car.imageUrl!);
+    } else {
+      final url = car.imageUrl ?? getDefaultImageUrl(car.make, car.model);
+      if (url != null && url.isNotEmpty) {
+        provider = NetworkImage(sanitizeImageUrl(url));
+      }
     }
     if (provider == null) return null;
     return DecorationImage(image: provider, fit: BoxFit.cover);

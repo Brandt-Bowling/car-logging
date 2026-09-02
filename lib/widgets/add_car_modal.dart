@@ -43,13 +43,40 @@ class _AddCarModalState extends State<AddCarModal> {
   bool _makeError = false;
   bool _modelError = false;
 
+  DraggableScrollableController? _sheetController;
+
+  @override
+  void initState() {
+    super.initState();
+    _sheetController = DraggableScrollableController();
+  }
+
   @override
   void dispose() {
     _makeController.dispose();
     _modelController.dispose();
     _makeFocusNode.dispose();
     _modelFocusNode.dispose();
+    _sheetController?.dispose();
     super.dispose();
+  }
+
+  void _expandSheetIfKeyboardOpen() {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    if (bottomInset > 0 && _sheetController != null && _sheetController!.isAttached) {
+      if (_sheetController!.size < 0.9) {
+        _sheetController!.animateTo(
+          0.95,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    }
+  }
+
+  EdgeInsets _getScrollPadding(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return EdgeInsets.only(bottom: bottomInset + 100.0);
   }
 
   // ---------------------------------------------------------------------------
@@ -181,60 +208,66 @@ class _AddCarModalState extends State<AddCarModal> {
         _selectedMake != null ? getModelsForMake(_selectedMake!) : <String>[];
     final hasImage = _imageUrl != null || _localImagePath != null;
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _expandSheetIfKeyboardOpen();
+    });
+
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
     return DraggableScrollableSheet(
+      controller: _sheetController,
       initialChildSize: 0.75,
       minChildSize: 0.4,
       maxChildSize: 0.95,
       expand: false,
       builder: (context, scrollController) {
-        final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-        return AnimatedPadding(
-          padding: EdgeInsets.only(bottom: bottomInset),
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          child: Container(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(28.0)),
-            ),
-            child: CustomScrollView(
-              controller: scrollController,
-              slivers: [
-                // Header
-                SliverToBoxAdapter(
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 12),
-                      Container(
-                        width: 48,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.onSurfaceVariant
-                              .withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(28.0)),
+          ),
+          child: CustomScrollView(
+            controller: scrollController,
+            slivers: [
+              // Header
+              SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(
+                      width: 48,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.onSurfaceVariant
+                            .withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      const SizedBox(height: 24),
-                      Text(
-                        'Add New Vehicle',
-                        style: theme.textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Add New Vehicle',
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Select your make and model to get started',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Select your make and model to get started',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
                 ),
+              ),
 
-                // Form content
-                SliverPadding(
-                  padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 80.0),
+              // Form content
+              SliverPadding(
+                padding: EdgeInsets.only(
+                  left: 24.0,
+                  right: 24.0,
+                  bottom: bottomInset + 120.0,
+                ),
                 sliver: SliverToBoxAdapter(
                   child: Form(
                     key: _formKey,
@@ -280,6 +313,7 @@ class _AddCarModalState extends State<AddCarModal> {
                         _buildAnimatedField(
                           delay: 400.ms,
                           child: TextFormField(
+                            scrollPadding: _getScrollPadding(context),
                             decoration: const InputDecoration(
                               labelText: 'License Plate',
                               hintText: 'e.g., ABC-1234',
@@ -297,6 +331,7 @@ class _AddCarModalState extends State<AddCarModal> {
                         _buildAnimatedField(
                           delay: 450.ms,
                           child: TextFormField(
+                            scrollPadding: _getScrollPadding(context),
                             decoration: const InputDecoration(
                               labelText: 'VIN',
                               hintText: 'Vehicle Identification Number',
@@ -314,6 +349,7 @@ class _AddCarModalState extends State<AddCarModal> {
                         _buildAnimatedField(
                           delay: 500.ms,
                           child: TextFormField(
+                            scrollPadding: _getScrollPadding(context),
                             decoration: const InputDecoration(
                               labelText: 'Current Odometer (miles)',
                               hintText: 'e.g., 45000',
@@ -362,10 +398,9 @@ class _AddCarModalState extends State<AddCarModal> {
               ),
             ],
           ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
