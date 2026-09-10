@@ -36,7 +36,18 @@ jobs:
           cache: true
 
       - name: Install Dependencies
-        run: flutter pub get
+        run: |
+          for i in 1 2 3; do
+            flutter pub get && break || {
+              if [ $i -lt 3 ]; then
+                echo "flutter pub get failed (attempt $i of 3). Retrying in 10s..."
+                sleep 10
+              else
+                echo "flutter pub get failed on attempt $i."
+                exit 1
+              fi
+            }
+          done
 
       - name: Decode google-services.json
         run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 --decode > android/app/google-services.json
