@@ -18,6 +18,7 @@ RELEASE_NOTES=""
 TESTERS="brandt.bowling@gmail.com"
 TESTER_GROUPS=""
 SKIP_BUILD=false
+BUILD_NUMBER=""
 
 # Styling
 GREEN='\033[0;32m'
@@ -58,6 +59,10 @@ while [[ $# -gt 0 ]]; do
             TESTER_GROUPS="$2"
             shift 2
             ;;
+        --build-number|-b)
+            BUILD_NUMBER="$2"
+            shift 2
+            ;;
         --skip-build|--no-build)
             SKIP_BUILD=true
             shift 1
@@ -69,6 +74,7 @@ while [[ $# -gt 0 ]]; do
             echo "  -n, --notes <string>     Release notes text for this distribution build"
             echo "  -t, --testers <emails>   Comma-separated list of tester emails"
             echo "  -g, --groups <aliases>   Comma-separated list of tester group aliases"
+            echo "  -b, --build-number <num> Explicit build number for versionName/versionCode"
             echo "  --skip-build             Skip 'flutter build apk --release' step"
             echo "  -h, --help               Display this help message"
             echo ""
@@ -106,7 +112,11 @@ log_info "Release Notes: \"${RELEASE_NOTES}\""
 # Build Release APK
 if [ "$SKIP_BUILD" = false ]; then
     log_info "Building Flutter Android Release APK..."
-    flutter build apk --release
+    if [ -z "$BUILD_NUMBER" ]; then
+        BUILD_NUMBER=$(date +%s)
+    fi
+    log_info "Using build number: ${BUILD_NUMBER}"
+    flutter build apk --release --build-number="${BUILD_NUMBER}"
     log_success "Build completed successfully."
 else
     log_warn "Skipping build step (--skip-build specified)."
