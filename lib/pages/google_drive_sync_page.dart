@@ -1,5 +1,5 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -10,6 +10,7 @@ import '../models/maintenance_record.dart';
 import '../services/storage_service.dart';
 import '../services/google_drive_service.dart';
 import '../services/ai_parsing_service.dart';
+import '../widgets/drive_folder_picker_sheet.dart';
 
 class GoogleDriveSyncPage extends StatefulWidget {
   final bool isTab;
@@ -24,8 +25,8 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
   bool _isSigningIn = false;
   bool _isLoadingFolders = false;
   bool _isScanningFiles = false;
+  bool _includeSubfolders = false;
 
-  List<drive.File> _folders = [];
   List<drive.File> _driveFiles = [];
   Set<String> _importedFileIds = {};
   List<Car> _cars = [];
@@ -57,7 +58,6 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
           _onAuthenticated();
         } else {
           setState(() {
-            _folders = [];
             _driveFiles = [];
             _selectedFileIds.clear();
           });
@@ -97,6 +97,7 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
     try {
       final account = await GoogleDriveService.signIn();
       if (account != null) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Connected as ${account.email}'),
@@ -104,14 +105,36 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
           ),
         );
       }
+    } on GoogleDriveSignInException catch (e) {
+      if (!mounted) return;
+      if (e.code == 'CANCELED') {
+        return;
+      }
+      if (e.isConfigurationError) {
+        _showConfigurationDialog(e);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Sign-in failed: $e'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (!mounted) return;
+      final parsed = GoogleDriveSignInException.fromError(e);
+      if (parsed.isConfigurationError) {
+        _showConfigurationDialog(parsed);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sign-in failed: ${parsed.message}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -119,6 +142,88 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
         });
       }
     }
+  }
+
+  void _showConfigurationDialog(GoogleDriveSignInException error) {
+    const consoleUrl =
+        'https://console.cloud.google.com/apis/credentials/consent?project=car-logger-track';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.admin_panel_settings,
+                color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Google Cloud Setup Required')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                error.message,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Because this app is in development mode ("Testing"), Google restricts Google Drive access to authorized test accounts:',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              ...error.troubleshootingSteps.map(
+                (step) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Expanded(
+                        child: Text(step, style: const TextStyle(fontSize: 13)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const SelectableText(
+                  consoleUrl,
+                  style: TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(const ClipboardData(text: consoleUrl));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Copied Google Cloud Console URL to clipboard!'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy, size: 18),
+            label: const Text('Copy URL'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Got It'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _handleSignOut() async {
@@ -130,7 +235,6 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
         _selectedFolderId = null;
         _selectedFolderName = null;
         _driveFiles = [];
-        _folders = [];
         _selectedFileIds.clear();
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -154,7 +258,6 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
 
     if (mounted) {
       setState(() {
-        _folders = folders;
         _isLoadingFolders = false;
       });
 
@@ -171,6 +274,17 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
           _selectFolder(autoMatch.id!, autoMatch.name ?? 'Drive Folder');
         }
       }
+    }
+  }
+
+  Future<void> _openFolderPicker() async {
+    final selection = await showDriveFolderPicker(
+      context,
+      currentFolderId: _selectedFolderId,
+      currentFolderName: _selectedFolderName,
+    );
+    if (selection != null && mounted) {
+      await _selectFolder(selection.id, selection.path);
     }
   }
 
@@ -192,7 +306,10 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
       _isScanningFiles = true;
     });
 
-    final files = await GoogleDriveService.listFiles(_selectedFolderId!);
+    final files = await GoogleDriveService.listFiles(
+      _selectedFolderId!,
+      recursive: _includeSubfolders,
+    );
 
     if (mounted) {
       setState(() {
@@ -740,45 +857,124 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Sync Folder Source', style: theme.textTheme.titleSmall),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.folder_shared_outlined,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text('Sync Folder Source', style: theme.textTheme.titleSmall),
+                  ],
+                ),
+                if (_selectedFolderId != null)
+                  TextButton.icon(
+                    onPressed: _openFolderPicker,
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('Change'),
+                  ),
+              ],
+            ),
             const SizedBox(height: 12),
-            if (_isLoadingFolders)
-              const Center(child: LinearProgressIndicator())
-            else if (_folders.isEmpty)
-              Text(
-                'No folders found in Google Drive. Please create a folder like "Car Maintenance" in your Drive first.',
-                style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
-              )
-            else
-              DropdownButtonFormField<String>(
-                initialValue: _selectedFolderId,
-                hint: const Text('Choose a folder...'),
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+            if (_selectedFolderId == null) ...[
+              if (_isLoadingFolders)
+                const Center(child: LinearProgressIndicator())
+              else ...[
+                Text(
+                  'No folder selected yet. Choose any Google Drive folder (including nested folders like "cars / sonic") where maintenance receipts are stored.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                items: _folders.map((folder) {
-                  return DropdownMenuItem<String>(
-                    value: folder.id,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.folder, color: Colors.amber, size: 20),
-                        const SizedBox(width: 8),
-                        Text(folder.name ?? 'Unnamed Folder'),
-                      ],
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: _openFolderPicker,
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text('Browse Google Drive'),
+                ),
+              ],
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.folder_rounded,
+                      color: Colors.amber.shade700,
+                      size: 36,
                     ),
-                  );
-                }).toList(),
-                onChanged: (id) {
-                  if (id != null) {
-                    final folder = _folders.firstWhere((f) => f.id == id);
-                    _selectFolder(id, folder.name ?? 'Drive Folder');
-                  }
-                },
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _selectedFolderName ?? 'Selected Folder',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Ready to sync maintenance files',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.outline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.refresh),
+                      tooltip: 'Re-scan folder',
+                      onPressed: _isScanningFiles ? null : _scanFolderFiles,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: 'Clear folder selection',
+                      onPressed: () {
+                        setState(() {
+                          _selectedFolderId = null;
+                          _selectedFolderName = null;
+                          _driveFiles = [];
+                          _selectedFileIds.clear();
+                        });
+                        StorageService.saveSyncFolderId(null);
+                        StorageService.saveSyncFolderName(null);
+                      },
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text('Include nested subfolders'),
+                subtitle: const Text('Recursively scan receipts in child folders'),
+                value: _includeSubfolders,
+                onChanged: (val) {
+                  setState(() {
+                    _includeSubfolders = val ?? false;
+                  });
+                  _scanFolderFiles();
+                },
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ],
           ],
         ),
       ),
