@@ -62,6 +62,7 @@ class _AddCarModalState extends State<AddCarModal> {
   }
 
   void _expandSheetIfKeyboardOpen() {
+    if (!mounted) return;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     if (bottomInset > 0 && _sheetController != null && _sheetController!.isAttached) {
       if (_sheetController!.size < 0.9) {
@@ -229,6 +230,7 @@ class _AddCarModalState extends State<AddCarModal> {
           ),
           child: CustomScrollView(
             controller: scrollController,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             slivers: [
               // Header
               SliverToBoxAdapter(
@@ -433,6 +435,7 @@ class _AddCarModalState extends State<AddCarModal> {
             return TextFormField(
               controller: controller,
               focusNode: focusNode,
+              scrollPadding: _getScrollPadding(context),
               decoration: InputDecoration(
                 labelText: 'Make *',
                 hintText: 'Search makes…',
@@ -505,6 +508,7 @@ class _AddCarModalState extends State<AddCarModal> {
           controller: controller,
           focusNode: focusNode,
           enabled: isEnabled,
+          scrollPadding: _getScrollPadding(context),
           decoration: InputDecoration(
             labelText: 'Model *',
             hintText: isEnabled
