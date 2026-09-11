@@ -43,13 +43,41 @@ class _AddCarModalState extends State<AddCarModal> {
   bool _makeError = false;
   bool _modelError = false;
 
+  DraggableScrollableController? _sheetController;
+
+  @override
+  void initState() {
+    super.initState();
+    _sheetController = DraggableScrollableController();
+  }
+
   @override
   void dispose() {
     _makeController.dispose();
     _modelController.dispose();
     _makeFocusNode.dispose();
     _modelFocusNode.dispose();
+    _sheetController?.dispose();
     super.dispose();
+  }
+
+  void _expandSheetIfKeyboardOpen() {
+    if (!mounted) return;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    if (bottomInset > 0 && _sheetController != null && _sheetController!.isAttached) {
+      if (_sheetController!.size < 0.9) {
+        _sheetController!.animateTo(
+          0.95,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    }
+  }
+
+  EdgeInsets _getScrollPadding(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return EdgeInsets.only(bottom: bottomInset + 100.0);
   }
 
   // ---------------------------------------------------------------------------
@@ -181,7 +209,14 @@ class _AddCarModalState extends State<AddCarModal> {
         _selectedMake != null ? getModelsForMake(_selectedMake!) : <String>[];
     final hasImage = _imageUrl != null || _localImagePath != null;
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _expandSheetIfKeyboardOpen();
+    });
+
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
     return DraggableScrollableSheet(
+      controller: _sheetController,
       initialChildSize: 0.75,
       minChildSize: 0.4,
       maxChildSize: 0.95,
@@ -195,6 +230,7 @@ class _AddCarModalState extends State<AddCarModal> {
           ),
           child: CustomScrollView(
             controller: scrollController,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             slivers: [
               // Header
               SliverToBoxAdapter(
@@ -229,7 +265,11 @@ class _AddCarModalState extends State<AddCarModal> {
 
               // Form content
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                padding: EdgeInsets.only(
+                  left: 24.0,
+                  right: 24.0,
+                  bottom: bottomInset + 120.0,
+                ),
                 sliver: SliverToBoxAdapter(
                   child: Form(
                     key: _formKey,
@@ -275,6 +315,7 @@ class _AddCarModalState extends State<AddCarModal> {
                         _buildAnimatedField(
                           delay: 400.ms,
                           child: TextFormField(
+                            scrollPadding: _getScrollPadding(context),
                             decoration: const InputDecoration(
                               labelText: 'License Plate',
                               hintText: 'e.g., ABC-1234',
@@ -292,6 +333,7 @@ class _AddCarModalState extends State<AddCarModal> {
                         _buildAnimatedField(
                           delay: 450.ms,
                           child: TextFormField(
+                            scrollPadding: _getScrollPadding(context),
                             decoration: const InputDecoration(
                               labelText: 'VIN',
                               hintText: 'Vehicle Identification Number',
@@ -309,6 +351,7 @@ class _AddCarModalState extends State<AddCarModal> {
                         _buildAnimatedField(
                           delay: 500.ms,
                           child: TextFormField(
+                            scrollPadding: _getScrollPadding(context),
                             decoration: const InputDecoration(
                               labelText: 'Current Odometer (miles)',
                               hintText: 'e.g., 45000',
@@ -392,6 +435,7 @@ class _AddCarModalState extends State<AddCarModal> {
             return TextFormField(
               controller: controller,
               focusNode: focusNode,
+              scrollPadding: _getScrollPadding(context),
               decoration: InputDecoration(
                 labelText: 'Make *',
                 hintText: 'Search makes…',
@@ -464,6 +508,7 @@ class _AddCarModalState extends State<AddCarModal> {
           controller: controller,
           focusNode: focusNode,
           enabled: isEnabled,
+          scrollPadding: _getScrollPadding(context),
           decoration: InputDecoration(
             labelText: 'Model *',
             hintText: isEnabled

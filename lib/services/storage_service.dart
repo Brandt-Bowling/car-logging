@@ -21,21 +21,24 @@ class StorageService {
   static List<Car> getCars() {
     final data = _prefs?.getString(_keyCars);
     if (data == null) {
-      // Default initial mock cars so the user doesn't see an empty screen
+      // Default initial cars so the user doesn't see an empty screen
       final defaults = [
         Car(
           id: '1',
-          make: 'Toyota',
-          model: 'Camry',
-          year: 2020,
-          licensePlate: 'ABC-1234',
+          make: 'Chevrolet',
+          model: 'Sonic',
+          year: 2013,
+          imageUrl:
+              'https://upload.wikimedia.org/wikipedia/commons/f/f9/2012_Chevrolet_Sonic_1LT_hatchback_--_10-19-2011_front_1.jpg',
         ),
         Car(
           id: '2',
-          make: 'Honda',
-          model: 'Civic',
+          make: 'Tesla',
+          model: 'Model 3',
           year: 2018,
-          licensePlate: 'XYZ-9876',
+          imageUrl:
+              'https://upload.wikimedia.org/wikipedia/commons/0/0e/Blue_Tesla_Model_3.jpg',
+          isEv: true,
         ),
       ];
       saveCars(defaults);
@@ -68,7 +71,7 @@ class StorageService {
   static List<MaintenanceRecord> getMaintenanceRecords(String carId) {
     final data = _prefs?.getString('$_keyRecordsPrefix$carId');
     if (data == null) {
-      // Return default mock record for the Toyota Camry for visual continuity
+      // Return default mock record for the Chevy Sonic for visual continuity
       if (carId == '1') {
         final defaults = [
           MaintenanceRecord(
