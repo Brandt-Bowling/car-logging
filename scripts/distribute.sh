@@ -113,7 +113,7 @@ log_info "Release Notes: \"${RELEASE_NOTES}\""
 if [ "$SKIP_BUILD" = false ]; then
     log_info "Building Flutter Android Release APK..."
     if [ -z "$BUILD_NUMBER" ]; then
-        BUILD_NUMBER=$(date +%s)
+        BUILD_NUMBER=$(git rev-list --count HEAD 2>/dev/null || echo 1)
     fi
     log_info "Using build number: ${BUILD_NUMBER}"
     flutter build apk --release --build-number="${BUILD_NUMBER}"
