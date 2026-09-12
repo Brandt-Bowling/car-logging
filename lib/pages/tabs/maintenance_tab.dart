@@ -2,39 +2,69 @@ import 'package:flutter/material.dart';
 import '../../models/car.dart';
 import '../../models/maintenance_record.dart';
 import '../../services/storage_service.dart';
+import '../../widgets/maintenance_record_dialog.dart';
 
 class MaintenanceTab extends StatefulWidget {
   final Car car;
+  final ValueChanged<Car>? onCarUpdated;
 
-  const MaintenanceTab({super.key, required this.car});
+  const MaintenanceTab({super.key, required this.car, this.onCarUpdated});
 
   @override
-  State<MaintenanceTab> createState() => _MaintenanceTabState();
+  State<MaintenanceTab> createState() => MaintenanceTabState();
 }
 
-class _MaintenanceTabState extends State<MaintenanceTab> {
+class MaintenanceTabState extends State<MaintenanceTab> {
   List<MaintenanceRecord> _records = [];
 
   @override
   void initState() {
     super.initState();
-    _loadRecords();
+    loadRecords();
   }
 
   @override
   void didUpdateWidget(covariant MaintenanceTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.car.id != widget.car.id) {
-      _loadRecords();
+    if (oldWidget.car.id != widget.car.id || oldWidget.car.odometer != widget.car.odometer) {
+      loadRecords();
     }
   }
 
-  void _loadRecords() {
+  void loadRecords() {
     setState(() {
       _records = StorageService.getMaintenanceRecords(widget.car.id);
       // Sort records by date descending (most recent first)
       _records.sort((a, b) => b.date.compareTo(a.date));
     });
+  }
+
+  Future<void> _editRecord(MaintenanceRecord record) async {
+    final result = await showMaintenanceRecordDialog(
+      context,
+      car: widget.car,
+      record: record,
+      onCarUpdated: widget.onCarUpdated,
+    );
+
+    if (result != null && mounted) {
+      loadRecords();
+      if (result.action == MaintenanceRecordAction.deleted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Deleted "${record.title}"'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (result.action == MaintenanceRecordAction.saved) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Updated "${result.record?.title ?? record.title}"'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -48,7 +78,7 @@ class _MaintenanceTabState extends State<MaintenanceTab> {
 
     return RefreshIndicator(
       onRefresh: () async {
-        _loadRecords();
+        loadRecords();
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -111,6 +141,8 @@ class _MaintenanceTabState extends State<MaintenanceTab> {
 
               return Card(
                 child: ListTile(
+                  onTap: () => _editRecord(record),
+                  onLongPress: () => _editRecord(record),
                   leading: CircleAvatar(
                     backgroundColor: Theme.of(context).colorScheme.primaryContainer,
                     child: Icon(
