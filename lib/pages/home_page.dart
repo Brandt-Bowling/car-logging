@@ -3,13 +3,12 @@ import 'dart:io' show File;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:uuid/uuid.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../data/vehicle_data.dart';
 import '../models/car.dart';
-import '../models/maintenance_record.dart';
 import '../widgets/add_car_modal.dart';
+import '../widgets/maintenance_record_dialog.dart';
 import 'car_details_page.dart';
 import '../services/storage_service.dart';
 import 'google_drive_sync_page.dart';
@@ -169,138 +168,20 @@ class _HomePageState extends State<HomePage> {
 
     if (!mounted) return;
 
-    final titleController = TextEditingController();
-    final odometerController = TextEditingController(
-      text: car.odometer != null ? car.odometer.toString() : '',
-    );
-    final costController = TextEditingController();
-    final descriptionController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-
-    final result = await showDialog<MaintenanceRecord>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text('Add Maintenance for ${car.make}'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: titleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Service Title *',
-                        hintText: 'e.g. Oil Change',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: odometerController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Odometer Reading (miles) *',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: costController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Cost (\$)',
-                        prefixText: '\$',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Notes',
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Date of Service'),
-                      subtitle: Text(selectedDate.toLocal().toString().split(' ')[0]),
-                      trailing: const Icon(Icons.calendar_today),
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: selectedDate,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime.now().add(const Duration(days: 365)),
-                        );
-                        if (date != null) {
-                          setDialogState(() {
-                            selectedDate = date;
-                          });
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    if (titleController.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Title is required')),
-                      );
-                      return;
-                    }
-                    final odo = int.tryParse(odometerController.text);
-                    if (odo == null || odo < 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a valid odometer')),
-                      );
-                      return;
-                    }
-                    final cost = double.tryParse(costController.text);
-                    final newRecord = MaintenanceRecord(
-                      id: const Uuid().v4(),
-                      carId: car.id,
-                      title: titleController.text.trim(),
-                      date: selectedDate,
-                      odometer: odo,
-                      cost: cost,
-                      description: descriptionController.text.trim(),
-                    );
-                    Navigator.pop(context, newRecord);
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
+    final result = await showMaintenanceRecordDialog(
+      context,
+      car: car,
+      onCarUpdated: (updatedCar) {
+        _loadCars();
       },
     );
 
-    if (result != null) {
-      await StorageService.addMaintenanceRecord(result);
-
-      if (car.odometer == null || result.odometer > car.odometer!) {
-        final updatedCar = car.copyWith(odometer: result.odometer);
-        final cars = StorageService.getCars();
-        final idx = cars.indexWhere((c) => c.id == car.id);
-        if (idx != -1) {
-          cars[idx] = updatedCar;
-          await StorageService.saveCars(cars);
-        }
-      }
-
+    if (result != null && result.action == MaintenanceRecordAction.saved && result.record != null) {
       _loadCars();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Added maintenance record: ${result.title}')),
+        SnackBar(content: Text('Added maintenance record: ${result.record!.title}')),
       );
     }
   }

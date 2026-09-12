@@ -21,6 +21,30 @@ class MaintenanceRecord {
     this.driveFileId,
   });
 
+  MaintenanceRecord copyWith({
+    String? id,
+    String? carId,
+    String? title,
+    DateTime? date,
+    int? odometer,
+    String? description,
+    String? receiptUrl,
+    double? cost,
+    String? driveFileId,
+  }) {
+    return MaintenanceRecord(
+      id: id ?? this.id,
+      carId: carId ?? this.carId,
+      title: title ?? this.title,
+      date: date ?? this.date,
+      odometer: odometer ?? this.odometer,
+      description: description ?? this.description,
+      receiptUrl: receiptUrl ?? this.receiptUrl,
+      cost: cost ?? this.cost,
+      driveFileId: driveFileId ?? this.driveFileId,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

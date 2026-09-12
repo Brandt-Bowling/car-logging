@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/car.dart';
+import '../widgets/maintenance_record_dialog.dart';
 import 'tabs/maintenance_tab.dart';
 import 'tabs/tires_tab.dart';
 import 'tabs/glovebox_tab.dart';
@@ -17,11 +18,39 @@ class CarDetailsPage extends StatefulWidget {
 class _CarDetailsPageState extends State<CarDetailsPage> {
   int _currentIndex = 0;
   late Car _car;
+  final _maintenanceTabKey = GlobalKey<MaintenanceTabState>();
 
   @override
   void initState() {
     super.initState();
     _car = widget.car;
+  }
+
+  void _onCarUpdated(Car updatedCar) {
+    setState(() {
+      _car = updatedCar;
+    });
+    widget.onCarUpdated?.call(updatedCar);
+  }
+
+  Future<void> _addMaintenanceRecord() async {
+    final result = await showMaintenanceRecordDialog(
+      context,
+      car: _car,
+      onCarUpdated: _onCarUpdated,
+    );
+
+    if (result != null && mounted) {
+      _maintenanceTabKey.currentState?.loadRecords();
+      if (result.action == MaintenanceRecordAction.saved) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added "${result.record?.title ?? 'Record'}"'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -33,16 +62,15 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          MaintenanceTab(car: _car),
+          MaintenanceTab(
+            key: _maintenanceTabKey,
+            car: _car,
+            onCarUpdated: _onCarUpdated,
+          ),
           TiresTab(car: _car),
           GloveboxTab(
             car: _car,
-            onCarUpdated: (updatedCar) {
-              setState(() {
-                _car = updatedCar;
-              });
-              widget.onCarUpdated?.call(updatedCar);
-            },
+            onCarUpdated: _onCarUpdated,
           ),
         ],
       ),
@@ -70,7 +98,9 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Action depends on _currentIndex
+          if (_currentIndex == 0) {
+            _addMaintenanceRecord();
+          }
         },
         child: _getFabIcon(),
       ),

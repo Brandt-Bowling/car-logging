@@ -110,6 +110,16 @@ class StorageService {
     await saveMaintenanceRecords(record.carId, records);
   }
 
+  static Future<void> updateMaintenanceRecord(MaintenanceRecord record) async {
+    await addMaintenanceRecord(record);
+  }
+
+  static Future<void> deleteMaintenanceRecord(String carId, String recordId) async {
+    final records = getMaintenanceRecords(carId);
+    records.removeWhere((r) => r.id == recordId);
+    await saveMaintenanceRecords(carId, records);
+  }
+
   // Google Drive Imported Files Track
   static Set<String> getImportedFileIds() {
     final list = _prefs?.getStringList(_keyImportedFiles) ?? [];
