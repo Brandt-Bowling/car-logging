@@ -23,6 +23,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   List<Car> _cars = [];
+  String _garageName = StorageService.defaultGarageName;
   int _currentTab = 0;
   bool _isSpeedDialOpen = false;
   final Set<String> _dismissedWarningCarIds = {};
@@ -47,7 +48,14 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _loadGarageName();
     _loadCars();
+  }
+
+  void _loadGarageName() {
+    setState(() {
+      _garageName = StorageService.getGarageName();
+    });
   }
 
 
@@ -265,6 +273,70 @@ class _HomePageState extends State<HomePage> {
     await _updateOdometerFlowForCar(car);
   }
 
+  Future<void> _renameGarageFlow() async {
+    final controller = TextEditingController(text: _garageName);
+    final formKey = GlobalKey<FormState>();
+
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Rename Garage'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Garage Name',
+                hintText: 'e.g. My Garage',
+                border: OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.words,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter a garage name';
+                }
+                return null;
+              },
+              onFieldSubmitted: (value) {
+                if (formKey.currentState?.validate() ?? false) {
+                  Navigator.of(dialogContext).pop(value.trim());
+                }
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState?.validate() ?? false) {
+                  Navigator.of(dialogContext).pop(controller.text.trim());
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newName != null && newName.isNotEmpty && newName != _garageName) {
+      await StorageService.saveGarageName(newName);
+      setState(() {
+        _garageName = newName;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Garage renamed to "$newName"')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -419,8 +491,13 @@ class _HomePageState extends State<HomePage> {
   Widget _buildGarageTab(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Garage'),
+        title: Text(_garageName),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Rename Garage',
+            onPressed: _renameGarageFlow,
+          ),
           IconButton(
             icon: const Icon(Icons.cloud_sync),
             tooltip: 'Sync Google Drive',
@@ -1272,6 +1349,14 @@ class _HomePageState extends State<HomePage> {
           Card(
             child: Column(
               children: [
+                ListTile(
+                  leading: const Icon(Icons.garage_outlined),
+                  title: const Text('Garage Name'),
+                  subtitle: Text('Current: $_garageName'),
+                  trailing: const Icon(Icons.edit_outlined),
+                  onTap: _renameGarageFlow,
+                ),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.straighten),
                   title: const Text('Distance Units'),

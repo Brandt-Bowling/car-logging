@@ -12,9 +12,14 @@ class StorageService {
   static const String _keySyncFolderId = 'car_logger_sync_folder_id';
   static const String _keySyncFolderName = 'car_logger_sync_folder_name';
   static const String _keyGeminiApiKey = 'car_logger_gemini_api_key';
+  static const String _keyGarageName = 'car_logger_garage_name';
 
-  static Future<void> init() async {
-    _prefs ??= await SharedPreferences.getInstance();
+  static const String defaultGarageName = 'My Garage';
+
+  static Future<void> init({bool force = false}) async {
+    if (force || _prefs == null) {
+      _prefs = await SharedPreferences.getInstance();
+    }
   }
 
   // Cars
@@ -167,6 +172,20 @@ class StorageService {
       await _prefs?.remove(_keyGeminiApiKey);
     } else {
       await _prefs?.setString(_keyGeminiApiKey, key);
+    }
+  }
+
+  // Garage Name
+  static String getGarageName() {
+    return _prefs?.getString(_keyGarageName) ?? defaultGarageName;
+  }
+
+  static Future<void> saveGarageName(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed == defaultGarageName) {
+      await _prefs?.remove(_keyGarageName);
+    } else {
+      await _prefs?.setString(_keyGarageName, trimmed);
     }
   }
 }
