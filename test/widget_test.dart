@@ -105,5 +105,30 @@ void main() {
 
     // Verify that our home page is visible.
     expect(find.text('My Garage'), findsOneWidget);
+
+    // Verify that the 4 bottom navigation tabs are present
+    expect(find.text('Garage'), findsOneWidget);
+    expect(find.text('Activity'), findsOneWidget);
+    expect(find.text('Schedule'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+
+    // Verify that per-car metric labels are present
+    expect(find.text('Odometer'), findsWidgets);
+    expect(find.text('Total Spent'), findsWidgets);
+
+    // Test tab navigation to Activity
+    await tester.tap(find.text('Activity'));
+    await tester.pumpAndSettle();
+    expect(find.text('Activity'), findsWidgets);
+
+    // Test tab navigation to Schedule
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+    expect(find.text('Schedule'), findsWidgets);
+
+    // Test tab navigation to Settings
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Google Drive Sync'), findsOneWidget);
   });
 }
