@@ -58,10 +58,14 @@ class _MaintenanceRecordDialogState extends State<MaintenanceRecordDialog> {
   late TextEditingController _costController;
   late TextEditingController _descriptionController;
   late DateTime _selectedDate;
+  late List<Car> _cars;
+  late String _selectedCarId;
 
   @override
   void initState() {
     super.initState();
+    _cars = StorageService.getCars();
+    _selectedCarId = widget.record?.carId ?? widget.car.id;
     final rec = widget.record;
     _titleController = TextEditingController(text: rec?.title ?? '');
     _odometerController = TextEditingController(
@@ -163,6 +167,7 @@ class _MaintenanceRecordDialogState extends State<MaintenanceRecordDialog> {
         odometer: odometer,
         cost: cost,
         description: description,
+        carId: _selectedCarId,
       );
     } else {
       savedRecord = MaintenanceRecord(
@@ -176,17 +181,31 @@ class _MaintenanceRecordDialogState extends State<MaintenanceRecordDialog> {
       );
     }
 
-    await StorageService.addMaintenanceRecord(savedRecord);
+    if (widget.isEditing && _selectedCarId != widget.car.id) {
+      await StorageService.moveMaintenanceRecord(
+        record: savedRecord,
+        fromCarId: widget.car.id,
+        toCarId: _selectedCarId,
+      );
+    } else {
+      await StorageService.addMaintenanceRecord(savedRecord);
+    }
 
     // If odometer entered is higher than current car odometer, update car
-    if (widget.car.odometer == null || odometer > widget.car.odometer!) {
-      final updatedCar = widget.car.copyWith(odometer: odometer);
+    final targetCar = _cars.firstWhere(
+      (c) => c.id == _selectedCarId,
+      orElse: () => widget.car,
+    );
+    if (targetCar.odometer == null || odometer > targetCar.odometer!) {
+      final updatedCar = targetCar.copyWith(odometer: odometer);
       final cars = StorageService.getCars();
-      final idx = cars.indexWhere((c) => c.id == widget.car.id);
+      final idx = cars.indexWhere((c) => c.id == targetCar.id);
       if (idx != -1) {
         cars[idx] = updatedCar;
         await StorageService.saveCars(cars);
-        widget.onCarUpdated?.call(updatedCar);
+        if (_selectedCarId == widget.car.id) {
+          widget.onCarUpdated?.call(updatedCar);
+        }
       }
     }
 
@@ -269,6 +288,30 @@ class _MaintenanceRecordDialogState extends State<MaintenanceRecordDialog> {
                       ],
                     ),
                   ),
+                ],
+                if (widget.isEditing && _cars.length > 1) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedCarId,
+                    decoration: const InputDecoration(
+                      labelText: 'Assigned Vehicle',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.directions_car),
+                    ),
+                    items: _cars.map((car) {
+                      return DropdownMenuItem<String>(
+                        value: car.id,
+                        child: Text('${car.year} ${car.make} ${car.model}'),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _selectedCarId = val;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
                 ],
                 TextFormField(
                   controller: _titleController,

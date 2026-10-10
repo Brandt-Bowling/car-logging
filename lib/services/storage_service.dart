@@ -63,7 +63,13 @@ class StorageService {
     final cars = getCars();
     cars.removeWhere((car) => car.id == carId);
     await saveCars(cars);
-    // Clean up associated maintenance records
+    // Clean up associated maintenance records and unmark imported files
+    final records = getMaintenanceRecords(carId);
+    for (final r in records) {
+      if (r.driveFileId != null) {
+        await unmarkFileAsImported(r.driveFileId!);
+      }
+    }
     await _prefs?.remove('$_keyRecordsPrefix$carId');
   }
 
@@ -114,10 +120,51 @@ class StorageService {
     await addMaintenanceRecord(record);
   }
 
-  static Future<void> deleteMaintenanceRecord(String carId, String recordId) async {
+  static Future<void> moveMaintenanceRecord({
+    required MaintenanceRecord record,
+    required String fromCarId,
+    required String toCarId,
+  }) async {
+    if (fromCarId == toCarId) {
+      await addMaintenanceRecord(record);
+      return;
+    }
+    // Remove from source car without unmarking imported file
+    await deleteMaintenanceRecord(fromCarId, record.id, keepImported: true);
+    // Add to target car
+    final updatedRecord = record.copyWith(carId: toCarId);
+    await addMaintenanceRecord(updatedRecord);
+  }
+
+  static Future<void> deleteMaintenanceRecord(
+    String carId,
+    String recordId, {
+    bool keepImported = false,
+  }) async {
     final records = getMaintenanceRecords(carId);
-    records.removeWhere((r) => r.id == recordId);
-    await saveMaintenanceRecords(carId, records);
+    final idx = records.indexWhere((r) => r.id == recordId);
+    if (idx != -1) {
+      final record = records[idx];
+      if (!keepImported && record.driveFileId != null) {
+        await unmarkFileAsImported(record.driveFileId!);
+      }
+      records.removeAt(idx);
+      await saveMaintenanceRecords(carId, records);
+    }
+  }
+
+  /// Locates the car and maintenance record associated with a Google Drive file ID
+  static ({Car car, MaintenanceRecord record})? findRecordByDriveFileId(String driveFileId) {
+    final cars = getCars();
+    for (final car in cars) {
+      final records = getMaintenanceRecords(car.id);
+      for (final record in records) {
+        if (record.driveFileId == driveFileId) {
+          return (car: car, record: record);
+        }
+      }
+    }
+    return null;
   }
 
   // Google Drive Imported Files Track
@@ -130,6 +177,13 @@ class StorageService {
     final fileIds = getImportedFileIds();
     fileIds.add(fileId);
     await _prefs?.setStringList(_keyImportedFiles, fileIds.toList());
+  }
+
+  static Future<void> unmarkFileAsImported(String fileId) async {
+    final fileIds = getImportedFileIds();
+    if (fileIds.remove(fileId)) {
+      await _prefs?.setStringList(_keyImportedFiles, fileIds.toList());
+    }
   }
 
   // Google Drive Settings

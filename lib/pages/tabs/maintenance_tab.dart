@@ -57,12 +57,26 @@ class MaintenanceTabState extends State<MaintenanceTab> {
           ),
         );
       } else if (result.action == MaintenanceRecordAction.saved) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Updated "${result.record?.title ?? record.title}"'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        if (result.record != null && result.record!.carId != widget.car.id) {
+          final cars = StorageService.getCars();
+          final newCar = cars.firstWhere(
+            (c) => c.id == result.record!.carId,
+            orElse: () => widget.car,
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Moved "${result.record!.title}" to ${newCar.year} ${newCar.make} ${newCar.model}'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Updated "${result.record?.title ?? record.title}"'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     }
   }
