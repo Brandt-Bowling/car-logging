@@ -275,5 +275,115 @@ void main() {
 
     expect(find.text('Synced from Google Drive'), findsOneWidget);
   });
+
+  testWidgets('Reassigning maintenance record to another car moves record between cars', (
+    WidgetTester tester,
+  ) async {
+    final secondCar = Car(
+      id: 'test_car_2',
+      make: 'Mazda',
+      model: 'Miata',
+      year: 2020,
+      odometer: 15000,
+    );
+    await StorageService.saveCars([testCar, secondCar]);
+
+    final record = MaintenanceRecord(
+      id: 'rec_wrong_car',
+      carId: testCar.id,
+      title: 'Spark Plugs',
+      date: DateTime(2024, 9, 1),
+      odometer: 43000,
+      cost: 110.0,
+      driveFileId: 'drive_file_spark',
+    );
+    await StorageService.saveMaintenanceRecords(testCar.id, [record]);
+    await StorageService.markFileAsImported('drive_file_spark');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MaintenanceTab(car: testCar),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Spark Plugs'), findsOneWidget);
+
+    // Open edit dialog
+    await tester.tap(find.text('Spark Plugs'));
+    await tester.pumpAndSettle();
+
+    // Verify "Assigned Vehicle" dropdown is shown because there are 2 cars
+    expect(find.text('Assigned Vehicle'), findsOneWidget);
+
+    // Tap dropdown and select the Mazda Miata
+    await tester.tap(find.text('2013 Chevrolet Sonic'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('2020 Mazda Miata').last);
+    await tester.pumpAndSettle();
+
+    // Tap Save Changes
+    await tester.tap(find.text('Save Changes'));
+    await tester.pumpAndSettle();
+
+    // Should no longer be on testCar
+    expect(find.text('Spark Plugs'), findsNothing);
+    final car1Records = StorageService.getMaintenanceRecords(testCar.id);
+    expect(car1Records.isEmpty, isTrue);
+
+    // Should now be on secondCar
+    final car2Records = StorageService.getMaintenanceRecords(secondCar.id);
+    expect(car2Records.length, 1);
+    expect(car2Records.first.title, 'Spark Plugs');
+    expect(car2Records.first.carId, secondCar.id);
+    expect(car2Records.first.driveFileId, 'drive_file_spark');
+
+    // Drive file should still be marked as imported
+    expect(StorageService.getImportedFileIds().contains('drive_file_spark'), isTrue);
+  });
+
+  testWidgets('Deleting a Drive-imported record unmarks it from StorageService imported files', (
+    WidgetTester tester,
+  ) async {
+    final record = MaintenanceRecord(
+      id: 'rec_delete_drive',
+      carId: testCar.id,
+      title: 'Brake Fluid Flush',
+      date: DateTime(2024, 9, 15),
+      odometer: 44000,
+      driveFileId: 'drive_file_brake_fluid',
+    );
+    await StorageService.saveMaintenanceRecords(testCar.id, [record]);
+    await StorageService.markFileAsImported('drive_file_brake_fluid');
+    expect(StorageService.getImportedFileIds().contains('drive_file_brake_fluid'), isTrue);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MaintenanceTab(car: testCar),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Brake Fluid Flush'));
+    await tester.pumpAndSettle();
+
+    // Tap delete button in dialog
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+
+    // Confirm delete
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    // Record removed from storage
+    expect(StorageService.getMaintenanceRecords(testCar.id).isEmpty, isTrue);
+    // Drive file is un-marked so it can be re-imported or re-assigned!
+    expect(StorageService.getImportedFileIds().contains('drive_file_brake_fluid'), isFalse);
+  });
 }
 

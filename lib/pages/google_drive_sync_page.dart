@@ -668,6 +668,184 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
     );
   }
 
+  Future<void> _confirmUnassign(drive.File file) async {
+    if (file.id == null) return;
+    final details = StorageService.findRecordByDriveFileId(file.id!);
+    final carName = details != null
+        ? '${details.car.year} ${details.car.make} ${details.car.model}'
+        : 'the vehicle';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unassign Document?'),
+        content: Text(
+          'Are you sure you want to unassign "${file.name ?? 'this document'}" from $carName? This will remove the maintenance record and return the document to unassigned.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Unassign'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      if (details != null) {
+        await StorageService.deleteMaintenanceRecord(
+          details.car.id,
+          details.record.id,
+        );
+      }
+      await StorageService.unmarkFileAsImported(file.id!);
+      setState(() {
+        _importedFileIds = StorageService.getImportedFileIds();
+        _selectedFileIds.remove(file.id!);
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unassigned "${file.name ?? 'document'}" from $carName'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openEditAssignedSheet(drive.File file) async {
+    if (file.id == null) return;
+    _cars = StorageService.getCars();
+    final details = StorageService.findRecordByDriveFileId(file.id!);
+
+    if (details == null) {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Document Assignment'),
+          content: Text(
+            'This file ("${file.name ?? 'document'}") is marked as assigned, but no corresponding maintenance record was found. Would you like to clear the assignment or re-import it?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'cancel'),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'clear'),
+              child: const Text('Clear Assignment'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, 'reimport'),
+              child: const Text('Re-import'),
+            ),
+          ],
+        ),
+      );
+
+      if (action == 'clear' && mounted) {
+        await StorageService.unmarkFileAsImported(file.id!);
+        setState(() {
+          _importedFileIds = StorageService.getImportedFileIds();
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Assignment cleared. File is now ready to import.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else if (action == 'reimport' && mounted) {
+        await StorageService.unmarkFileAsImported(file.id!);
+        setState(() {
+          _importedFileIds = StorageService.getImportedFileIds();
+        });
+        _openImportReviewSheet(file);
+      }
+      return;
+    }
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => EditAssignedModal(
+        file: file,
+        record: details.record,
+        currentCar: details.car,
+        cars: _cars,
+        onSave: (updatedRecord, newCarId) async {
+          if (newCarId != details.car.id) {
+            await StorageService.moveMaintenanceRecord(
+              record: updatedRecord,
+              fromCarId: details.car.id,
+              toCarId: newCarId,
+            );
+            await _updateCarOdometerIfNeeded(newCarId, updatedRecord.odometer);
+            final newCar = _cars.firstWhere((c) => c.id == newCarId);
+            if (mounted) {
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Reassigned "${file.name}" to ${newCar.year} ${newCar.make} ${newCar.model}',
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          } else {
+            await StorageService.updateMaintenanceRecord(updatedRecord);
+            await _updateCarOdometerIfNeeded(details.car.id, updatedRecord.odometer);
+            if (mounted) {
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                SnackBar(
+                  content: Text('Updated "${file.name}"'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _importedFileIds = StorageService.getImportedFileIds();
+            });
+          }
+        },
+        onUnassign: () async {
+          await StorageService.deleteMaintenanceRecord(
+            details.car.id,
+            details.record.id,
+          );
+          await StorageService.unmarkFileAsImported(file.id!);
+          if (mounted) {
+            setState(() {
+              _importedFileIds = StorageService.getImportedFileIds();
+              _selectedFileIds.remove(file.id!);
+            });
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Unassigned "${file.name}" from ${details.car.year} ${details.car.make} ${details.car.model}',
+                ),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1022,12 +1200,15 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
           final file = _driveFiles[index];
           final isImported = _importedFileIds.contains(file.id);
           final fileTypeIcon = _getFileTypeIcon(file.mimeType);
+          final assignedDetails = isImported && file.id != null
+              ? StorageService.findRecordByDriveFileId(file.id!)
+              : null;
 
           return ListTile(
             leading: isImported
                 ? Icon(
-                    fileTypeIcon,
-                    color: theme.colorScheme.outline,
+                    Icons.cloud_done,
+                    color: theme.colorScheme.primary,
                   )
                 : Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1055,17 +1236,91 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
               file.name ?? 'Unnamed File',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: isImported ? theme.colorScheme.outline : null,
-                decoration: isImported ? TextDecoration.lineThrough : null,
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
               ),
             ),
             subtitle: Text(
-              'Size: ${_formatBytes(file.size)} • Created: ${_formatDate(file.createdTime)}',
-              style: theme.textTheme.bodySmall,
+              isImported
+                  ? (assignedDetails != null
+                      ? 'Assigned to: ${assignedDetails.car.year} ${assignedDetails.car.make} ${assignedDetails.car.model} • ${_formatBytes(file.size)}'
+                      : 'Assigned • ${_formatBytes(file.size)}')
+                  : 'Size: ${_formatBytes(file.size)} • Created: ${_formatDate(file.createdTime)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: isImported ? theme.colorScheme.primary : null,
+              ),
             ),
             trailing: isImported
-                ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.check,
+                              size: 14,
+                              color: theme.colorScheme.onSecondaryContainer,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Assigned',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSecondaryContainer,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, size: 20),
+                        tooltip: 'Document actions',
+                        onSelected: (action) {
+                          if (action == 'edit') {
+                            _openEditAssignedSheet(file);
+                          } else if (action == 'unassign') {
+                            _confirmUnassign(file);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'edit',
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit_outlined, size: 18),
+                                SizedBox(width: 8),
+                                Text('Edit / Reassign'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'unassign',
+                            child: Row(
+                              children: [
+                                Icon(Icons.link_off, size: 18, color: theme.colorScheme.error),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Unassign',
+                                  style: TextStyle(color: theme.colorScheme.error),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
                 : Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -1084,7 +1339,13 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
                       ),
                     ),
                   ),
-            onTap: isImported ? null : () => _openImportReviewSheet(file),
+            onTap: () {
+              if (isImported) {
+                _openEditAssignedSheet(file);
+              } else {
+                _openImportReviewSheet(file);
+              }
+            },
           );
         },
       ),
@@ -1472,6 +1733,369 @@ class _ImportReviewModalState extends State<_ImportReviewModal> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// Modal to edit, reassign, or unassign an already imported Drive document
+class EditAssignedModal extends StatefulWidget {
+  final drive.File file;
+  final MaintenanceRecord record;
+  final Car currentCar;
+  final List<Car> cars;
+  final Future<void> Function(MaintenanceRecord updatedRecord, String newCarId) onSave;
+  final Future<void> Function() onUnassign;
+
+  const EditAssignedModal({
+    super.key,
+    required this.file,
+    required this.record,
+    required this.currentCar,
+    required this.cars,
+    required this.onSave,
+    required this.onUnassign,
+  });
+
+  @override
+  State<EditAssignedModal> createState() => _EditAssignedModalState();
+}
+
+class _EditAssignedModalState extends State<EditAssignedModal> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _titleController;
+  late TextEditingController _dateController;
+  late TextEditingController _odometerController;
+  late TextEditingController _costController;
+  late TextEditingController _descController;
+  late String _selectedCarId;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCarId = widget.record.carId;
+    _titleController = TextEditingController(text: widget.record.title);
+    _dateController = TextEditingController(
+      text: widget.record.date.toIso8601String().split('T')[0],
+    );
+    _odometerController = TextEditingController(
+      text: widget.record.odometer.toString(),
+    );
+    _costController = TextEditingController(
+      text: widget.record.cost != null
+          ? (widget.record.cost! % 1 == 0
+              ? widget.record.cost!.toInt().toString()
+              : widget.record.cost!.toStringAsFixed(2))
+          : '',
+    );
+    _descController = TextEditingController(text: widget.record.description ?? '');
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _dateController.dispose();
+    _odometerController.dispose();
+    _costController.dispose();
+    _descController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectDate() async {
+    DateTime initial = widget.record.date;
+    try {
+      if (_dateController.text.isNotEmpty) {
+        initial = DateTime.parse(_dateController.text);
+      }
+    } catch (_) {}
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1990),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        _dateController.text = picked.toIso8601String().split('T')[0];
+      });
+    }
+  }
+
+  Future<void> _confirmAndUnassign() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unassign Document?'),
+        content: Text(
+          'Are you sure you want to unassign "${widget.file.name ?? 'this document'}" from ${widget.currentCar.year} ${widget.currentCar.make} ${widget.currentCar.model}? This will remove the maintenance record and return the document to unassigned.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Unassign'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      Navigator.pop(context);
+      await widget.onUnassign();
+    }
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final double? cost = double.tryParse(_costController.text.trim());
+    final int odometer = int.tryParse(_odometerController.text.trim()) ?? widget.record.odometer;
+    final DateTime date = DateTime.tryParse(_dateController.text.trim()) ?? widget.record.date;
+
+    final updated = widget.record.copyWith(
+      title: _titleController.text.trim(),
+      date: date,
+      odometer: odometer,
+      cost: cost,
+      description: _descController.text.trim(),
+      carId: _selectedCarId,
+    );
+
+    Navigator.pop(context);
+    await widget.onSave(updated, _selectedCarId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    widget.file.mimeType == 'application/pdf'
+                        ? Icons.picture_as_pdf
+                        : Icons.image,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Edit Assigned Document',
+                      style: theme.textTheme.titleLarge,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                widget.file.name ?? 'Receipt File',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: theme.colorScheme.primaryContainer),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.directions_car,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Assigned to ${widget.currentCar.year} ${widget.currentCar.make} ${widget.currentCar.model}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 24),
+
+              // Car Selector (Reassign to different car)
+              DropdownButtonFormField<String>(
+                initialValue: _selectedCarId,
+                decoration: const InputDecoration(
+                  labelText: 'Assign to Car',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.swap_horiz),
+                  helperText: 'Select a different vehicle to reassign this document',
+                ),
+                items: widget.cars.map((car) {
+                  return DropdownMenuItem<String>(
+                    value: car.id,
+                    child: Text('${car.year} ${car.make} ${car.model}'),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _selectedCarId = val;
+                    });
+                  }
+                },
+                validator: (val) => val == null ? 'Please select a car' : null,
+              ),
+              const SizedBox(height: 12),
+
+              // Title
+              TextFormField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Service Title',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.title),
+                ),
+                validator: (val) =>
+                    val == null || val.trim().isEmpty ? 'Title is required' : null,
+              ),
+              const SizedBox(height: 12),
+
+              // Date Picker Field
+              TextFormField(
+                controller: _dateController,
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: 'Service Date',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.calendar_month),
+                ),
+                onTap: _selectDate,
+                validator: (val) =>
+                    val == null || val.trim().isEmpty ? 'Date is required' : null,
+              ),
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  // Odometer
+                  Expanded(
+                    child: TextFormField(
+                      controller: _odometerController,
+                      decoration: const InputDecoration(
+                        labelText: 'Odometer (mi)',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.speed),
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) {
+                          return 'Odometer is required';
+                        }
+                        if (int.tryParse(val.trim()) == null || int.parse(val.trim()) < 0) {
+                          return 'Invalid number';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Cost
+                  Expanded(
+                    child: TextFormField(
+                      controller: _costController,
+                      decoration: const InputDecoration(
+                        labelText: 'Total Cost (\$)',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.attach_money),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Description
+              TextFormField(
+                controller: _descController,
+                decoration: const InputDecoration(
+                  labelText: 'Service Details / Description',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.description),
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 20),
+
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.colorScheme.error,
+                      side: BorderSide(color: theme.colorScheme.error),
+                    ),
+                    onPressed: _confirmAndUnassign,
+                    icon: const Icon(Icons.link_off, size: 18),
+                    label: const Text('Unassign'),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: _submit,
+                    icon: const Icon(Icons.check),
+                    label: const Text('Save Changes'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
