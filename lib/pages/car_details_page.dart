@@ -123,8 +123,6 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        backgroundColor: colorScheme.surface,
-        elevation: 0,
         onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
