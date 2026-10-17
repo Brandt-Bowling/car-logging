@@ -695,6 +695,7 @@ class _HomePageState extends State<HomePage> {
     final serviceInterval = car.isEv ? 7500 : 5000;
     final nextServiceOdo = latestRecordOdo + serviceInterval;
     final remainingMiles = car.odometer != null ? nextServiceOdo - car.odometer! : serviceInterval;
+    final servicePercent = (remainingMiles / serviceInterval.toDouble()).clamp(0.0, 1.0);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16.0),
@@ -726,7 +727,7 @@ class _HomePageState extends State<HomePage> {
         onLongPress: () => _deleteCarFlow(car),
         borderRadius: BorderRadius.circular(20.0),
         child: SizedBox(
-          height: 230,
+          height: 238,
           width: double.infinity,
           child: Stack(
             children: [
@@ -884,30 +885,39 @@ class _HomePageState extends State<HomePage> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
-                              // Sub-bar
+                              const SizedBox(height: 7),
+                              // Health Status & Linear Progress Bar
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Row(
                                     children: [
-                                      Container(
-                                        width: 5,
-                                        height: 5,
-                                        decoration: const BoxDecoration(
-                                          color: Colors.greenAccent,
-                                          shape: BoxShape.circle,
-                                        ),
+                                      Icon(
+                                        remainingMiles > (car.isEv ? 1500 : 1000)
+                                            ? Icons.check_circle_outline
+                                            : Icons.warning_amber_rounded,
+                                        size: 12,
+                                        color: remainingMiles > (car.isEv ? 1500 : 1000)
+                                            ? Colors.greenAccent
+                                            : (remainingMiles > 0 ? Colors.orangeAccent : Colors.redAccent),
                                       ),
                                       const SizedBox(width: 4),
-                                      const Text(
-                                        'Systems Normal',
-                                        style: TextStyle(fontSize: 10, color: Colors.white70),
+                                      Text(
+                                        remainingMiles > 0
+                                            ? '${NumberFormat.decimalPattern().format(remainingMiles)} mi to ${car.isEv ? 'rotation' : 'service'}'
+                                            : 'Service Due Now',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: remainingMiles > (car.isEv ? 1500 : 1000)
+                                              ? Colors.white70
+                                              : (remainingMiles > 0 ? Colors.orangeAccent : Colors.redAccent),
+                                        ),
                                       ),
                                     ],
                                   ),
                                   Text(
-                                    'Tread: ${(treadWearPercent * 100).toInt()}% Remaining',
+                                    'Tread: ${(treadWearPercent * 100).toInt()}%',
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
@@ -915,6 +925,20 @@ class _HomePageState extends State<HomePage> {
                                     ),
                                   ),
                                 ],
+                              ),
+                              const SizedBox(height: 5),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value: servicePercent,
+                                  minHeight: 3.5,
+                                  backgroundColor: Colors.white12,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    remainingMiles > (car.isEv ? 1500 : 1000)
+                                        ? Colors.greenAccent
+                                        : (remainingMiles > 0 ? Colors.orangeAccent : Colors.redAccent),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
