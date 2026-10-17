@@ -227,6 +227,21 @@ class GoogleDriveService {
     }
   }
 
+  // Fetches file metadata by id
+  static Future<drive.File?> getFileInfo(String fileId) async {
+    try {
+      final api = await getDriveApi();
+      final file = await api.files.get(
+        fileId,
+        $fields: 'id, name, mimeType, size, webViewLink, webContentLink, thumbnailLink, createdTime, iconLink',
+      ) as drive.File;
+      return file;
+    } catch (e) {
+      print('Error getting file info ($fileId): $e');
+      return null;
+    }
+  }
+
   // Lists all files (images, PDFs, documents) in a specific folder
   static Future<List<drive.File>> listFiles(
     String folderId, {
