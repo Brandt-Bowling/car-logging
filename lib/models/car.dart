@@ -11,6 +11,9 @@ class Car {
   final bool isEv;
   final bool isArchived;
 
+  final String? trim;
+  final String? bodyStyle;
+
   Car({
     required this.id,
     required this.make,
@@ -23,6 +26,8 @@ class Car {
     this.odometer,
     this.isEv = false,
     this.isArchived = false,
+    this.trim,
+    this.bodyStyle,
   });
 
   Car copyWith({
@@ -37,6 +42,8 @@ class Car {
     int? odometer,
     bool? isEv,
     bool? isArchived,
+    String? trim,
+    String? bodyStyle,
   }) {
     return Car(
       id: id ?? this.id,
@@ -50,6 +57,8 @@ class Car {
       odometer: odometer ?? this.odometer,
       isEv: isEv ?? this.isEv,
       isArchived: isArchived ?? this.isArchived,
+      trim: trim ?? this.trim,
+      bodyStyle: bodyStyle ?? this.bodyStyle,
     );
   }
 
@@ -66,6 +75,8 @@ class Car {
       'odometer': odometer,
       'isEv': isEv,
       'isArchived': isArchived,
+      'trim': trim,
+      'bodyStyle': bodyStyle,
     };
   }
 
@@ -82,6 +93,8 @@ class Car {
       odometer: map['odometer'],
       isEv: map['isEv'] ?? false,
       isArchived: map['isArchived'] ?? false,
+      trim: map['trim'],
+      bodyStyle: map['bodyStyle'],
     );
   }
 }

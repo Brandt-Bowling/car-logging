@@ -12,6 +12,7 @@ class StorageService {
   static const String _keySyncFolderId = 'car_logger_sync_folder_id';
   static const String _keySyncFolderName = 'car_logger_sync_folder_name';
   static const String _keyGeminiApiKey = 'car_logger_gemini_api_key';
+  static const String _keyAutoDevApiKey = 'car_logger_auto_dev_api_key';
   static const String _keyGarageName = 'car_logger_garage_name';
 
   static const String defaultGarageName = 'My Garage';
@@ -272,6 +273,19 @@ class StorageService {
       await _prefs?.remove(_keyGeminiApiKey);
     } else {
       await _prefs?.setString(_keyGeminiApiKey, key);
+    }
+  }
+
+  // Auto.dev API Key
+  static String? getAutoDevApiKey() {
+    return _prefs?.getString(_keyAutoDevApiKey);
+  }
+
+  static Future<void> saveAutoDevApiKey(String? key) async {
+    if (key == null || key.isEmpty) {
+      await _prefs?.remove(_keyAutoDevApiKey);
+    } else {
+      await _prefs?.setString(_keyAutoDevApiKey, key);
     }
   }
 

@@ -8,9 +8,17 @@ import 'package:uuid/uuid.dart';
 
 import '../data/vehicle_data.dart';
 import '../models/car.dart';
+import '../services/auto_dev_service.dart';
 
 class AddCarModal extends StatefulWidget {
-  const AddCarModal({super.key});
+  final bool openVinPrompt;
+  final String? initialVin;
+
+  const AddCarModal({
+    super.key,
+    this.openVinPrompt = false,
+    this.initialVin,
+  });
 
   @override
   State<AddCarModal> createState() => _AddCarModalState();
@@ -26,6 +34,13 @@ class _AddCarModalState extends State<AddCarModal> {
   final _modelController = TextEditingController();
   final _makeFocusNode = FocusNode();
   final _modelFocusNode = FocusNode();
+
+  // VIN & AutoDev
+  final _vinController = TextEditingController();
+  final _vinFocusNode = FocusNode();
+  bool _isLoadingVin = false;
+  String? _decodedTrim;
+  String? _decodedBodyStyle;
 
   // Other fields
   int _selectedYear = 2010;
@@ -49,6 +64,22 @@ class _AddCarModalState extends State<AddCarModal> {
   void initState() {
     super.initState();
     _sheetController = DraggableScrollableController();
+
+    if (widget.initialVin != null && widget.initialVin!.isNotEmpty) {
+      _vin = widget.initialVin;
+      _vinController.text = widget.initialVin!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _decodeVin(widget.initialVin!);
+        }
+      });
+    } else if (widget.openVinPrompt) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _promptVinLookup();
+        }
+      });
+    }
   }
 
   @override
@@ -57,6 +88,8 @@ class _AddCarModalState extends State<AddCarModal> {
     _modelController.dispose();
     _makeFocusNode.dispose();
     _modelFocusNode.dispose();
+    _vinController.dispose();
+    _vinFocusNode.dispose();
     _sheetController?.dispose();
     super.dispose();
   }
@@ -161,6 +194,177 @@ class _AddCarModalState extends State<AddCarModal> {
   }
 
   // ---------------------------------------------------------------------------
+  // VIN actions
+  // ---------------------------------------------------------------------------
+
+  Future<void> _decodeVin(String rawVin) async {
+    final cleanVin = rawVin.trim().toUpperCase();
+    if (cleanVin.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a VIN to decode'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoadingVin = true;
+    });
+
+    try {
+      final info = await AutoDevService.decodeAndFetchDetails(cleanVin);
+
+      if (!mounted) return;
+
+      if (!info.vinValid || info.make == null) {
+        final error = info.errorMessage ?? 'Could not decode vehicle details for VIN "$cleanVin".';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _vin = cleanVin;
+        _vinController.text = cleanVin;
+        _decodedTrim = info.trim;
+        _decodedBodyStyle = info.body;
+
+        // Populate Make
+        _selectedMake = info.make;
+        _makeController.text = info.make!;
+        _makeError = false;
+
+        // Populate Model - smart match with known models if possible
+        final knownModels = getModelsForMake(info.make!);
+        String resolvedModel = info.model ?? '';
+        if (info.model != null && knownModels.isNotEmpty) {
+          final exactMatch = knownModels.firstWhere(
+            (m) => m.toLowerCase() == info.model!.toLowerCase(),
+            orElse: () => '',
+          );
+          if (exactMatch.isNotEmpty) {
+            resolvedModel = exactMatch;
+          } else {
+            final partialMatch = knownModels.firstWhere(
+              (m) => info.model!.toLowerCase().contains(m.toLowerCase()),
+              orElse: () => '',
+            );
+            if (partialMatch.isNotEmpty) {
+              resolvedModel = partialMatch;
+            }
+          }
+        }
+        _selectedModel = resolvedModel.isNotEmpty ? resolvedModel : info.model;
+        _modelController.text = _selectedModel ?? '';
+        _modelError = false;
+
+        // Populate Year
+        if (info.year != null) {
+          _selectedYear = info.year!;
+        }
+
+        // Populate EV
+        _isEv = info.isEv;
+
+        // Populate Photo (from auto-dev)
+        if (info.photoUrl != null && info.photoUrl!.isNotEmpty) {
+          _imageUrl = info.photoUrl;
+          _localImagePath = null;
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Vehicle details populated for $_selectedYear ${_selectedMake ?? ''} ${_selectedModel ?? ''}!',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to decode VIN: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingVin = false;
+        });
+      }
+    }
+  }
+
+  void _promptVinLookup() {
+    final dialogController = TextEditingController(text: _vinController.text);
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.auto_awesome),
+            SizedBox(width: 8),
+            Text('Add Vehicle by VIN'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your 17-character VIN. Vehicle make, model, year, and photo will be automatically retrieved via auto.dev.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: dialogController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                labelText: 'Vehicle Identification Number',
+                hintText: 'e.g., 1HGCR2F83HA000000',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.pin_outlined),
+              ),
+              onSubmitted: (value) {
+                Navigator.pop(dialogContext);
+                _decodeVin(value);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              final val = dialogController.text;
+              Navigator.pop(dialogContext);
+              _decodeVin(val);
+            },
+            icon: const Icon(Icons.search, size: 18),
+            label: const Text('Decode & Auto-fill'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Submit
   // ---------------------------------------------------------------------------
 
@@ -191,6 +395,8 @@ class _AddCarModalState extends State<AddCarModal> {
         vin: _vin?.isEmpty ?? true ? null : _vin,
         odometer: _odometer,
         isEv: _isEv,
+        trim: _decodedTrim,
+        bodyStyle: _decodedBodyStyle,
       );
 
       Navigator.pop(context, newCar);
@@ -276,9 +482,16 @@ class _AddCarModalState extends State<AddCarModal> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // ── Make Picker ──
+                        // ── Quick Add by VIN helper card ──
                         _buildAnimatedField(
                           delay: 0.ms,
+                          child: _buildVinHelperCard(theme),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // ── Make Picker ──
+                        _buildAnimatedField(
+                          delay: 50.ms,
                           child: _buildMakeField(allMakes, theme),
                         ),
                         const SizedBox(height: 16),
@@ -333,15 +546,47 @@ class _AddCarModalState extends State<AddCarModal> {
                         _buildAnimatedField(
                           delay: 450.ms,
                           child: TextFormField(
+                            controller: _vinController,
+                            focusNode: _vinFocusNode,
                             scrollPadding: _getScrollPadding(context),
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'VIN',
                               hintText: 'Vehicle Identification Number',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.pin_outlined),
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(Icons.pin_outlined),
+                              suffixIcon: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_vinController.text.isNotEmpty)
+                                    IconButton(
+                                      icon: const Icon(Icons.clear, size: 18),
+                                      onPressed: () {
+                                        _vinController.clear();
+                                        setState(() => _vin = null);
+                                      },
+                                    ),
+                                  if (_isLoadingVin)
+                                    const Padding(
+                                      padding: EdgeInsets.all(12.0),
+                                      child: SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                    )
+                                  else
+                                    IconButton(
+                                      icon: const Icon(Icons.auto_awesome),
+                                      tooltip: 'Decode VIN & populate vehicle details via auto.dev',
+                                      onPressed: () => _decodeVin(_vinController.text),
+                                    ),
+                                ],
+                              ),
                             ),
                             textInputAction: TextInputAction.next,
                             textCapitalization: TextCapitalization.characters,
+                            onChanged: (value) => _vin = value.trim(),
+                            onFieldSubmitted: (value) => _decodeVin(value),
                             onSaved: (value) => _vin = value?.trim(),
                           ),
                         ),
@@ -409,12 +654,72 @@ class _AddCarModalState extends State<AddCarModal> {
   // Field Builders
   // ---------------------------------------------------------------------------
 
+  /// Helper card at top for quick VIN decode via auto.dev.
+  Widget _buildVinHelperCard(ThemeData theme) {
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: theme.colorScheme.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.auto_awesome, color: theme.colorScheme.primary, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add by VIN',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                  Text(
+                    'Auto-populate make, model, year & photo via auto.dev',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.tonal(
+              onPressed: _isLoadingVin ? null : _promptVinLookup,
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
+              child: const Text('Enter VIN'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Searchable Make combobox using Autocomplete.
   Widget _buildMakeField(List<String> allMakes, ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Autocomplete<String>(
+          key: ValueKey('make_${_selectedMake ?? ""}'),
+          initialValue: TextEditingValue(text: _selectedMake ?? ''),
           optionsBuilder: (TextEditingValue textEditingValue) {
             if (textEditingValue.text.isEmpty) {
               return allMakes;
@@ -423,15 +728,10 @@ class _AddCarModalState extends State<AddCarModal> {
                 make.toLowerCase().contains(textEditingValue.text.toLowerCase()));
           },
           onSelected: (String selection) {
-            _makeController.text = selection;
             _onMakeSelected(selection);
           },
           fieldViewBuilder:
               (context, controller, focusNode, onFieldSubmitted) {
-            // Sync our controller on first build
-            if (_makeController.text.isNotEmpty && controller.text.isEmpty) {
-              controller.text = _makeController.text;
-            }
             return TextFormField(
               controller: controller,
               focusNode: focusNode,
@@ -488,6 +788,8 @@ class _AddCarModalState extends State<AddCarModal> {
     final isEnabled = _selectedMake != null;
 
     return Autocomplete<String>(
+      key: ValueKey('model_${_selectedMake ?? ""}_${_selectedModel ?? ""}'),
+      initialValue: TextEditingValue(text: _selectedModel ?? ''),
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (!isEnabled) return const Iterable<String>.empty();
         if (textEditingValue.text.isEmpty) {
@@ -497,13 +799,9 @@ class _AddCarModalState extends State<AddCarModal> {
             model.toLowerCase().contains(textEditingValue.text.toLowerCase()));
       },
       onSelected: (String selection) {
-        _modelController.text = selection;
         _onModelSelected(selection);
       },
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-        if (_modelController.text.isNotEmpty && controller.text.isEmpty) {
-          controller.text = _modelController.text;
-        }
         return TextFormField(
           controller: controller,
           focusNode: focusNode,
@@ -554,10 +852,13 @@ class _AddCarModalState extends State<AddCarModal> {
   /// Year dropdown — defaults to 2010.
   Widget _buildYearField(ThemeData theme) {
     final currentYear = DateTime.now().year;
+    final minYear = _selectedYear < 1980 ? _selectedYear : 1980;
+    final maxYear = _selectedYear > currentYear + 1 ? _selectedYear : currentYear + 1;
     final years =
-        List<int>.generate(currentYear - 1990 + 2, (i) => currentYear + 1 - i);
+        List<int>.generate(maxYear - minYear + 1, (i) => maxYear - i);
 
     return DropdownButtonFormField<int>(
+      key: ValueKey(_selectedYear),
       initialValue: _selectedYear,
       decoration: const InputDecoration(
         labelText: 'Year',
