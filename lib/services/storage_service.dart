@@ -42,7 +42,7 @@ class StorageService {
           model: 'Model 3',
           year: 2018,
           imageUrl:
-              'https://upload.wikimedia.org/wikipedia/commons/0/0e/Blue_Tesla_Model_3.jpg',
+              'https://api.auto.dev/photos/retail/5YJ3E1EAXMF860954-1.jpg',
           isEv: true,
         ),
       ];

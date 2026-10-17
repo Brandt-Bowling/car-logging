@@ -175,7 +175,7 @@ const Map<String, List<String>> vehicleMakeModels = {
 const Map<String, String> defaultVehicleImages = {
   // Tesla
   'Tesla|Model 3':
-      'https://upload.wikimedia.org/wikipedia/commons/0/0e/Blue_Tesla_Model_3.jpg',
+      'https://api.auto.dev/photos/retail/5YJ3E1EAXMF860954-1.jpg',
   'Tesla|Model Y':
       'https://upload.wikimedia.org/wikipedia/commons/5/5c/2024_Tesla_Model_Y_Long_Range_in_Ultra_White%2C_front_6.15.2024.jpg',
   'Tesla|Model S':
@@ -212,6 +212,8 @@ const Map<String, String> defaultVehicleImages = {
       'https://upload.wikimedia.org/wikipedia/commons/4/46/2021_Ford_Bronco_Badlands_Sasquatch_Package%2C_front_7.24.21.jpg',
 
   // Chevrolet
+  'Chevrolet|Blazer EV':
+      'https://api.auto.dev/photos/retail/3GNKDCRJ1RS284858-1.jpg',
   'Chevrolet|Corvette':
       'https://upload.wikimedia.org/wikipedia/commons/b/bf/2020_Chevrolet_Corvette_C8_Stingray_Coupe_in_Torch_Red%2C_front_10.3.20.jpg',
   'Chevrolet|Silverado':

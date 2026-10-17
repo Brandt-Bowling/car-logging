@@ -27,6 +27,8 @@ flutter pub get
 flutter run
 ```
 
+> **Note for Git Worktrees:** Since `android/app/google-services.json` is ignored by git, it will not be copied automatically to new worktrees. Make sure to copy `google-services.json` from the main repository into `android/app/google-services.json` before building or debugging Android in a worktree.
+
 ---
 
 ## Receipt Scanning Setup (Gemini AI Key)

@@ -5,16 +5,29 @@ import 'package:car_logger/data/vehicle_data.dart';
 import 'package:car_logger/widgets/add_car_modal.dart';
 
 void main() {
-  group('Chevrolet Sonic vehicle data tests', () {
-    test('Chevrolet models list includes Sonic', () {
+  group('Vehicle data image tests', () {
+    test('Chevrolet models list includes Sonic and Blazer EV', () {
       final chevroletModels = getModelsForMake('Chevrolet');
       expect(chevroletModels.contains('Sonic'), isTrue);
+      expect(chevroletModels.contains('Blazer EV'), isTrue);
     });
 
     test('Chevrolet Sonic has a default image URL defined', () {
       final imageUrl = getDefaultImageUrl('Chevrolet', 'Sonic');
       expect(imageUrl, isNotNull);
       expect(imageUrl, contains('Sonic'));
+    });
+
+    test('Chevrolet Blazer EV has Iridescent Pearl Tricoat image from auto.dev', () {
+      final imageUrl = getDefaultImageUrl('Chevrolet', 'Blazer EV');
+      expect(imageUrl, isNotNull);
+      expect(imageUrl, equals('https://api.auto.dev/photos/retail/3GNKDCRJ1RS284858-1.jpg'));
+    });
+
+    test('Tesla Model 3 has Metallic Blue image from auto.dev', () {
+      final imageUrl = getDefaultImageUrl('Tesla', 'Model 3');
+      expect(imageUrl, isNotNull);
+      expect(imageUrl, equals('https://api.auto.dev/photos/retail/5YJ3E1EAXMF860954-1.jpg'));
     });
   });
 
