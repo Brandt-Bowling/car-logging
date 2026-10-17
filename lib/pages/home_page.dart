@@ -148,6 +148,30 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _addCarByVinFlow() async {
+    _closeSpeedDial();
+    final newCar = await showModalBottomSheet<Car>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const AddCarModal(openVinPrompt: true),
+    );
+
+    if (newCar != null) {
+      await StorageService.addCar(newCar);
+      _loadCars();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added ${newCar.make} ${newCar.model}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _deleteCarFlow(Car car) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -378,6 +402,12 @@ class _HomePageState extends State<HomePage> {
                     label: 'Add Vehicle',
                     icon: Icons.directions_car,
                     onTap: _addCarFlow,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSpeedDialItem(
+                    label: 'Add by VIN',
+                    icon: Icons.pin_outlined,
+                    onTap: _addCarByVinFlow,
                   ),
                   const SizedBox(height: 12),
                   _buildSpeedDialItem(

@@ -35,6 +35,8 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
   String? _selectedFolderId;
   String? _selectedFolderName;
   String? _apiKey;
+  String? _autoDevApiKey;
+  final TextEditingController _autoDevApiKeyController = TextEditingController();
 
   @override
   void initState() {
@@ -44,6 +46,7 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
     _selectedFolderId = StorageService.getSyncFolderId();
     _selectedFolderName = StorageService.getSyncFolderName();
     _apiKey = StorageService.getGeminiApiKey();
+    _autoDevApiKey = StorageService.getAutoDevApiKey();
     _cars = StorageService.getCars();
 
     // Listen to Google Sign-In status changes
@@ -380,6 +383,64 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
   }
 
   final TextEditingController _apiKeyController = TextEditingController();
+
+  void _configureAutoDevApiKey() {
+    _autoDevApiKeyController.text = _autoDevApiKey ?? '';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Configure auto.dev API'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your auto.dev API Key to decode VINs and retrieve official vehicle photos. If no key is provided, the app uses the built-in auto.dev integration.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _autoDevApiKeyController,
+              decoration: const InputDecoration(
+                labelText: 'auto.dev API Key',
+                border: OutlineInputBorder(),
+                hintText: 'at_...',
+              ),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final newKey = _autoDevApiKeyController.text.trim();
+              await StorageService.saveAutoDevApiKey(newKey);
+              setState(() {
+                _autoDevApiKey = newKey.isEmpty ? null : newKey;
+              });
+              if (!mounted) return;
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    newKey.isEmpty
+                        ? 'auto.dev Custom Key removed (using built-in integration)'
+                        : 'auto.dev API Key updated!',
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _updateCarOdometerIfNeeded(String carId, int odometer) async {
     final carIndex = _cars.indexWhere((c) => c.id == carId);
@@ -875,6 +936,10 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
             _buildGeminiCard(theme),
             const SizedBox(height: 16),
 
+            // auto.dev API Config Card
+            _buildAutoDevCard(theme),
+            const SizedBox(height: 16),
+
             // Folder Configuration Section
             _buildFolderSelectorCard(theme),
             const SizedBox(height: 16),
@@ -1023,6 +1088,39 @@ class _GoogleDriveSyncPageState extends State<GoogleDriveSyncPage> {
         trailing: FilledButton.tonal(
           onPressed: _configureApiKey,
           child: Text(hasKey ? 'Configure' : 'Setup Key'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAutoDevCard(ThemeData theme) {
+    final hasCustomKey = _autoDevApiKey != null && _autoDevApiKey!.isNotEmpty;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      child: ListTile(
+        leading: Icon(
+          Icons.directions_car,
+          color: theme.colorScheme.primary,
+          size: 28,
+        ),
+        title: const Text('VIN Decoding & Photos (auto.dev)'),
+        subtitle: Text(
+          hasCustomKey
+              ? 'Active (Custom API Key)'
+              : 'Active (Built-in auto.dev integration)',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        trailing: FilledButton.tonal(
+          onPressed: _configureAutoDevApiKey,
+          child: Text(hasCustomKey ? 'Configure' : 'Custom Key'),
         ),
       ),
     );
