@@ -433,7 +433,9 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: theme.colorScheme.surfaceContainer,
       body: Stack(
         children: [
           IndexedStack(
@@ -497,6 +499,8 @@ class _HomePageState extends State<HomePage> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentTab,
+        backgroundColor: theme.colorScheme.surface,
+        elevation: 0,
         onDestinationSelected: (index) {
           _closeSpeedDial();
           setState(() {
@@ -588,34 +592,111 @@ class _HomePageState extends State<HomePage> {
     ).animate().fadeIn(duration: 200.ms).slideY(begin: 0.3, end: 0, curve: Curves.easeOut);
   }
 
-  Widget _buildGarageTab(BuildContext context) {
+  Widget _buildEnvelopedTab({
+    required BuildContext context,
+    required Widget title,
+    Widget? subtitle,
+    List<Widget>? actions,
+    required Widget body,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_garageName),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Rename Garage',
-            onPressed: _renameGarageFlow,
-          ),
-          IconButton(
-            icon: const Icon(Icons.cloud_sync),
-            tooltip: 'Sync Google Drive',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const GoogleDriveSyncPage(isTab: false),
+      backgroundColor: colorScheme.surfaceContainer,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Seamless Frameless Header (no divider line, no drop shadow)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 12, 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        DefaultTextStyle(
+                          style: theme.textTheme.headlineSmall!.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                          child: title,
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          DefaultTextStyle(
+                            style: theme.textTheme.bodySmall!.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            child: subtitle,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (actions != null && actions.isNotEmpty)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: actions,
+                    ),
+                ],
+              ),
+            ),
+
+            // Enveloped Body Canvas (no drag handle)
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                 ),
-              );
-            },
-          ),
-        ],
+                clipBehavior: Clip.antiAlias,
+                child: body,
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildGarageTab(BuildContext context) {
+    final vehicleCountText = _cars.isEmpty
+        ? 'No vehicles yet'
+        : '${_cars.length} ${_cars.length == 1 ? 'vehicle' : 'vehicles'}';
+
+    return _buildEnvelopedTab(
+      context: context,
+      title: Text(_garageName),
+      subtitle: Text(vehicleCountText),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.edit_outlined),
+          tooltip: 'Rename Garage',
+          onPressed: _renameGarageFlow,
+        ),
+        IconButton(
+          icon: const Icon(Icons.cloud_sync),
+          tooltip: 'Sync Google Drive',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const GoogleDriveSyncPage(isTab: false),
+              ),
+            );
+          },
+        ),
+      ],
       body: _cars.isEmpty
           ? const Center(child: Text('No vehicles added yet.'))
           : ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 80.0),
               children: [
                 _buildUrgentServiceWarning(context),
                 ..._cars.map((car) => _buildVehicleCard(context, car)),
@@ -1081,17 +1162,21 @@ class _HomePageState extends State<HomePage> {
     // Sort by date descending
     allRecords.sort((a, b) => b.value.date.compareTo(a.value.date));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Activity'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Add Record',
-            onPressed: _addMaintenanceRecordFlow,
-          ),
-        ],
-      ),
+    final countText = allRecords.isEmpty
+        ? 'No records yet'
+        : '${allRecords.length} ${allRecords.length == 1 ? 'record' : 'records'} logged';
+
+    return _buildEnvelopedTab(
+      context: context,
+      title: const Text('Activity'),
+      subtitle: Text(countText),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.add),
+          tooltip: 'Add Record',
+          onPressed: _addMaintenanceRecordFlow,
+        ),
+      ],
       body: allRecords.isEmpty
           ? Center(
               child: Column(
@@ -1115,7 +1200,7 @@ class _HomePageState extends State<HomePage> {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
               itemCount: allRecords.length,
               separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
@@ -1209,14 +1294,19 @@ class _HomePageState extends State<HomePage> {
 
     schedules.sort((a, b) => (a['remainingMiles'] as int).compareTo(b['remainingMiles'] as int));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Schedule'),
-      ),
+    final upcomingCount = schedules.where((s) => s['isUrgent'] == true).length;
+    final subtitleText = upcomingCount > 0
+        ? '$upcomingCount ${upcomingCount == 1 ? 'service' : 'services'} due soon'
+        : 'Maintenance intervals';
+
+    return _buildEnvelopedTab(
+      context: context,
+      title: const Text('Schedule'),
+      subtitle: Text(subtitleText),
       body: _cars.isEmpty
           ? const Center(child: Text('No vehicles added yet.'))
           : ListView.separated(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
               itemCount: schedules.length,
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
@@ -1348,12 +1438,12 @@ class _HomePageState extends State<HomePage> {
     final theme = Theme.of(context);
     final syncFolderName = StorageService.getSyncFolderName();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+    return _buildEnvelopedTab(
+      context: context,
+      title: const Text('Settings'),
+      subtitle: const Text('Preferences & sync'),
       body: ListView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
         children: [
           // Google Drive Sync Card
           Card(

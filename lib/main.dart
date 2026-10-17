@@ -46,19 +46,19 @@ class CarLoggerApp extends StatelessWidget {
             useMaterial3: true,
             brightness: Brightness.light,
             cardTheme: const CardThemeData(
-              elevation: 4,
-              shadowColor: Colors.black45,
+              elevation: 1,
             ),
             appBarTheme: const AppBarTheme(
-              elevation: 4,
-              shadowColor: Colors.black45,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              backgroundColor: Colors.transparent,
             ),
-            navigationBarTheme: const NavigationBarThemeData(
-              elevation: 4,
-              shadowColor: Colors.black45,
+            navigationBarTheme: NavigationBarThemeData(
+              elevation: 0,
+              backgroundColor: lightColorScheme.surface,
             ),
             floatingActionButtonTheme: const FloatingActionButtonThemeData(
-              elevation: 4,
+              elevation: 3,
             ),
           ),
           darkTheme: ThemeData(
@@ -66,19 +66,19 @@ class CarLoggerApp extends StatelessWidget {
             useMaterial3: true,
             brightness: Brightness.dark,
             cardTheme: const CardThemeData(
-              elevation: 4,
-              shadowColor: Colors.black87,
+              elevation: 1,
             ),
             appBarTheme: const AppBarTheme(
-              elevation: 4,
-              shadowColor: Colors.black87,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              backgroundColor: Colors.transparent,
             ),
-            navigationBarTheme: const NavigationBarThemeData(
-              elevation: 4,
-              shadowColor: Colors.black87,
+            navigationBarTheme: NavigationBarThemeData(
+              elevation: 0,
+              backgroundColor: darkColorScheme.surface,
             ),
             floatingActionButtonTheme: const FloatingActionButtonThemeData(
-              elevation: 4,
+              elevation: 3,
             ),
           ),
           themeMode: ThemeMode.system,
