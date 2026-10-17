@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/car.dart';
+import '../services/storage_service.dart';
 import '../widgets/maintenance_record_dialog.dart';
 import 'tabs/maintenance_tab.dart';
 import 'tabs/tires_tab.dart';
@@ -33,6 +34,26 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
     widget.onCarUpdated?.call(updatedCar);
   }
 
+  Future<void> _toggleArchive() async {
+    final newArchived = !_car.isArchived;
+    final updatedCar = _car.copyWith(isArchived: newArchived);
+    await StorageService.updateCar(updatedCar);
+    _onCarUpdated(updatedCar);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          newArchived
+              ? '${_car.make} ${_car.model} archived'
+              : '${_car.make} ${_car.model} unarchived',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<void> _addMaintenanceRecord() async {
     final result = await showMaintenanceRecordDialog(
       context,
@@ -58,6 +79,13 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('${_car.year} ${_car.make} ${_car.model}'),
+        actions: [
+          IconButton(
+            icon: Icon(_car.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined),
+            tooltip: _car.isArchived ? 'Unarchive Vehicle' : 'Archive Vehicle',
+            onPressed: _toggleArchive,
+          ),
+        ],
       ),
       body: IndexedStack(
         index: _currentIndex,

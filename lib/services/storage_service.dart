@@ -64,6 +64,24 @@ class StorageService {
     await saveCars(cars);
   }
 
+  static Future<void> updateCar(Car car) async {
+    final cars = getCars();
+    final index = cars.indexWhere((c) => c.id == car.id);
+    if (index != -1) {
+      cars[index] = car;
+      await saveCars(cars);
+    }
+  }
+
+  static Future<void> toggleArchiveCar(String carId) async {
+    final cars = getCars();
+    final index = cars.indexWhere((c) => c.id == carId);
+    if (index != -1) {
+      cars[index] = cars[index].copyWith(isArchived: !cars[index].isArchived);
+      await saveCars(cars);
+    }
+  }
+
   static Future<void> deleteCar(String carId) async {
     final cars = getCars();
     cars.removeWhere((car) => car.id == carId);
