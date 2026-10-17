@@ -850,7 +850,7 @@ class _HomePageState extends State<HomePage> {
                             children: [
                               // Odometer
                               _buildDigitalKeyMetric(
-                                label: 'ODOMETER',
+                                label: 'Odometer',
                                 value: car.odometer != null
                                     ? '${NumberFormat.decimalPattern().format(car.odometer)} mi'
                                     : 'Not set',
@@ -859,7 +859,7 @@ class _HomePageState extends State<HomePage> {
                               Container(width: 1, height: 26, color: Colors.white12),
                               // Next Service
                               _buildDigitalKeyMetric(
-                                label: car.isEv ? 'TIRE ROTATION' : 'OIL CHANGE',
+                                label: car.isEv ? 'Tire Rotation' : 'Next Service',
                                 value: remainingMiles > 0
                                     ? 'In ${NumberFormat.decimalPattern().format(remainingMiles)} mi'
                                     : 'Due Now',
@@ -870,7 +870,7 @@ class _HomePageState extends State<HomePage> {
                               Container(width: 1, height: 26, color: Colors.white12),
                               // Total Spent
                               _buildDigitalKeyMetric(
-                                label: 'TOTAL SPENT',
+                                label: 'Total Spent',
                                 value: NumberFormat.simpleCurrency().format(carTotalSpent),
                                 color: Colors.greenAccent,
                               ),
