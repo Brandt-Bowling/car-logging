@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../data/vehicle_data.dart';
 import '../models/car.dart';
 import '../services/auto_dev_service.dart';
+import '../services/storage_service.dart';
 
 class AddCarModal extends StatefulWidget {
   final bool openVinPrompt;
@@ -25,7 +26,21 @@ class AddCarModal extends StatefulWidget {
 }
 
 class _AddCarModalState extends State<AddCarModal> {
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
   final _formKey = GlobalKey<FormState>();
+
+  void _showSnackBar(SnackBar snackBar) {
+    if (!mounted) return;
+    final messenger = _scaffoldMessengerKey.currentState;
+    if (messenger != null) {
+      messenger.removeCurrentSnackBar();
+      messenger.showSnackBar(snackBar);
+    } else {
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(snackBar);
+    }
+  }
 
   // Make / Model selection
   String? _selectedMake;
@@ -39,6 +54,8 @@ class _AddCarModalState extends State<AddCarModal> {
   final _vinController = TextEditingController();
   final _vinFocusNode = FocusNode();
   bool _isLoadingVin = false;
+  String? _vinErrorMessage;
+  bool _isApiKeyError = false;
   String? _decodedTrim;
   String? _decodedBodyStyle;
 
@@ -175,7 +192,7 @@ class _AddCarModalState extends State<AddCarModal> {
         });
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          _showSnackBar(
             const SnackBar(
               content: Text('No default image available for this model'),
               behavior: SnackBarBehavior.floating,
@@ -197,20 +214,91 @@ class _AddCarModalState extends State<AddCarModal> {
   // VIN actions
   // ---------------------------------------------------------------------------
 
-  Future<void> _decodeVin(String rawVin) async {
-    final cleanVin = rawVin.trim().toUpperCase();
-    if (cleanVin.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a VIN to decode'),
+  void _applyDecodedInfo(AutoDevVehicleInfo info, String cleanVin) {
+    setState(() {
+      _vin = cleanVin;
+      _vinController.text = cleanVin;
+      _decodedTrim = info.trim;
+      _decodedBodyStyle = info.body;
+      _vinErrorMessage = null;
+      _isApiKeyError = false;
+
+      // Populate Make
+      _selectedMake = info.make;
+      _makeError = false;
+
+      // Populate Model - smart match with known models if possible
+      final knownModels = getModelsForMake(info.make!);
+      String resolvedModel = info.model ?? '';
+      if (info.model != null && knownModels.isNotEmpty) {
+        final exactMatch = knownModels.firstWhere(
+          (m) => m.toLowerCase() == info.model!.toLowerCase(),
+          orElse: () => '',
+        );
+        if (exactMatch.isNotEmpty) {
+          resolvedModel = exactMatch;
+        } else {
+          final partialMatch = knownModels.firstWhere(
+            (m) => info.model!.toLowerCase().contains(m.toLowerCase()),
+            orElse: () => '',
+          );
+          if (partialMatch.isNotEmpty) {
+            resolvedModel = partialMatch;
+          }
+        }
+      }
+      _selectedModel = resolvedModel.isNotEmpty ? resolvedModel : info.model;
+      _modelError = false;
+
+      // Populate Year
+      if (info.year != null) {
+        _selectedYear = info.year!;
+      }
+
+      // Populate EV
+      _isEv = info.isEv;
+
+      // Populate Photo (from auto-dev)
+      if (info.photoUrl != null && info.photoUrl!.isNotEmpty) {
+        _imageUrl = info.photoUrl;
+        _localImagePath = null;
+      }
+    });
+
+    if (mounted) {
+      _showSnackBar(
+        SnackBar(
+          content: Text(
+            'Vehicle details populated for $_selectedYear ${_selectedMake ?? ''} ${_selectedModel ?? ''}!',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
+    }
+  }
+
+  Future<void> _decodeVin(String rawVin) async {
+    final cleanVin = rawVin.trim().toUpperCase();
+    if (cleanVin.isEmpty) {
+      setState(() {
+        _vinErrorMessage = 'Please enter a VIN to decode';
+        _isApiKeyError = false;
+      });
+      if (mounted) {
+        _showSnackBar(
+          const SnackBar(
+            content: Text('Please enter a VIN to decode'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
       return;
     }
 
     setState(() {
       _isLoadingVin = true;
+      _vinErrorMessage = null;
+      _isApiKeyError = false;
     });
 
     try {
@@ -220,7 +308,16 @@ class _AddCarModalState extends State<AddCarModal> {
 
       if (!info.vinValid || info.make == null) {
         final error = info.errorMessage ?? 'Could not decode vehicle details for VIN "$cleanVin".';
-        ScaffoldMessenger.of(context).showSnackBar(
+        final isAuth = error.toLowerCase().contains('api key') ||
+            error.toLowerCase().contains('401') ||
+            error.toLowerCase().contains('authentication') ||
+            error.toLowerCase().contains('unauthorized');
+        setState(() {
+          _vinErrorMessage = error;
+          _isApiKeyError = isAuth;
+          _isLoadingVin = false;
+        });
+        _showSnackBar(
           SnackBar(
             content: Text(error),
             backgroundColor: Theme.of(context).colorScheme.error,
@@ -230,74 +327,20 @@ class _AddCarModalState extends State<AddCarModal> {
         return;
       }
 
+      _applyDecodedInfo(info, cleanVin);
+    } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _vin = cleanVin;
-        _vinController.text = cleanVin;
-        _decodedTrim = info.trim;
-        _decodedBodyStyle = info.body;
-
-        // Populate Make
-        _selectedMake = info.make;
-        _makeController.text = info.make!;
-        _makeError = false;
-
-        // Populate Model - smart match with known models if possible
-        final knownModels = getModelsForMake(info.make!);
-        String resolvedModel = info.model ?? '';
-        if (info.model != null && knownModels.isNotEmpty) {
-          final exactMatch = knownModels.firstWhere(
-            (m) => m.toLowerCase() == info.model!.toLowerCase(),
-            orElse: () => '',
-          );
-          if (exactMatch.isNotEmpty) {
-            resolvedModel = exactMatch;
-          } else {
-            final partialMatch = knownModels.firstWhere(
-              (m) => info.model!.toLowerCase().contains(m.toLowerCase()),
-              orElse: () => '',
-            );
-            if (partialMatch.isNotEmpty) {
-              resolvedModel = partialMatch;
-            }
-          }
-        }
-        _selectedModel = resolvedModel.isNotEmpty ? resolvedModel : info.model;
-        _modelController.text = _selectedModel ?? '';
-        _modelError = false;
-
-        // Populate Year
-        if (info.year != null) {
-          _selectedYear = info.year!;
-        }
-
-        // Populate EV
-        _isEv = info.isEv;
-
-        // Populate Photo (from auto-dev)
-        if (info.photoUrl != null && info.photoUrl!.isNotEmpty) {
-          _imageUrl = info.photoUrl;
-          _localImagePath = null;
-        }
+        _vinErrorMessage = 'Failed to decode VIN: $e';
+        _isApiKeyError = false;
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBar(
         SnackBar(
-          content: Text(
-            'Vehicle details populated for $_selectedYear ${_selectedMake ?? ''} ${_selectedModel ?? ''}!',
-          ),
+          content: Text('Failed to decode VIN: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to decode VIN: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
     } finally {
       if (mounted) {
         setState(() {
@@ -309,14 +352,214 @@ class _AddCarModalState extends State<AddCarModal> {
 
   void _promptVinLookup() {
     final dialogController = TextEditingController(text: _vinController.text);
+    bool isDialogLoading = false;
+    String? dialogError;
+    bool isDialogApiKeyError = false;
+
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void> performDialogDecode(String rawVin) async {
+            final vin = rawVin.trim().toUpperCase();
+            if (vin.isEmpty) {
+              setDialogState(() {
+                dialogError = 'Please enter a VIN';
+                isDialogApiKeyError = false;
+              });
+              return;
+            }
+            setDialogState(() {
+              isDialogLoading = true;
+              dialogError = null;
+              isDialogApiKeyError = false;
+            });
+
+            try {
+              final info = await AutoDevService.decodeAndFetchDetails(vin);
+              if (!dialogContext.mounted) return;
+
+              if (!info.vinValid || info.make == null) {
+                final err = info.errorMessage ?? 'Could not decode vehicle details for VIN "$vin".';
+                final isAuth = err.toLowerCase().contains('api key') ||
+                    err.toLowerCase().contains('401') ||
+                    err.toLowerCase().contains('authentication') ||
+                    err.toLowerCase().contains('unauthorized');
+                setDialogState(() {
+                  isDialogLoading = false;
+                  dialogError = err;
+                  isDialogApiKeyError = isAuth;
+                });
+                return;
+              }
+
+              // Success! Pop dialog and apply to modal
+              Navigator.pop(dialogContext);
+              _applyDecodedInfo(info, vin);
+            } catch (e) {
+              if (dialogContext.mounted) {
+                setDialogState(() {
+                  isDialogLoading = false;
+                  dialogError = 'Failed to decode VIN: $e';
+                  isDialogApiKeyError = false;
+                });
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.auto_awesome),
+                SizedBox(width: 8),
+                Text('Add Vehicle by VIN'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Enter your 17-character VIN. Vehicle make, model, year, and photo will be automatically retrieved via auto.dev.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: dialogController,
+                  autofocus: true,
+                  enabled: !isDialogLoading,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: InputDecoration(
+                    labelText: 'Vehicle Identification Number',
+                    hintText: 'e.g., 1HGCR2F83HA000000',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.pin_outlined),
+                    suffixIcon: dialogController.text.isNotEmpty && !isDialogLoading
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              setDialogState(() {
+                                dialogController.clear();
+                                dialogError = null;
+                                isDialogApiKeyError = false;
+                              });
+                            },
+                          )
+                        : null,
+                  ),
+                  onChanged: (_) {
+                    if (dialogError != null) {
+                      setDialogState(() {
+                        dialogError = null;
+                        isDialogApiKeyError = false;
+                      });
+                    }
+                  },
+                  onSubmitted: (value) => performDialogDecode(value),
+                ),
+                if (dialogError != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.error.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.error_outline,
+                                size: 18,
+                                color: Theme.of(context).colorScheme.error),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                dialogError!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.onErrorContainer,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (isDialogApiKeyError) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () async {
+                                final vin = dialogController.text.trim();
+                                await _showApiKeyDialog(triggerDecode: false);
+                                if (dialogContext.mounted) {
+                                  if (vin.isNotEmpty) {
+                                    performDialogDecode(vin);
+                                  } else {
+                                    setDialogState(() {
+                                      dialogError = null;
+                                      isDialogApiKeyError = false;
+                                    });
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.key, size: 14),
+                              label: const Text('Set API Key'),
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isDialogLoading ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: isDialogLoading
+                    ? null
+                    : () => performDialogDecode(dialogController.text),
+                icon: isDialogLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.auto_awesome, size: 18),
+                label: Text(isDialogLoading ? 'Decoding…' : 'Decode & Auto-fill'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showApiKeyDialog({bool triggerDecode = true}) async {
+    final currentKey = StorageService.getAutoDevApiKey() ?? '';
+    final controller = TextEditingController(text: currentKey);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.auto_awesome),
+            Icon(Icons.key),
             SizedBox(width: 8),
-            Text('Add Vehicle by VIN'),
+            Text('auto.dev API Key'),
           ],
         ),
         content: Column(
@@ -324,42 +567,120 @@ class _AddCarModalState extends State<AddCarModal> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Enter your 17-character VIN. Vehicle make, model, year, and photo will be automatically retrieved via auto.dev.',
+              'Enter your auto.dev API key from https://auto.dev/dashboard/api-keys to decode VINs and fetch retail vehicle photos.',
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: dialogController,
+              controller: controller,
               autofocus: true,
-              textCapitalization: TextCapitalization.characters,
               decoration: const InputDecoration(
-                labelText: 'Vehicle Identification Number',
-                hintText: 'e.g., 1HGCR2F83HA000000',
+                labelText: 'API Key',
+                hintText: 'Enter API key or Bearer token',
                 border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.pin_outlined),
+                prefixIcon: Icon(Icons.vpn_key_outlined),
               ),
-              onSubmitted: (value) {
-                Navigator.pop(dialogContext);
-                _decodeVin(value);
-              },
             ),
           ],
         ),
         actions: [
+          if (currentKey.isNotEmpty)
+            TextButton(
+              onPressed: () async {
+                await StorageService.saveAutoDevApiKey('');
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx, true);
+              },
+              child: const Text('Reset', style: TextStyle(color: Colors.red)),
+            ),
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
+            onPressed: () => Navigator.pop(dialogCtx, false),
             child: const Text('Cancel'),
           ),
-          FilledButton.icon(
-            onPressed: () {
-              final val = dialogController.text;
-              Navigator.pop(dialogContext);
-              _decodeVin(val);
+          FilledButton(
+            onPressed: () async {
+              await StorageService.saveAutoDevApiKey(controller.text.trim());
+              if (dialogCtx.mounted) Navigator.pop(dialogCtx, true);
             },
-            icon: const Icon(Icons.search, size: 18),
-            label: const Text('Decode & Auto-fill'),
+            child: const Text('Save'),
           ),
         ],
+      ),
+    );
+
+    if (saved == true && mounted) {
+      setState(() {
+        _vinErrorMessage = null;
+        _isApiKeyError = false;
+      });
+      _showSnackBar(
+        const SnackBar(
+          content: Text('auto.dev API Key updated'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      if (triggerDecode && _vinController.text.trim().isNotEmpty) {
+        _decodeVin(_vinController.text);
+      }
+    }
+  }
+
+  Widget _buildVinErrorBanner(ThemeData theme) {
+    if (_vinErrorMessage == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10.0),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.errorContainer,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: theme.colorScheme.error.withValues(alpha: 0.4),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.error_outline,
+                    color: theme.colorScheme.error, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _vinErrorMessage!,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onErrorContainer,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                InkWell(
+                  onTap: () => setState(() => _vinErrorMessage = null),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2.0),
+                    child: Icon(Icons.close,
+                        size: 18, color: theme.colorScheme.onErrorContainer),
+                  ),
+                ),
+              ],
+            ),
+            if (_isApiKeyError) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.tonalIcon(
+                  onPressed: _showApiKeyDialog,
+                  icon: const Icon(Icons.key, size: 16),
+                  label: const Text('Configure API Key'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -428,66 +749,75 @@ class _AddCarModalState extends State<AddCarModal> {
       maxChildSize: 0.95,
       expand: false,
       builder: (context, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(28.0)),
-          ),
-          child: CustomScrollView(
-            controller: scrollController,
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            slivers: [
-              // Header
-              SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    const SizedBox(height: 12),
-                    Container(
-                      width: 48,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurfaceVariant
-                            .withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Add New Vehicle',
-                      style: theme.textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Select your make and model to get started',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                ),
+        return ScaffoldMessenger(
+          key: _scaffoldMessengerKey,
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            resizeToAvoidBottomInset: false,
+            body: Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28.0)),
               ),
-
-              // Form content
-              SliverPadding(
-                padding: EdgeInsets.only(
-                  left: 24.0,
-                  right: 24.0,
-                  bottom: bottomInset + 120.0,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: Form(
-                    key: _formKey,
+              child: CustomScrollView(
+                controller: scrollController,
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                slivers: [
+                  // Header
+                  SliverToBoxAdapter(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // ── Quick Add by VIN helper card ──
-                        _buildAnimatedField(
-                          delay: 0.ms,
-                          child: _buildVinHelperCard(theme),
+                        const SizedBox(height: 12),
+                        Container(
+                          width: 48,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Add New Vehicle',
+                          style: theme.textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Select your make and model to get started',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+
+                  // Form content
+                  SliverPadding(
+                    padding: EdgeInsets.only(
+                      left: 24.0,
+                      right: 24.0,
+                      bottom: bottomInset + 120.0,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // ── Quick Add by VIN helper card ──
+                            _buildAnimatedField(
+                              delay: 0.ms,
+                              child: _buildVinHelperCard(theme),
+                            ),
+                            if (_vinErrorMessage != null) ...[
+                              const SizedBox(height: 10),
+                              _buildVinErrorBanner(theme),
+                            ],
+                            const SizedBox(height: 16),
 
                         // ── Make Picker ──
                         _buildAnimatedField(
@@ -645,8 +975,10 @@ class _AddCarModalState extends State<AddCarModal> {
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
+    );
+  },
     );
   }
 
@@ -699,6 +1031,11 @@ class _AddCarModalState extends State<AddCarModal> {
               ),
             ),
             const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.key_outlined, size: 20),
+              tooltip: 'Configure auto.dev API Key',
+              onPressed: () => _showApiKeyDialog(),
+            ),
             FilledButton.tonal(
               onPressed: _isLoadingVin ? null : _promptVinLookup,
               style: FilledButton.styleFrom(

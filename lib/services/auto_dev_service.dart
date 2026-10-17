@@ -137,7 +137,7 @@ class AutoDevVehicleInfo {
 /// Service to interact with the auto.dev Automotive APIs for VIN decoding and vehicle photos.
 class AutoDevService {
   static const String defaultApiKey =
-      'at_34caef644b9700dbfe019ba8ea9a83977065db5e50ac6296';
+      'at_9348733ff052bcb41d54ce21e45503374ba5436be4b952de';
   static const String baseUrl = 'https://api.auto.dev';
 
   /// Optional client override, primarily used in tests.
@@ -146,14 +146,22 @@ class AutoDevService {
   /// Resolves the API key to use for auto.dev requests.
   static String get apiKey {
     final configuredKey = StorageService.getAutoDevApiKey();
-    if (configuredKey != null && configuredKey.isNotEmpty) {
-      return configuredKey;
+    if (configuredKey != null && configuredKey.trim().isNotEmpty) {
+      return configuredKey.trim();
     }
     const envKey = String.fromEnvironment('AUTODEV_API_KEY');
     if (envKey.isNotEmpty) {
       return envKey;
     }
     return defaultApiKey;
+  }
+
+  static Map<String, String> _buildHeaders(String key) {
+    return {
+      'Authorization': 'Bearer $key',
+      'X-API-Key': key,
+      'Accept': 'application/json',
+    };
   }
 
   /// Decodes a VIN using auto.dev `/vin/{vin}` endpoint.
@@ -176,10 +184,7 @@ class AutoDevService {
     try {
       final response = await httpClient.get(
         url,
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Accept': 'application/json',
-        },
+        headers: _buildHeaders(apiKey),
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
@@ -190,11 +195,16 @@ class AutoDevService {
         try {
           final Map<String, dynamic> errData = jsonDecode(response.body);
           if (errData['error'] is Map) {
-            errorMsg = (errData['error']['error'] ?? errData['error']['message'])?.toString();
+            errorMsg = (errData['error']['message'] ?? errData['error']['error'])?.toString();
           } else if (errData['error'] != null) {
             errorMsg = errData['error'].toString();
           }
         } catch (_) {}
+
+        if (response.statusCode == 401) {
+          errorMsg = errorMsg ??
+              'Authentication required. Get your API key at https://auto.dev/dashboard/api-keys';
+        }
 
         return AutoDevVehicleInfo(
           vin: vin,
@@ -230,10 +240,7 @@ class AutoDevService {
     try {
       final response = await httpClient.get(
         url,
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Accept': 'application/json',
-        },
+        headers: _buildHeaders(apiKey),
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
