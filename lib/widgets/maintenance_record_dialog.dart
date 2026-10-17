@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../models/car.dart';
 import '../models/maintenance_record.dart';
 import '../services/storage_service.dart';
+import 'drive_attachment_viewer_sheet.dart';
 
 enum MaintenanceRecordAction { saved, deleted }
 
@@ -65,6 +66,9 @@ class _MaintenanceRecordDialogState extends State<MaintenanceRecordDialog> {
   void initState() {
     super.initState();
     _cars = StorageService.getCars();
+    if (!_cars.any((c) => c.id == widget.car.id)) {
+      _cars.insert(0, widget.car);
+    }
     _selectedCarId = widget.record?.carId ?? widget.car.id;
     final rec = widget.record;
     _titleController = TextEditingController(text: rec?.title ?? '');
@@ -284,6 +288,22 @@ class _MaintenanceRecordDialogState extends State<MaintenanceRecordDialog> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          onPressed: () {
+                            showDriveAttachmentViewerSheet(
+                              context,
+                              driveFileId: widget.record?.driveFileId,
+                              receiptUrl: widget.record?.receiptUrl,
+                              recordTitle: widget.record?.title ?? 'Record',
+                            );
+                          },
+                          icon: const Icon(Icons.open_in_new, size: 14),
+                          label: const Text('View Attachment', style: TextStyle(fontSize: 12)),
                         ),
                       ],
                     ),
