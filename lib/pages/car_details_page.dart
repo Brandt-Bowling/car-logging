@@ -76,9 +76,18 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
+      backgroundColor: colorScheme.surfaceContainer,
       appBar: AppBar(
-        title: Text('${_car.year} ${_car.make} ${_car.model}'),
+        title: Text(
+          '${_car.year} ${_car.make} ${_car.model}',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         actions: [
           IconButton(
             icon: Icon(_car.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined),
@@ -86,24 +95,36 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
             onPressed: _toggleArchive,
           ),
         ],
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          MaintenanceTab(
-            key: _maintenanceTabKey,
-            car: _car,
-            onCarUpdated: _onCarUpdated,
-          ),
-          TiresTab(car: _car),
-          GloveboxTab(
-            car: _car,
-            onCarUpdated: _onCarUpdated,
-          ),
-        ],
+      body: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: IndexedStack(
+          index: _currentIndex,
+          children: [
+            MaintenanceTab(
+              key: _maintenanceTabKey,
+              car: _car,
+              onCarUpdated: _onCarUpdated,
+            ),
+            TiresTab(car: _car),
+            GloveboxTab(
+              car: _car,
+              onCarUpdated: _onCarUpdated,
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
+        backgroundColor: colorScheme.surface,
+        elevation: 0,
         onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
