@@ -347,7 +347,114 @@ void main() {
       await tester.pump();
       await tester.pumpAndSettle();
 
-      expect(find.text('Invalid VIN or vehicle not found'), findsOneWidget);
+      expect(find.text('Invalid VIN or vehicle not found'), findsWidgets);
+      expect(find.byType(SnackBar), findsOneWidget);
+    });
+
+    testWidgets('Prompt dialog retains focus, does not close on decode error, and shows error message',
+        (WidgetTester tester) async {
+      AutoDevService.testClient = http_testing.MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'error': {'message': 'VIN decode error: vehicle not found'}
+          }),
+          404,
+        );
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  await showModalBottomSheet<Car>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (context) => const AddCarModal(openVinPrompt: true),
+                  );
+                },
+                child: const Text('Open Modal With Prompt'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Modal With Prompt'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add Vehicle by VIN'), findsOneWidget);
+
+      final dialogVinFinder = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(dialogVinFinder, 'BADVIN999');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Decode & Auto-fill'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // Dialog is still open!
+      expect(find.text('Add Vehicle by VIN'), findsOneWidget);
+      expect(find.text('VIN decode error: vehicle not found'), findsOneWidget);
+    });
+
+    testWidgets('API key 401 error displays Set API Key in dialog and allows setting key',
+        (WidgetTester tester) async {
+      AutoDevService.testClient = http_testing.MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'error': {'message': 'Authentication required. Get your API key at https://auto.dev/dashboard/api-keys'}
+          }),
+          401,
+        );
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  await showModalBottomSheet<Car>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (context) => const AddCarModal(openVinPrompt: true),
+                  );
+                },
+                child: const Text('Open Modal With Prompt'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Modal With Prompt'));
+      await tester.pumpAndSettle();
+
+      final dialogVinFinder = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(dialogVinFinder, '1HGCV1F18MA000000');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Decode & Auto-fill'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // Dialog is open and shows error + Set API Key action button
+      expect(find.text('Set API Key'), findsOneWidget);
+
+      // Tap Set API Key to open key dialog
+      await tester.tap(find.text('Set API Key'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('auto.dev API Key'), findsOneWidget);
+      expect(find.text('Save'), findsOneWidget);
     });
   });
 }
