@@ -681,21 +681,13 @@ class _HomePageState extends State<HomePage> {
     final records = StorageService.getMaintenanceRecords(car.id);
     final carTotalSpent = records.fold<double>(0.0, (sum, r) => sum + (r.cost ?? 0.0));
 
-    // Tire tread wear progress calculations
-    final installedOdo = car.odometer != null ? (car.odometer! * 0.85).toInt() : 0;
-    const estimatedTreadLife = 60000;
-    final treadWearPercent = car.odometer != null
-        ? (1.0 - (car.odometer! - installedOdo) / estimatedTreadLife).clamp(0.0, 1.0)
-        : 1.0;
-
-    // Next Service progress calculations (7.5k tire rotation interval for EV, 5k oil change for gas)
+    // Next Service calculations (7.5k tire rotation interval for EV, 5k oil change for gas)
     final latestRecordOdo = records.isNotEmpty
         ? records.map((r) => r.odometer).reduce((a, b) => a > b ? a : b)
         : (car.odometer ?? 0);
     final serviceInterval = car.isEv ? 7500 : 5000;
     final nextServiceOdo = latestRecordOdo + serviceInterval;
     final remainingMiles = car.odometer != null ? nextServiceOdo - car.odometer! : serviceInterval;
-    final servicePercent = (remainingMiles / serviceInterval.toDouble()).clamp(0.0, 1.0);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16.0),
@@ -727,7 +719,7 @@ class _HomePageState extends State<HomePage> {
         onLongPress: () => _deleteCarFlow(car),
         borderRadius: BorderRadius.circular(20.0),
         child: SizedBox(
-          height: 238,
+          height: 225,
           width: double.infinity,
           child: Stack(
             children: [
@@ -838,107 +830,49 @@ class _HomePageState extends State<HomePage> {
                     ),
 
                     // Bottom HUD Shelf (frosted glass blur)
+                    // Bottom HUD Shelf (pure minimalist 3-column)
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(14.0),
+                      borderRadius: BorderRadius.circular(16.0),
                       child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                          padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(14.0),
+                            borderRadius: BorderRadius.circular(16.0),
                             border: Border.all(
                               color: Colors.white.withValues(alpha: 0.18),
                               width: 1,
                             ),
                           ),
-                          child: Column(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                children: [
-                                  // Odometer
-                                  _buildDigitalKeyMetric(
-                                    label: 'ODOMETER',
-                                    value: car.odometer != null
-                                        ? '${NumberFormat.decimalPattern().format(car.odometer)} mi'
-                                        : 'Not set',
-                                    color: Colors.white,
-                                  ),
-                                  Container(width: 1, height: 24, color: Colors.white12),
-                                  // Next Service
-                                  _buildDigitalKeyMetric(
-                                    label: car.isEv ? 'TIRE ROTATION' : 'OIL CHANGE',
-                                    value: remainingMiles > 0
-                                        ? 'In ${NumberFormat.decimalPattern().format(remainingMiles)} mi'
-                                        : 'Due Now',
-                                    color: remainingMiles > (car.isEv ? 1500 : 1000)
-                                        ? Colors.white
-                                        : Colors.amberAccent,
-                                  ),
-                                  Container(width: 1, height: 24, color: Colors.white12),
-                                  // Total Spent
-                                  _buildDigitalKeyMetric(
-                                    label: 'TOTAL SPENT',
-                                    value: NumberFormat.simpleCurrency().format(carTotalSpent),
-                                    color: Colors.greenAccent,
-                                  ),
-                                ],
+                              // Odometer
+                              _buildDigitalKeyMetric(
+                                label: 'ODOMETER',
+                                value: car.odometer != null
+                                    ? '${NumberFormat.decimalPattern().format(car.odometer)} mi'
+                                    : 'Not set',
+                                color: Colors.white,
                               ),
-                              const SizedBox(height: 7),
-                              // Health Status & Linear Progress Bar
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        remainingMiles > (car.isEv ? 1500 : 1000)
-                                            ? Icons.check_circle_outline
-                                            : Icons.warning_amber_rounded,
-                                        size: 12,
-                                        color: remainingMiles > (car.isEv ? 1500 : 1000)
-                                            ? Colors.greenAccent
-                                            : (remainingMiles > 0 ? Colors.orangeAccent : Colors.redAccent),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        remainingMiles > 0
-                                            ? '${NumberFormat.decimalPattern().format(remainingMiles)} mi to ${car.isEv ? 'rotation' : 'service'}'
-                                            : 'Service Due Now',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: remainingMiles > (car.isEv ? 1500 : 1000)
-                                              ? Colors.white70
-                                              : (remainingMiles > 0 ? Colors.orangeAccent : Colors.redAccent),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Text(
-                                    'Tread: ${(treadWearPercent * 100).toInt()}%',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: treadWearPercent > 0.4 ? Colors.white70 : Colors.orangeAccent,
-                                    ),
-                                  ),
-                                ],
+                              Container(width: 1, height: 26, color: Colors.white12),
+                              // Next Service
+                              _buildDigitalKeyMetric(
+                                label: car.isEv ? 'TIRE ROTATION' : 'OIL CHANGE',
+                                value: remainingMiles > 0
+                                    ? 'In ${NumberFormat.decimalPattern().format(remainingMiles)} mi'
+                                    : 'Due Now',
+                                color: remainingMiles > (car.isEv ? 1500 : 1000)
+                                    ? Colors.white
+                                    : (remainingMiles > 0 ? Colors.amberAccent : Colors.redAccent),
                               ),
-                              const SizedBox(height: 5),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(2),
-                                child: LinearProgressIndicator(
-                                  value: servicePercent,
-                                  minHeight: 3.5,
-                                  backgroundColor: Colors.white12,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    remainingMiles > (car.isEv ? 1500 : 1000)
-                                        ? Colors.greenAccent
-                                        : (remainingMiles > 0 ? Colors.orangeAccent : Colors.redAccent),
-                                  ),
-                                ),
+                              Container(width: 1, height: 26, color: Colors.white12),
+                              // Total Spent
+                              _buildDigitalKeyMetric(
+                                label: 'TOTAL SPENT',
+                                value: NumberFormat.simpleCurrency().format(carTotalSpent),
+                                color: Colors.greenAccent,
                               ),
                             ],
                           ),
