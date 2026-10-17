@@ -1,4 +1,5 @@
 import 'dart:io' show File;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -694,19 +695,16 @@ class _HomePageState extends State<HomePage> {
     final serviceInterval = car.isEv ? 7500 : 5000;
     final nextServiceOdo = latestRecordOdo + serviceInterval;
     final remainingMiles = car.odometer != null ? nextServiceOdo - car.odometer! : serviceInterval;
-    final servicePercent = (remainingMiles / serviceInterval.toDouble()).clamp(0.0, 1.0);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16.0),
-      elevation: 2.0,
-      color: theme.colorScheme.surfaceContainer,
-      shadowColor: theme.brightness == Brightness.dark
-          ? Colors.black.withValues(alpha: 0.6)
-          : theme.colorScheme.shadow.withValues(alpha: 0.12),
+      elevation: 4.0,
+      color: Colors.black,
+      shadowColor: Colors.black54,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16.0),
+        borderRadius: BorderRadius.circular(20.0),
         side: BorderSide(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+          color: Colors.white.withValues(alpha: 0.15),
           width: 1.2,
         ),
       ),
@@ -726,255 +724,205 @@ class _HomePageState extends State<HomePage> {
           );
         },
         onLongPress: () => _deleteCarFlow(car),
-        borderRadius: BorderRadius.circular(16.0),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        borderRadius: BorderRadius.circular(20.0),
+        child: SizedBox(
+          height: 230,
+          width: double.infinity,
+          child: Stack(
             children: [
-              // Vehicle info header: Clean typography without EV/Gas tags
-              Row(
-                children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(10.0),
-                      border: Border.all(
-                        color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                        width: 1,
-                      ),
-                      image: _getCarCardImage(car),
+              // Background Car Image
+              Positioned.fill(
+                child: _buildDigitalKeyCarImage(car, theme),
+              ),
+              // Cinematic Gradient Overlay (darker at top & bottom, clear in middle)
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.75),
+                        Colors.black.withValues(alpha: 0.20),
+                        Colors.black.withValues(alpha: 0.88),
+                      ],
+                      stops: const [0.0, 0.40, 1.0],
                     ),
-                    child: car.imageUrl == null && car.localImagePath == null
-                        ? Icon(Icons.directions_car, size: 30, color: theme.colorScheme.primary)
-                        : null,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
+                ),
+              ),
+              // Content Stack
+              Padding(
+                padding: const EdgeInsets.all(14.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Top Row: Active Tag, Title, Plate, Chevron
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          '${car.year} ${car.make} ${car.model}',
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        if (car.licensePlate != null && car.licensePlate!.isNotEmpty)
-                          Text(
-                            'License: ${car.licensePlate}',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.white24, width: 0.5),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.greenAccent,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      car.isEv ? 'ACTIVE EV' : 'ACTIVE',
+                                      style: const TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                '${car.year} ${car.make} ${car.model}',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  shadows: const [
+                                    Shadow(color: Colors.black87, blurRadius: 4, offset: Offset(0, 1)),
+                                  ],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (car.licensePlate != null && car.licensePlate!.isNotEmpty)
+                                Text(
+                                  car.licensePlate!,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 1.0,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                            ],
                           ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.18),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.white),
+                        ),
                       ],
                     ),
-                  ),
-                  Icon(Icons.chevron_right, color: theme.colorScheme.outline),
-                ],
-              ),
-              const SizedBox(height: 14),
 
-              // Side-by-Side Metric Cards: Mileage & Cost
-              Row(
-                children: [
-                  // Left Card: Odometer / Mileage
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(12.0),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12.0),
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // Bottom HUD Shelf (frosted glass blur)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14.0),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(14.0),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              width: 1,
+                            ),
+                          ),
+                          child: Column(
                             children: [
                               Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceAround,
                                 children: [
-                                  Icon(Icons.speed, size: 15, color: theme.colorScheme.primary),
-                                  const SizedBox(width: 5),
+                                  // Odometer
+                                  _buildDigitalKeyMetric(
+                                    label: 'ODOMETER',
+                                    value: car.odometer != null
+                                        ? '${NumberFormat.decimalPattern().format(car.odometer)} mi'
+                                        : 'Not set',
+                                    color: Colors.white,
+                                  ),
+                                  Container(width: 1, height: 24, color: Colors.white12),
+                                  // Next Service
+                                  _buildDigitalKeyMetric(
+                                    label: car.isEv ? 'TIRE ROTATION' : 'OIL CHANGE',
+                                    value: remainingMiles > 0
+                                        ? 'In ${NumberFormat.decimalPattern().format(remainingMiles)} mi'
+                                        : 'Due Now',
+                                    color: remainingMiles > (car.isEv ? 1500 : 1000)
+                                        ? Colors.white
+                                        : Colors.amberAccent,
+                                  ),
+                                  Container(width: 1, height: 24, color: Colors.white12),
+                                  // Total Spent
+                                  _buildDigitalKeyMetric(
+                                    label: 'TOTAL SPENT',
+                                    value: NumberFormat.simpleCurrency().format(carTotalSpent),
+                                    color: Colors.greenAccent,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              // Sub-bar
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 5,
+                                        height: 5,
+                                        decoration: const BoxDecoration(
+                                          color: Colors.greenAccent,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Text(
+                                        'Systems Normal',
+                                        style: TextStyle(fontSize: 10, color: Colors.white70),
+                                      ),
+                                    ],
+                                  ),
                                   Text(
-                                    'Odometer',
-                                    style: theme.textTheme.labelMedium?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w600,
+                                    'Tread: ${(treadWearPercent * 100).toInt()}% Remaining',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: treadWearPercent > 0.4 ? Colors.white70 : Colors.orangeAccent,
                                     ),
                                   ),
                                 ],
                               ),
-                              InkWell(
-                                onTap: () => _updateOdometerFlowForCar(car),
-                                borderRadius: BorderRadius.circular(12),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(2.0),
-                                  child: Icon(
-                                    Icons.edit_outlined,
-                                    size: 14,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                ),
-                              ),
                             ],
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            car.odometer != null
-                                ? '${NumberFormat.decimalPattern().format(car.odometer)} mi'
-                                : 'Not set',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-
-                  // Right Card: Total Spent
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(12.0),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12.0),
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(Icons.payments_outlined, size: 15, color: Colors.green),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    'Total Spent',
-                                    style: theme.textTheme.labelMedium?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                '${records.length} ${records.length == 1 ? 'log' : 'logs'}',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: theme.colorScheme.outline,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            NumberFormat.simpleCurrency().format(carTotalSpent),
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-
-              // Progress bar: Tire Tread Wear
-              Text(
-                'Tire Tread Life Wear',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: treadWearPercent,
-                        minHeight: 8,
-                        backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          treadWearPercent > 0.4 ? Colors.green : Colors.orange,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    '${(treadWearPercent * 100).toInt()}% Remaining',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: treadWearPercent > 0.4 ? Colors.green : Colors.orange,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Progress bar: Next Service
-              Text(
-                car.isEv ? 'Next Tire Rotation' : 'Next Oil Change',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: servicePercent,
-                        minHeight: 8,
-                        backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          remainingMiles > (car.isEv ? 1500 : 1000) ? Colors.green : Colors.orange,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    remainingMiles > 0
-                        ? '${remainingMiles.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} mi remaining'
-                        : 'Due Now',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: remainingMiles > (car.isEv ? 1500 : 1000) ? Colors.green : Colors.orange,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Document Status Badges
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildDocBadge(context, Icons.description_outlined, 'Registration', true),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildDocBadge(context, Icons.security_outlined, 'Insurance', false),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildDocBadge(context, Icons.menu_book_outlined, 'Manual', true),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -1411,49 +1359,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildDocBadge(BuildContext context, IconData icon, String label, bool isUploaded) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: isUploaded
-            ? colorScheme.primaryContainer.withValues(alpha: 0.7)
-            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isUploaded
-              ? colorScheme.primary.withValues(alpha: 0.6)
-              : colorScheme.outline.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: isUploaded ? colorScheme.primary : colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isUploaded ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  DecorationImage? _getCarCardImage(Car car) {
+  Widget _buildDigitalKeyCarImage(Car car, ThemeData theme) {
     ImageProvider? provider;
     if (car.localImagePath != null && car.localImagePath!.isNotEmpty) {
       if (kIsWeb) {
@@ -1467,7 +1373,54 @@ class _HomePageState extends State<HomePage> {
         provider = NetworkImage(sanitizeImageUrl(url));
       }
     }
-    if (provider == null) return null;
-    return DecorationImage(image: provider, fit: BoxFit.cover);
+
+    if (provider == null) {
+      return Container(
+        color: Colors.blueGrey.shade900,
+        child: const Center(
+          child: Icon(Icons.directions_car, size: 64, color: Colors.white24),
+        ),
+      );
+    }
+
+    return Image(
+      image: provider,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Container(
+        color: Colors.blueGrey.shade900,
+        child: const Center(
+          child: Icon(Icons.directions_car, size: 64, color: Colors.white24),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDigitalKeyMetric({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+            color: Colors.white60,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 }
