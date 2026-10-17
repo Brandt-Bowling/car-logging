@@ -9,6 +9,7 @@ class Car {
   final String? vin;
   final int? odometer;
   final bool isEv;
+  final bool isArchived;
 
   final String? trim;
   final String? bodyStyle;
@@ -24,6 +25,7 @@ class Car {
     this.vin,
     this.odometer,
     this.isEv = false,
+    this.isArchived = false,
     this.trim,
     this.bodyStyle,
   });
@@ -39,6 +41,7 @@ class Car {
     String? vin,
     int? odometer,
     bool? isEv,
+    bool? isArchived,
     String? trim,
     String? bodyStyle,
   }) {
@@ -53,6 +56,7 @@ class Car {
       vin: vin ?? this.vin,
       odometer: odometer ?? this.odometer,
       isEv: isEv ?? this.isEv,
+      isArchived: isArchived ?? this.isArchived,
       trim: trim ?? this.trim,
       bodyStyle: bodyStyle ?? this.bodyStyle,
     );
@@ -70,6 +74,7 @@ class Car {
       'vin': vin,
       'odometer': odometer,
       'isEv': isEv,
+      'isArchived': isArchived,
       'trim': trim,
       'bodyStyle': bodyStyle,
     };
@@ -87,6 +92,7 @@ class Car {
       vin: map['vin'],
       odometer: map['odometer'],
       isEv: map['isEv'] ?? false,
+      isArchived: map['isArchived'] ?? false,
       trim: map['trim'],
       bodyStyle: map['bodyStyle'],
     );

@@ -65,6 +65,24 @@ class StorageService {
     await saveCars(cars);
   }
 
+  static Future<void> updateCar(Car car) async {
+    final cars = getCars();
+    final index = cars.indexWhere((c) => c.id == car.id);
+    if (index != -1) {
+      cars[index] = car;
+      await saveCars(cars);
+    }
+  }
+
+  static Future<void> toggleArchiveCar(String carId) async {
+    final cars = getCars();
+    final index = cars.indexWhere((c) => c.id == carId);
+    if (index != -1) {
+      cars[index] = cars[index].copyWith(isArchived: !cars[index].isArchived);
+      await saveCars(cars);
+    }
+  }
+
   static Future<void> deleteCar(String carId) async {
     final cars = getCars();
     cars.removeWhere((car) => car.id == carId);
@@ -85,15 +103,43 @@ class StorageService {
     if (data == null) {
       // Return default mock record for the Chevy Sonic for visual continuity
       if (carId == '1') {
+        final now = DateTime.now();
         final defaults = [
           MaintenanceRecord(
             id: 'mock_1',
             carId: '1',
-            title: 'Oil Change',
-            date: DateTime.now().subtract(const Duration(days: 30)),
+            title: 'Oil Change & Filter',
+            date: now.subtract(const Duration(days: 30)),
             odometer: 45000,
             cost: 65.0,
-            description: 'Regular maintenance oil and filter change.',
+            description: 'Regular synthetic oil and oil filter replacement.',
+          ),
+          MaintenanceRecord(
+            id: 'mock_2',
+            carId: '1',
+            title: 'Brake Pad Replacement & Rotor Resurface',
+            date: DateTime(now.year - 1, 9, 15),
+            odometer: 38200,
+            cost: 320.0,
+            description: 'Front ceramic brake pads installed and rotors resurfaced.',
+          ),
+          MaintenanceRecord(
+            id: 'mock_3',
+            carId: '1',
+            title: 'Tire Rotation & Wheel Balance',
+            date: DateTime(now.year - 1, 4, 10),
+            odometer: 33500,
+            cost: 45.0,
+            description: 'Rotated all 4 tires and rebalanced front wheels.',
+          ),
+          MaintenanceRecord(
+            id: 'mock_4',
+            carId: '1',
+            title: 'Battery Replacement',
+            date: DateTime(now.year - 2, 11, 20),
+            odometer: 28000,
+            cost: 165.0,
+            description: 'Installed new AGM 12V battery with 3-year warranty.',
           ),
         ];
         saveMaintenanceRecords('1', defaults);

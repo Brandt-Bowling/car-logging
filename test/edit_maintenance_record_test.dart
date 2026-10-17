@@ -129,7 +129,7 @@ void main() {
 
     // UI should display updated title and cost
     expect(find.text('Full Synthetic Oil & Filter Service'), findsOneWidget);
-    expect(find.text('\$89.50'), findsOneWidget);
+    expect(find.descendant(of: find.byType(ListTile), matching: find.text('\$89.50')), findsOneWidget);
     expect(find.textContaining('46,000 mi'), findsOneWidget);
 
     // Verify storage persistence

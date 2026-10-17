@@ -31,7 +31,7 @@ class _HomePageState extends State<HomePage> {
 
   bool get _hasUrgentService {
     for (final car in _cars) {
-      if (car.odometer == null) continue;
+      if (car.isArchived || car.odometer == null) continue;
       final records = StorageService.getMaintenanceRecords(car.id);
       final latestRecordOdo = records.isNotEmpty
           ? records.map((r) => r.odometer).reduce((a, b) => a > b ? a : b)
@@ -63,7 +63,13 @@ class _HomePageState extends State<HomePage> {
 
   void _loadCars() {
     setState(() {
-      _cars = StorageService.getCars();
+      final cars = StorageService.getCars();
+      // Active cars first, archived cars at the bottom
+      cars.sort((a, b) {
+        if (a.isArchived == b.isArchived) return 0;
+        return a.isArchived ? 1 : -1;
+      });
+      _cars = cars;
     });
   }
 
@@ -110,8 +116,16 @@ class _HomePageState extends State<HomePage> {
                 const Divider(),
                 ..._cars.map((car) {
                   return ListTile(
-                    leading: const Icon(Icons.directions_car),
-                    title: Text('${car.year} ${car.make} ${car.model}'),
+                    leading: Icon(
+                      Icons.directions_car,
+                      color: car.isArchived ? Colors.grey : null,
+                    ),
+                    title: Text(
+                      '${car.year} ${car.make} ${car.model}${car.isArchived ? ' (Archived)' : ''}',
+                      style: TextStyle(
+                        color: car.isArchived ? Colors.grey : null,
+                      ),
+                    ),
                     subtitle: car.licensePlate != null ? Text(car.licensePlate!) : null,
                     onTap: () => Navigator.pop(context, car),
                   );
@@ -211,6 +225,61 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     }
+  }
+
+  Future<void> _toggleArchiveCar(Car car) async {
+    final newArchived = !car.isArchived;
+    await StorageService.toggleArchiveCar(car.id);
+    _loadCars();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          newArchived
+              ? 'Archived ${car.make} ${car.model}'
+              : 'Unarchived ${car.make} ${car.model}',
+        ),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            await StorageService.toggleArchiveCar(car.id);
+            _loadCars();
+          },
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _showCarOptionsSheet(Car car) async {
+    await showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(car.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined),
+              title: Text(car.isArchived ? 'Unarchive Vehicle' : 'Archive Vehicle'),
+              onTap: () {
+                Navigator.pop(context);
+                _toggleArchiveCar(car);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Remove Vehicle', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(context);
+                _deleteCarFlow(car);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _addMaintenanceRecordForCar(Car car) async {
@@ -564,7 +633,7 @@ class _HomePageState extends State<HomePage> {
     String serviceName = '';
 
     for (final car in _cars) {
-      if (car.odometer == null || _dismissedWarningCarIds.contains(car.id)) continue;
+      if (car.isArchived || car.odometer == null || _dismissedWarningCarIds.contains(car.id)) continue;
       final records = StorageService.getMaintenanceRecords(car.id);
       final latestRecordOdo = records.isNotEmpty
           ? records.map((r) => r.odometer).reduce((a, b) => a > b ? a : b)
@@ -719,22 +788,24 @@ class _HomePageState extends State<HomePage> {
     final nextServiceOdo = latestRecordOdo + serviceInterval;
     final remainingMiles = car.odometer != null ? nextServiceOdo - car.odometer! : serviceInterval;
 
-    return Card(
+    final cardWidget = Card(
       margin: const EdgeInsets.only(bottom: 16.0),
-      elevation: 4.0,
+      elevation: car.isArchived ? 1.0 : 4.0,
       color: Colors.black,
-      shadowColor: Colors.black54,
+      shadowColor: car.isArchived ? Colors.transparent : Colors.black54,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20.0),
         side: BorderSide(
-          color: Colors.white.withValues(alpha: 0.15),
+          color: car.isArchived
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.white.withValues(alpha: 0.15),
           width: 1.2,
         ),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
-          Navigator.push(
+        onTap: () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => CarDetailsPage(
@@ -745,8 +816,9 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           );
+          _loadCars();
         },
-        onLongPress: () => _deleteCarFlow(car),
+        onLongPress: () => _showCarOptionsSheet(car),
         borderRadius: BorderRadius.circular(20.0),
         child: SizedBox(
           height: 225,
@@ -781,7 +853,7 @@ class _HomePageState extends State<HomePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Top Row: Active Tag, Title, Plate, Chevron
+                    // Top Row: Active/Archived Tag, Title, Plate, Chevron & Options
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -793,9 +865,14 @@ class _HomePageState extends State<HomePage> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.18),
+                                  color: car.isArchived
+                                      ? Colors.white.withValues(alpha: 0.10)
+                                      : Colors.white.withValues(alpha: 0.18),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.white24, width: 0.5),
+                                  border: Border.all(
+                                    color: car.isArchived ? Colors.white12 : Colors.white24,
+                                    width: 0.5,
+                                  ),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -803,19 +880,21 @@ class _HomePageState extends State<HomePage> {
                                     Container(
                                       width: 6,
                                       height: 6,
-                                      decoration: const BoxDecoration(
-                                        color: Colors.greenAccent,
+                                      decoration: BoxDecoration(
+                                        color: car.isArchived ? Colors.grey : Colors.greenAccent,
                                         shape: BoxShape.circle,
                                       ),
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      car.isEv ? 'ACTIVE EV' : 'ACTIVE',
-                                      style: const TextStyle(
+                                      car.isArchived
+                                          ? (car.isEv ? 'ARCHIVED EV' : 'ARCHIVED')
+                                          : (car.isEv ? 'ACTIVE EV' : 'ACTIVE'),
+                                      style: TextStyle(
                                         fontSize: 9,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: 0.5,
-                                        color: Colors.white,
+                                        color: car.isArchived ? Colors.white70 : Colors.white,
                                       ),
                                     ),
                                   ],
@@ -847,14 +926,69 @@ class _HomePageState extends State<HomePage> {
                             ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.18),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white24),
-                          ),
-                          child: const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.white),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            PopupMenuButton<String>(
+                              icon: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.18),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white24),
+                                ),
+                                child: const Icon(Icons.more_vert, size: 14, color: Colors.white),
+                              ),
+                              tooltip: 'Vehicle options',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onSelected: (value) {
+                                if (value == 'archive') {
+                                  _toggleArchiveCar(car);
+                                } else if (value == 'delete') {
+                                  _deleteCarFlow(car);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                PopupMenuItem<String>(
+                                  value: 'archive',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        car.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(car.isArchived ? 'Unarchive Vehicle' : 'Archive Vehicle'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem<String>(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Remove Vehicle',
+                                        style: TextStyle(color: theme.colorScheme.error),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.18),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white24),
+                              ),
+                              child: const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.white),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -917,6 +1051,21 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+
+    if (car.isArchived) {
+      return Opacity(
+        opacity: 0.6,
+        child: ColorFiltered(
+          colorFilter: const ColorFilter.mode(
+            Colors.grey,
+            BlendMode.saturation,
+          ),
+          child: cardWidget,
+        ),
+      );
+    }
+
+    return cardWidget;
   }
 
   Widget _buildActivityTab(BuildContext context) {
