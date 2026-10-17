@@ -499,8 +499,6 @@ class _HomePageState extends State<HomePage> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentTab,
-        backgroundColor: theme.colorScheme.surface,
-        elevation: 0,
         onDestinationSelected: (index) {
           _closeSpeedDial();
           setState(() {
