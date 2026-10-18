@@ -63,6 +63,9 @@ class _AddCarModalState extends State<AddCarModal> {
   int _selectedYear = 2010;
   String? _imageUrl;
   String? _localImagePath;
+  List<String> _availableImageUrls = [];
+  int _selectedImageIndex = 0;
+  late final PageController _imagePageController;
   String? _licensePlate;
   String? _vin;
   int? _odometer;
@@ -81,6 +84,7 @@ class _AddCarModalState extends State<AddCarModal> {
   void initState() {
     super.initState();
     _sheetController = DraggableScrollableController();
+    _imagePageController = PageController();
 
     if (widget.initialVin != null && widget.initialVin!.isNotEmpty) {
       _vin = widget.initialVin;
@@ -108,6 +112,7 @@ class _AddCarModalState extends State<AddCarModal> {
     _vinController.dispose();
     _vinFocusNode.dispose();
     _sheetController?.dispose();
+    _imagePageController.dispose();
     super.dispose();
   }
 
@@ -141,6 +146,8 @@ class _AddCarModalState extends State<AddCarModal> {
       _modelController.clear();
       _imageUrl = null;
       _localImagePath = null;
+      _availableImageUrls = [];
+      _selectedImageIndex = 0;
       _makeError = false;
       // Don't auto-reset EV — user may have toggled it manually
     });
@@ -153,7 +160,10 @@ class _AddCarModalState extends State<AddCarModal> {
 
       // Auto-populate default image (if user hasn't picked a custom one)
       if (_selectedMake != null && _localImagePath == null) {
-        _imageUrl = getDefaultImageUrl(_selectedMake!, model);
+        final defaultUrl = getDefaultImageUrl(_selectedMake!, model);
+        _imageUrl = defaultUrl;
+        _availableImageUrls = defaultUrl != null ? [defaultUrl] : [];
+        _selectedImageIndex = 0;
       }
 
       // Auto-detect EV
@@ -189,7 +199,18 @@ class _AddCarModalState extends State<AddCarModal> {
         setState(() {
           _imageUrl = url;
           _localImagePath = null;
+          if (!_availableImageUrls.contains(url)) {
+            _availableImageUrls.add(url);
+          }
+          _selectedImageIndex = _availableImageUrls.indexOf(url);
         });
+        if (_imagePageController.hasClients) {
+          _imagePageController.animateToPage(
+            _selectedImageIndex,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
       } else {
         if (mounted) {
           _showSnackBar(
@@ -258,12 +279,26 @@ class _AddCarModalState extends State<AddCarModal> {
       // Populate EV
       _isEv = info.isEv;
 
-      // Populate Photo (from auto-dev)
-      if (info.photoUrl != null && info.photoUrl!.isNotEmpty) {
+      // Populate Photos (from auto-dev)
+      _availableImageUrls = List<String>.from(info.photoUrls);
+      if (info.photoUrl != null &&
+          info.photoUrl!.isNotEmpty &&
+          !_availableImageUrls.contains(info.photoUrl!)) {
+        _availableImageUrls.insert(0, info.photoUrl!);
+      }
+      _selectedImageIndex = 0;
+      if (_availableImageUrls.isNotEmpty) {
+        _imageUrl = _availableImageUrls.first;
+        _localImagePath = null;
+      } else if (info.photoUrl != null && info.photoUrl!.isNotEmpty) {
         _imageUrl = info.photoUrl;
         _localImagePath = null;
       }
     });
+
+    if (_imagePageController.hasClients) {
+      _imagePageController.jumpToPage(0);
+    }
 
     if (mounted) {
       _showSnackBar(
@@ -1090,6 +1125,8 @@ class _AddCarModalState extends State<AddCarModal> {
                             _modelController.clear();
                             _imageUrl = null;
                             _localImagePath = null;
+                            _availableImageUrls = [];
+                            _selectedImageIndex = 0;
                             _makeError = false;
                           });
                         },
@@ -1107,6 +1144,8 @@ class _AddCarModalState extends State<AddCarModal> {
                     _modelController.clear();
                     _imageUrl = null;
                     _localImagePath = null;
+                    _availableImageUrls = [];
+                    _selectedImageIndex = 0;
                   });
                 }
               },
@@ -1161,6 +1200,8 @@ class _AddCarModalState extends State<AddCarModal> {
                         _selectedModel = null;
                         _imageUrl = null;
                         _localImagePath = null;
+                        _availableImageUrls = [];
+                        _selectedImageIndex = 0;
                         _modelError = false;
                       });
                     },
@@ -1175,6 +1216,8 @@ class _AddCarModalState extends State<AddCarModal> {
                 _selectedModel = null;
                 _imageUrl = null;
                 _localImagePath = null;
+                _availableImageUrls = [];
+                _selectedImageIndex = 0;
               });
             }
           },
@@ -1216,8 +1259,10 @@ class _AddCarModalState extends State<AddCarModal> {
     );
   }
 
-  /// Photo section — preview card with pick / default / remove actions.
+  /// Photo section — preview card with carousel / pick / default / remove actions.
   Widget _buildPhotoSection(ThemeData theme, bool hasImage) {
+    final showCarousel = _localImagePath == null && _availableImageUrls.length > 1;
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -1234,94 +1279,479 @@ class _AddCarModalState extends State<AddCarModal> {
             // Section label
             Row(
               children: [
-                Icon(Icons.photo_camera_outlined,
-                    size: 20, color: theme.colorScheme.onSurfaceVariant),
+                Icon(
+                  showCarousel ? Icons.collections_outlined : Icons.photo_camera_outlined,
+                  size: 20,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
                 const SizedBox(width: 8),
                 Text(
-                  'Vehicle Photo',
+                  showCarousel ? 'Vehicle Photos' : 'Vehicle Photo',
                   style: theme.textTheme.titleSmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Image preview
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              height: hasImage ? 180 : 100,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-                image: _getPreviewImage(),
-              ),
-              child: !hasImage
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.directions_car_outlined,
-                              size: 36,
-                              color: theme.colorScheme.onSurfaceVariant
-                                  .withValues(alpha: 0.4)),
-                          const SizedBox(height: 8),
-                          Text(
-                            _selectedModel != null
-                                ? 'No image available'
-                                : 'Select make & model for preview',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant
-                                  .withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(height: 12),
-
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.photo_library_outlined, size: 18),
-                    label: const Text('Choose Photo'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (_selectedMake != null && _selectedModel != null)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed:
-                          _localImagePath != null ? _useDefaultImage : null,
-                      icon: const Icon(Icons.auto_fix_high, size: 18),
-                      label: const Text('Use Default'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
-                    ),
-                  ),
-                if (hasImage) ...[
+                if (showCarousel) ...[
                   const SizedBox(width: 8),
-                  IconButton.outlined(
-                    onPressed: _removeImage,
-                    icon: const Icon(Icons.close, size: 18),
-                    tooltip: 'Remove image',
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${_availableImageUrls.length} available',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ],
             ),
+            const SizedBox(height: 12),
+
+            // Image preview or carousel
+            if (showCarousel)
+              _buildImageCarousel(theme)
+            else
+              _buildSingleImagePreview(theme, hasImage),
+
+            // Horizontal thumbnail strip (when carousel is active)
+            if (showCarousel) ...[
+              const SizedBox(height: 10),
+              _buildThumbnailStrip(theme),
+            ],
+
+            const SizedBox(height: 12),
+
+            // Action buttons
+            _buildPhotoActionButtons(theme, hasImage, showCarousel),
           ],
         ),
       ),
+    );
+  }
+
+  /// Carousel view for navigating through multiple VIN photos.
+  Widget _buildImageCarousel(ThemeData theme) {
+    return Container(
+      height: 200,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            controller: _imagePageController,
+            itemCount: _availableImageUrls.length,
+            onPageChanged: (index) {
+              setState(() {
+                _selectedImageIndex = index;
+                _imageUrl = _availableImageUrls[index];
+                _localImagePath = null;
+              });
+            },
+            itemBuilder: (context, index) {
+              final url = _availableImageUrls[index];
+              return Image.network(
+                url,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Center(
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                          : null,
+                      strokeWidth: 2,
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.broken_image_outlined,
+                          size: 36,
+                          color: theme.colorScheme.onSurfaceVariant
+                              .withValues(alpha: 0.5),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Photo unavailable',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+
+          // Previous button
+          if (_selectedImageIndex > 0)
+            Positioned(
+              left: 8,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  shape: const CircleBorder(),
+                  clipBehavior: Clip.antiAlias,
+                  child: IconButton(
+                    icon: const Icon(Icons.chevron_left, color: Colors.white, size: 24),
+                    tooltip: 'Previous photo',
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    onPressed: () {
+                      _imagePageController.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+
+          // Next button
+          if (_selectedImageIndex < _availableImageUrls.length - 1)
+            Positioned(
+              right: 8,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  shape: const CircleBorder(),
+                  clipBehavior: Clip.antiAlias,
+                  child: IconButton(
+                    icon: const Icon(Icons.chevron_right, color: Colors.white, size: 24),
+                    tooltip: 'Next photo',
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    onPressed: () {
+                      _imagePageController.nextPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+
+          // Counter badge
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.photo_library, color: Colors.white, size: 12),
+                  const SizedBox(width: 5),
+                  Text(
+                    '${_selectedImageIndex + 1} / ${_availableImageUrls.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Selected indicator
+          Positioned(
+            bottom: 10,
+            left: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, color: Colors.greenAccent, size: 14),
+                  SizedBox(width: 5),
+                  Text(
+                    'Selected photo',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Horizontal thumbnail strip for rapid photo selection.
+  Widget _buildThumbnailStrip(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+            'Tap any photo to select:',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 56,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _availableImageUrls.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final isSelected = index == _selectedImageIndex;
+              final url = _availableImageUrls[index];
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedImageIndex = index;
+                    _imageUrl = url;
+                    _localImagePath = null;
+                  });
+                  if (_imagePageController.hasClients) {
+                    _imagePageController.animateToPage(
+                      index,
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeInOut,
+                    );
+                  }
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 70,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+                      width: isSelected ? 2.5 : 1.0,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.network(
+                          url,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            child: Icon(
+                              Icons.broken_image,
+                              size: 16,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        if (isSelected)
+                          Container(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                            alignment: Alignment.topRight,
+                            padding: const EdgeInsets.all(2),
+                            child: Icon(
+                              Icons.check_circle,
+                              color: theme.colorScheme.primary,
+                              size: 14,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Single image preview when not in carousel mode.
+  Widget _buildSingleImagePreview(ThemeData theme, bool hasImage) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      height: hasImage ? 180 : 100,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        image: _getPreviewImage(),
+      ),
+      child: !hasImage
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.directions_car_outlined,
+                    size: 36,
+                    color: theme.colorScheme.onSurfaceVariant
+                        .withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _selectedModel != null
+                        ? 'No image available'
+                        : 'Select make & model for preview',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : (_localImagePath != null
+              ? Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Container(
+                    margin: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.photo, color: Colors.white, size: 13),
+                        SizedBox(width: 4),
+                        Text(
+                          'Custom photo',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : null),
+    );
+  }
+
+  /// Action buttons below the photo preview / carousel.
+  Widget _buildPhotoActionButtons(
+    ThemeData theme,
+    bool hasImage,
+    bool showCarousel,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.photo_library_outlined, size: 18),
+                label: const Text('Choose Photo'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+            if (_selectedMake != null && _selectedModel != null) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: (_localImagePath != null ||
+                          (_availableImageUrls.length > 1 &&
+                              _imageUrl !=
+                                  getDefaultImageUrl(_selectedMake!, _selectedModel!)))
+                      ? _useDefaultImage
+                      : null,
+                  icon: const Icon(Icons.auto_fix_high, size: 18),
+                  label: const Text('Use Default'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+            ],
+            if (hasImage) ...[
+              const SizedBox(width: 8),
+              IconButton.outlined(
+                onPressed: _removeImage,
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: 'Remove image',
+              ),
+            ],
+          ],
+        ),
+        if (_localImagePath != null && _availableImageUrls.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _localImagePath = null;
+                  _imageUrl = _availableImageUrls[_selectedImageIndex];
+                });
+              },
+              icon: const Icon(Icons.collections, size: 16),
+              label: Text('Switch back to VIN photos (${_availableImageUrls.length})'),
+            ),
+          ),
+        ],
+        if (_localImagePath == null && _imageUrl == null && _availableImageUrls.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _imageUrl = _availableImageUrls[_selectedImageIndex];
+                });
+              },
+              icon: const Icon(Icons.restore, size: 16),
+              label: Text('Restore VIN photos (${_availableImageUrls.length})'),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

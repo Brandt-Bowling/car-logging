@@ -18,6 +18,7 @@ class AutoDevVehicleInfo {
   final String? transmission;
   final bool isEv;
   final String? photoUrl;
+  final List<String> photoUrls;
   final bool vinValid;
   final String? errorMessage;
 
@@ -34,6 +35,7 @@ class AutoDevVehicleInfo {
     this.transmission,
     this.isEv = false,
     this.photoUrl,
+    this.photoUrls = const [],
     this.vinValid = true,
     this.errorMessage,
   });
@@ -41,6 +43,7 @@ class AutoDevVehicleInfo {
   factory AutoDevVehicleInfo.fromJson(
     Map<String, dynamic> json, {
     String? photoUrl,
+    List<String>? photoUrls,
   }) {
     final vin = (json['vin'] ?? '').toString().trim();
     final vehicle = json['vehicle'] is Map<String, dynamic>
@@ -81,6 +84,9 @@ class AutoDevVehicleInfo {
         ? (json['error']['error'] ?? json['error']['message'])?.toString()
         : json['error']?.toString();
 
+    final resolvedPhotoUrls = photoUrls ??
+        (photoUrl != null && photoUrl.isNotEmpty ? [photoUrl] : const <String>[]);
+
     return AutoDevVehicleInfo(
       vin: vin,
       make: make,
@@ -93,7 +99,8 @@ class AutoDevVehicleInfo {
       drive: drive,
       transmission: transmission,
       isEv: isEvBySpecs,
-      photoUrl: photoUrl,
+      photoUrl: photoUrl ?? (resolvedPhotoUrls.isNotEmpty ? resolvedPhotoUrls.first : null),
+      photoUrls: resolvedPhotoUrls,
       vinValid: vinValid && errorMessage == null,
       errorMessage: errorMessage,
     );
@@ -112,6 +119,7 @@ class AutoDevVehicleInfo {
     String? transmission,
     bool? isEv,
     String? photoUrl,
+    List<String>? photoUrls,
     bool? vinValid,
     String? errorMessage,
   }) {
@@ -128,6 +136,7 @@ class AutoDevVehicleInfo {
       transmission: transmission ?? this.transmission,
       isEv: isEv ?? this.isEv,
       photoUrl: photoUrl ?? this.photoUrl,
+      photoUrls: photoUrls ?? this.photoUrls,
       vinValid: vinValid ?? this.vinValid,
       errorMessage: errorMessage ?? this.errorMessage,
     );
@@ -226,13 +235,13 @@ class AutoDevService {
     }
   }
 
-  /// Retrieves the vehicle photo URL by VIN from auto.dev `/photos/{vin}` endpoint.
-  static Future<String?> getVehiclePhoto(
+  /// Retrieves all vehicle photo URLs by VIN from auto.dev `/photos/{vin}` endpoint.
+  static Future<List<String>> getVehiclePhotos(
     String rawVin, {
     http.Client? client,
   }) async {
     final vin = rawVin.trim().toUpperCase();
-    if (vin.isEmpty) return null;
+    if (vin.isEmpty) return const [];
 
     final httpClient = client ?? testClient ?? http.Client();
     final url = Uri.parse('$baseUrl/photos/${Uri.encodeComponent(vin)}');
@@ -246,18 +255,31 @@ class AutoDevService {
       if (response.statusCode == 200) {
         final Map<String, dynamic> json = jsonDecode(response.body);
         final data = json['data'] is Map ? json['data'] : json;
+        final photos = <String>[];
 
-        if (data['retail'] is List && (data['retail'] as List).isNotEmpty) {
-          return (data['retail'] as List).first.toString();
+        void addPhoto(dynamic item) {
+          final str = item?.toString().trim();
+          if (str != null && str.isNotEmpty && !photos.contains(str)) {
+            photos.add(str);
+          }
         }
-        if (data['wholesale'] is List && (data['wholesale'] as List).isNotEmpty) {
-          return (data['wholesale'] as List).first.toString();
+
+        if (data['retail'] is List) {
+          for (final item in data['retail'] as List) {
+            addPhoto(item);
+          }
         }
+        if (data['wholesale'] is List) {
+          for (final item in data['wholesale'] as List) {
+            addPhoto(item);
+          }
+        }
+        return photos;
       }
-      return null;
+      return const [];
     } catch (e) {
-      debugPrint('AutoDevService.getVehiclePhoto error: $e');
-      return null;
+      debugPrint('AutoDevService.getVehiclePhotos error: $e');
+      return const [];
     } finally {
       if (client == null && testClient == null) {
         httpClient.close();
@@ -265,7 +287,16 @@ class AutoDevService {
     }
   }
 
-  /// Decodes the VIN and fetches the vehicle photo concurrently, populating all available fields.
+  /// Retrieves the vehicle photo URL by VIN from auto.dev `/photos/{vin}` endpoint.
+  static Future<String?> getVehiclePhoto(
+    String rawVin, {
+    http.Client? client,
+  }) async {
+    final photos = await getVehiclePhotos(rawVin, client: client);
+    return photos.isNotEmpty ? photos.first : null;
+  }
+
+  /// Decodes the VIN and fetches all vehicle photos concurrently, populating all available fields.
   static Future<AutoDevVehicleInfo> decodeAndFetchDetails(
     String rawVin, {
     http.Client? client,
@@ -284,18 +315,28 @@ class AutoDevService {
     try {
       final results = await Future.wait([
         decodeVin(vin, client: httpClient),
-        getVehiclePhoto(vin, client: httpClient),
+        getVehiclePhotos(vin, client: httpClient),
       ]);
 
       final info = results[0] as AutoDevVehicleInfo;
-      var photoUrl = results[1] as String?;
+      final photos = List<String>.from(results[1] as List<String>);
 
-      // If auto-dev photo endpoint returned null or empty, fall back to default vehicle image if known
-      if ((photoUrl == null || photoUrl.isEmpty) && info.make != null && info.model != null) {
-        photoUrl = getDefaultImageUrl(info.make!, info.model!);
+      // If default vehicle image exists, also make it available in the photos list
+      if (info.make != null && info.model != null) {
+        final defaultImg = getDefaultImageUrl(info.make!, info.model!);
+        if (defaultImg != null && !photos.contains(defaultImg)) {
+          // If auto-dev returned no photos, default image will be first.
+          // Otherwise it is appended so the user can easily select the stock catalog photo.
+          photos.add(defaultImg);
+        }
       }
 
-      return info.copyWith(photoUrl: photoUrl);
+      final photoUrl = photos.isNotEmpty ? photos.first : null;
+
+      return info.copyWith(
+        photoUrl: photoUrl,
+        photoUrls: photos,
+      );
     } finally {
       if (client == null && testClient == null) {
         httpClient.close();

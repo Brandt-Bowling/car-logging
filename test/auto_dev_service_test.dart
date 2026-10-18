@@ -89,6 +89,36 @@ void main() {
       expect(photo, equals('https://api.auto.dev/photos/retail/19XFL1H87RE004388-1.jpg'));
     });
 
+    test('getVehiclePhotos retrieves all retail and wholesale photos from auto.dev', () async {
+      final mockPhotoData = {
+        'data': {
+          'retail': [
+            'https://api.auto.dev/photos/retail/19XFL1H87RE004388-1.jpg',
+            'https://api.auto.dev/photos/retail/19XFL1H87RE004388-2.jpg',
+            'https://api.auto.dev/photos/retail/19XFL1H87RE004388-3.jpg',
+          ],
+          'wholesale': [
+            'https://api.auto.dev/photos/wholesale/19XFL1H87RE004388-w1.jpg',
+          ],
+        }
+      };
+
+      final client = MockClient((request) async {
+        if (request.url.path.contains('/photos/19XFL1H87RE004388')) {
+          return http.Response(jsonEncode(mockPhotoData), 200);
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final photos = await AutoDevService.getVehiclePhotos('19XFL1H87RE004388', client: client);
+
+      expect(photos.length, equals(4));
+      expect(photos[0], equals('https://api.auto.dev/photos/retail/19XFL1H87RE004388-1.jpg'));
+      expect(photos[1], equals('https://api.auto.dev/photos/retail/19XFL1H87RE004388-2.jpg'));
+      expect(photos[2], equals('https://api.auto.dev/photos/retail/19XFL1H87RE004388-3.jpg'));
+      expect(photos[3], equals('https://api.auto.dev/photos/wholesale/19XFL1H87RE004388-w1.jpg'));
+    });
+
     test('decodeAndFetchDetails populates vehicle info and auto.dev photo', () async {
       final mockVinData = {
         'vin': '3GNKDCRJ1RS284858',
@@ -103,6 +133,7 @@ void main() {
         'data': {
           'retail': [
             'https://api.auto.dev/photos/retail/3GNKDCRJ1RS284858-1.jpg',
+            'https://api.auto.dev/photos/retail/3GNKDCRJ1RS284858-2.jpg',
           ],
         }
       };
@@ -124,6 +155,8 @@ void main() {
       expect(details.year, equals(2024));
       expect(details.isEv, isTrue);
       expect(details.photoUrl, equals('https://api.auto.dev/photos/retail/3GNKDCRJ1RS284858-1.jpg'));
+      expect(details.photoUrls, contains('https://api.auto.dev/photos/retail/3GNKDCRJ1RS284858-1.jpg'));
+      expect(details.photoUrls, contains('https://api.auto.dev/photos/retail/3GNKDCRJ1RS284858-2.jpg'));
     });
 
     test('decodeAndFetchDetails falls back to default vehicle image if auto.dev has no photos', () async {
