@@ -13,7 +13,7 @@ void main() {
     await StorageService.init();
   });
 
-  testWidgets('RaisedNavigationBar renders with upward elevation shadow and top border', (tester) async {
+  testWidgets('RaisedNavigationBar renders with solid surfaceContainer color and zero shadows/borders', (tester) async {
     const colorScheme = ColorScheme.light();
     await tester.pumpWidget(
       MaterialApp(
@@ -44,25 +44,30 @@ void main() {
     ).first;
 
     final Container container = tester.widget(containerFinder);
-    final BoxDecoration decoration = container.decoration as BoxDecoration;
 
     // Verify container background color is surfaceContainer
-    expect(decoration.color, equals(colorScheme.surfaceContainer));
+    final containerColor = container.color ?? (container.decoration as BoxDecoration?)?.color;
+    expect(containerColor, equals(colorScheme.surfaceContainer));
 
-    // Verify upward elevation shadow is present with negative Y offset
-    expect(decoration.boxShadow, isNotNull);
-    expect(decoration.boxShadow!.isNotEmpty, isTrue);
-    final shadow = decoration.boxShadow!.first;
-    expect(shadow.offset.dy, lessThan(0)); // Negative Y casts upward onto canvas
-    expect(shadow.blurRadius, greaterThanOrEqualTo(8));
+    // Verify no shadow or border is present
+    if (container.decoration is BoxDecoration) {
+      final BoxDecoration decoration = container.decoration as BoxDecoration;
+      expect(decoration.boxShadow == null || decoration.boxShadow!.isEmpty, isTrue);
+      expect(decoration.border, isNull);
+    }
 
-    // Verify subtle top border is present
-    expect(decoration.border, isNotNull);
-    final border = decoration.border as Border;
-    expect(border.top.width, greaterThan(0));
+    // Verify NavigationBar widget properties
+    final navBarFinder = find.descendant(
+      of: raisedNavBarFinder,
+      matching: find.byType(NavigationBar),
+    );
+    expect(navBarFinder, findsOneWidget);
+    final NavigationBar navBar = tester.widget(navBarFinder);
+    expect(navBar.elevation, equals(0));
+    expect(navBar.shadowColor, equals(Colors.transparent));
   });
 
-  testWidgets('HomePage uses RaisedNavigationBar with upward elevation shadow', (tester) async {
+  testWidgets('HomePage uses RaisedNavigationBar without shadows', (tester) async {
     await tester.pumpWidget(const CarLoggerApp());
     await tester.pumpAndSettle();
 
@@ -75,12 +80,14 @@ void main() {
     ).first;
 
     final Container container = tester.widget(containerFinder);
-    final BoxDecoration decoration = container.decoration as BoxDecoration;
-    expect(decoration.boxShadow, isNotNull);
-    expect(decoration.boxShadow!.first.offset.dy, lessThan(0));
+    if (container.decoration is BoxDecoration) {
+      final BoxDecoration decoration = container.decoration as BoxDecoration;
+      expect(decoration.boxShadow == null || decoration.boxShadow!.isEmpty, isTrue);
+      expect(decoration.border, isNull);
+    }
   });
 
-  testWidgets('CarDetailsPage uses RaisedNavigationBar with upward elevation shadow', (tester) async {
+  testWidgets('CarDetailsPage uses RaisedNavigationBar without shadows', (tester) async {
     final testCar = Car(
       id: 'test-car',
       make: 'Tesla',
@@ -104,8 +111,10 @@ void main() {
     ).first;
 
     final Container container = tester.widget(containerFinder);
-    final BoxDecoration decoration = container.decoration as BoxDecoration;
-    expect(decoration.boxShadow, isNotNull);
-    expect(decoration.boxShadow!.first.offset.dy, lessThan(0));
+    if (container.decoration is BoxDecoration) {
+      final BoxDecoration decoration = container.decoration as BoxDecoration;
+      expect(decoration.boxShadow == null || decoration.boxShadow!.isEmpty, isTrue);
+      expect(decoration.border, isNull);
+    }
   });
 }

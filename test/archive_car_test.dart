@@ -272,6 +272,8 @@ void main() {
       // Pop back to HomePage
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
+      ScaffoldMessenger.of(tester.element(find.byType(HomePage))).clearSnackBars();
+      await tester.pumpAndSettle();
 
       // Now Chevy is at the bottom, Tesla is first
       final chevyY = tester.getTopLeft(find.text('2013 Chevrolet Sonic')).dy;

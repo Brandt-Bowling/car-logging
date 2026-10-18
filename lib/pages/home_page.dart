@@ -13,6 +13,7 @@ import '../widgets/add_car_modal.dart';
 import '../widgets/maintenance_record_dialog.dart';
 import 'car_details_page.dart';
 import '../services/storage_service.dart';
+import '../widgets/material3_body_container.dart';
 import '../widgets/raised_navigation_bar.dart';
 import 'google_drive_sync_page.dart';
 
@@ -435,20 +436,9 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final outerBg = isDark
-        ? Color.alphaBlend(
-            colorScheme.primary.withValues(alpha: 0.10),
-            Color.alphaBlend(colorScheme.surfaceContainerHighest, const Color(0xFF22252B)),
-          )
-        : Color.alphaBlend(
-            colorScheme.primary.withValues(alpha: 0.06),
-            Color.alphaBlend(colorScheme.surfaceContainerHighest, const Color(0xFFE8EBF0)),
-          );
 
     return Scaffold(
-      backgroundColor: outerBg,
+      backgroundColor: theme.colorScheme.surfaceContainer,
       body: Stack(
         children: [
           IndexedStack(
@@ -612,32 +602,17 @@ class _HomePageState extends State<HomePage> {
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-
-    final outerBg = isDark
-        ? Color.alphaBlend(
-            colorScheme.primary.withValues(alpha: 0.10),
-            Color.alphaBlend(colorScheme.surfaceContainerHighest, const Color(0xFF22252B)),
-          )
-        : Color.alphaBlend(
-            colorScheme.primary.withValues(alpha: 0.06),
-            Color.alphaBlend(colorScheme.surfaceContainerHighest, const Color(0xFFE8EBF0)),
-          );
-
-    final bodyBg = isDark
-        ? const Color(0xFF101216)
-        : Colors.white;
 
     return Scaffold(
-      backgroundColor: outerBg,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Seamless Frameless Header (no divider line, no drop shadow)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 12, 6),
+      backgroundColor: colorScheme.surfaceContainer,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Seamless Frameless Header (no divider line, no drop shadow, M3 padding)
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 12, 18),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -654,7 +629,7 @@ class _HomePageState extends State<HomePage> {
                           child: title,
                         ),
                         if (subtitle != null) ...[
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 4),
                           DefaultTextStyle(
                             style: theme.textTheme.bodySmall!.copyWith(
                               color: colorScheme.onSurfaceVariant,
@@ -673,36 +648,15 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
+          ),
 
-            // Enveloped Body Canvas (no drag handle)
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: bodyBg,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.12)
-                        : colorScheme.outlineVariant.withValues(alpha: 0.45),
-                    width: 1.0,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isDark
-                          ? Colors.black.withValues(alpha: 0.45)
-                          : Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                      offset: const Offset(0, -3),
-                    ),
-                  ],
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: body,
-              ),
+          // Enveloped Body Canvas (no drag handle, zero edge bleeding, solid surface transition)
+          Expanded(
+            child: Material3BodyContainer(
+              child: body,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -738,7 +692,7 @@ class _HomePageState extends State<HomePage> {
       body: _cars.isEmpty
           ? const Center(child: Text('No vehicles added yet.'))
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 80.0),
+              padding: const EdgeInsets.fromLTRB(16.0, 20.0, 16.0, 80.0),
               children: [
                 _buildUrgentServiceWarning(context),
                 ..._cars.map((car) => _buildVehicleCard(context, car)),
@@ -913,9 +867,9 @@ class _HomePageState extends State<HomePage> {
 
     final cardWidget = Card(
       margin: const EdgeInsets.only(bottom: 16.0),
-      elevation: car.isArchived ? 1.0 : 4.0,
+      elevation: 0,
       color: Colors.black,
-      shadowColor: car.isArchived ? Colors.transparent : Colors.black54,
+      shadowColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20.0),
         side: BorderSide(
@@ -1242,7 +1196,7 @@ class _HomePageState extends State<HomePage> {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
+              padding: const EdgeInsets.fromLTRB(16.0, 20.0, 16.0, 80.0),
               itemCount: allRecords.length,
               separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
@@ -1251,7 +1205,7 @@ class _HomePageState extends State<HomePage> {
                 final record = entry.value;
 
                 return Card(
-                  elevation: 1,
+                  elevation: 0,
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                     leading: CircleAvatar(
@@ -1348,7 +1302,7 @@ class _HomePageState extends State<HomePage> {
       body: _cars.isEmpty
           ? const Center(child: Text('No vehicles added yet.'))
           : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
+              padding: const EdgeInsets.fromLTRB(16.0, 20.0, 16.0, 80.0),
               itemCount: schedules.length,
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
@@ -1485,7 +1439,7 @@ class _HomePageState extends State<HomePage> {
       title: const Text('Settings'),
       subtitle: const Text('Preferences & sync'),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
+        padding: const EdgeInsets.fromLTRB(16.0, 20.0, 16.0, 80.0),
         children: [
           // Google Drive Sync Card
           Card(

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// A Material 3 navigation bar with a prominent upward elevation shadow
-/// and subtle top border line, providing a visibly raised appearance
-/// similar to the docked navigation bar in Gmail on Android.
+/// A Material 3 navigation bar with solid color transitions and zero shadows,
+/// matching Google apps like Gmail on Android.
+///
+/// Transitions cleanly between the body canvas and docked navigation bar
+/// using the standard Material 3 [ColorScheme.surfaceContainer] tone.
 class RaisedNavigationBar extends StatelessWidget {
   const RaisedNavigationBar({
     super.key,
@@ -25,28 +27,9 @@ class RaisedNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainer,
-        border: Border(
-          top: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-            width: 0.5,
-          ),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.5)
-                : Colors.black.withValues(alpha: 0.10),
-            blurRadius: 10,
-            spreadRadius: 0,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
+      color: colorScheme.surfaceContainer,
       child: NavigationBar(
         selectedIndex: selectedIndex,
         destinations: destinations,
@@ -54,8 +37,9 @@ class RaisedNavigationBar extends StatelessWidget {
         height: height,
         labelBehavior: labelBehavior,
         animationDuration: animationDuration,
-        backgroundColor: Colors.transparent,
+        backgroundColor: colorScheme.surfaceContainer,
         elevation: 0,
+        shadowColor: Colors.transparent,
       ),
     );
   }
