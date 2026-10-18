@@ -695,7 +695,7 @@ class MaintenanceTabState extends State<MaintenanceTab> {
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.fromLTRB(16.0, 20.0, 16.0, 80.0),
         children: [
           // Next Scheduled Maintenance Card
           Card(
