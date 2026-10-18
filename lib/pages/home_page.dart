@@ -435,8 +435,20 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final outerBg = isDark
+        ? Color.alphaBlend(
+            colorScheme.primary.withValues(alpha: 0.10),
+            Color.alphaBlend(colorScheme.surfaceContainerHighest, const Color(0xFF22252B)),
+          )
+        : Color.alphaBlend(
+            colorScheme.primary.withValues(alpha: 0.06),
+            Color.alphaBlend(colorScheme.surfaceContainerHighest, const Color(0xFFE8EBF0)),
+          );
+
     return Scaffold(
-      backgroundColor: theme.colorScheme.surfaceContainer,
+      backgroundColor: outerBg,
       body: Stack(
         children: [
           IndexedStack(
@@ -500,8 +512,6 @@ class _HomePageState extends State<HomePage> {
       ),
       bottomNavigationBar: RaisedNavigationBar(
         selectedIndex: _currentTab,
-        backgroundColor: theme.colorScheme.surface,
-        elevation: 0,
         onDestinationSelected: (index) {
           _closeSpeedDial();
           setState(() {
@@ -602,9 +612,24 @@ class _HomePageState extends State<HomePage> {
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final outerBg = isDark
+        ? Color.alphaBlend(
+            colorScheme.primary.withValues(alpha: 0.10),
+            Color.alphaBlend(colorScheme.surfaceContainerHighest, const Color(0xFF22252B)),
+          )
+        : Color.alphaBlend(
+            colorScheme.primary.withValues(alpha: 0.06),
+            Color.alphaBlend(colorScheme.surfaceContainerHighest, const Color(0xFFE8EBF0)),
+          );
+
+    final bodyBg = isDark
+        ? const Color(0xFF101216)
+        : Colors.white;
 
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainer,
+      backgroundColor: outerBg,
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -653,8 +678,24 @@ class _HomePageState extends State<HomePage> {
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: colorScheme.surface,
+                  color: bodyBg,
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : colorScheme.outlineVariant.withValues(alpha: 0.45),
+                    width: 1.0,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.45)
+                          : Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                      offset: const Offset(0, -3),
+                    ),
+                  ],
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: body,

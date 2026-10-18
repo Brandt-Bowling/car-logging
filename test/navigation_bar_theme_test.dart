@@ -1,7 +1,6 @@
 import 'package:car_logger/main.dart';
 import 'package:car_logger/models/car.dart';
 import 'package:car_logger/pages/car_details_page.dart';
-import 'package:car_logger/pages/home_page.dart';
 import 'package:car_logger/services/storage_service.dart';
 import 'package:car_logger/widgets/raised_navigation_bar.dart';
 import 'package:flutter/material.dart';
