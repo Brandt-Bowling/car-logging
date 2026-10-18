@@ -2,6 +2,7 @@ import 'package:car_logger/main.dart';
 import 'package:car_logger/models/car.dart';
 import 'package:car_logger/pages/car_details_page.dart';
 import 'package:car_logger/services/storage_service.dart';
+import 'package:car_logger/widgets/material3_body_container.dart';
 import 'package:car_logger/widgets/raised_navigation_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,9 +46,10 @@ void main() {
 
     final Container container = tester.widget(containerFinder);
 
-    // Verify container background color is surfaceContainer
+    // Verify container background color is shellColor
     final containerColor = container.color ?? (container.decoration as BoxDecoration?)?.color;
-    expect(containerColor, equals(colorScheme.surfaceContainer));
+    final expectedColor = Material3BodyContainer.getShellColor(tester.element(raisedNavBarFinder));
+    expect(containerColor, equals(expectedColor));
 
     // Verify no shadow or border is present
     if (container.decoration is BoxDecoration) {

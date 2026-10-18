@@ -435,10 +435,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
-      backgroundColor: theme.colorScheme.surfaceContainer,
+      backgroundColor: Material3BodyContainer.getShellColor(context),
       body: Stack(
         children: [
           IndexedStack(
@@ -604,7 +602,7 @@ class _HomePageState extends State<HomePage> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainer,
+      backgroundColor: Material3BodyContainer.getShellColor(context),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

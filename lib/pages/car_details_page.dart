@@ -79,10 +79,9 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainer,
+      backgroundColor: Material3BodyContainer.getShellColor(context),
       appBar: AppBar(
         title: Text(
           '${_car.year} ${_car.make} ${_car.model}',
