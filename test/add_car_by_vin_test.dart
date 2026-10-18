@@ -456,5 +456,103 @@ void main() {
       expect(find.text('auto.dev API Key'), findsOneWidget);
       expect(find.text('Save'), findsOneWidget);
     });
+
+    testWidgets('VIN decode with multiple photos displays carousel and allows selecting another photo',
+        (WidgetTester tester) async {
+      Car? savedCar;
+
+      AutoDevService.testClient = http_testing.MockClient((request) async {
+        if (request.url.path.contains('/vin/')) {
+          return http.Response(
+            jsonEncode({
+              'vin': '19XFL1H87RE004388',
+              'make': 'Honda',
+              'model': 'Civic Hatchback',
+              'year': 2024,
+            }),
+            200,
+          );
+        } else if (request.url.path.contains('/photos/')) {
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'retail': [
+                  'https://api.auto.dev/photos/retail/19XFL1H87RE004388-1.jpg',
+                  'https://api.auto.dev/photos/retail/19XFL1H87RE004388-2.jpg',
+                  'https://api.auto.dev/photos/retail/19XFL1H87RE004388-3.jpg',
+                ],
+                'wholesale': [],
+              }
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  savedCar = await showModalBottomSheet<Car>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (context) => const AddCarModal(),
+                  );
+                },
+                child: const Text('Open Modal'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Modal'));
+      await tester.pumpAndSettle();
+
+      final vinFieldFinder = find.widgetWithText(TextFormField, 'VIN');
+      await tester.ensureVisible(vinFieldFinder);
+      await tester.enterText(vinFieldFinder, '19XFL1H87RE004388');
+      await tester.pumpAndSettle();
+
+      final autoFillButton = find.byTooltip('Decode VIN & populate vehicle details via auto.dev');
+      await tester.tap(autoFillButton);
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // Verify carousel is rendered
+      expect(find.text('Vehicle Photos'), findsOneWidget);
+      expect(find.textContaining('available'), findsOneWidget);
+      expect(find.text('Selected photo'), findsOneWidget);
+      expect(find.text('Tap any photo to select:'), findsOneWidget);
+      expect(find.textContaining('1 / '), findsOneWidget);
+
+      // Verify Next photo button exists
+      final nextButton = find.byTooltip('Next photo');
+      expect(nextButton, findsOneWidget);
+      await tester.ensureVisible(nextButton);
+      await tester.pumpAndSettle();
+
+      // Tap Next photo button to advance to photo 2
+      await tester.tap(nextButton);
+      await tester.pumpAndSettle();
+
+      // Verify counter now shows 2
+      expect(find.textContaining('2 / '), findsOneWidget);
+
+      // Scroll to Add Vehicle button and save
+      final addVehicleButton = find.widgetWithText(FilledButton, 'Add Vehicle');
+      await tester.ensureVisible(addVehicleButton);
+      await tester.pumpAndSettle();
+
+      await tester.tap(addVehicleButton);
+      await tester.pumpAndSettle();
+
+      // Verify the saved car picked photo 2 instead of photo 1!
+      expect(savedCar, isNotNull);
+      expect(savedCar!.imageUrl, equals('https://api.auto.dev/photos/retail/19XFL1H87RE004388-2.jpg'));
+    });
   });
 }
