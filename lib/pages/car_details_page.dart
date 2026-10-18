@@ -5,6 +5,7 @@ import '../widgets/maintenance_record_dialog.dart';
 import 'tabs/maintenance_tab.dart';
 import 'tabs/tires_tab.dart';
 import 'tabs/glovebox_tab.dart';
+import '../widgets/raised_navigation_bar.dart';
 
 class CarDetailsPage extends StatefulWidget {
   final Car car;
@@ -121,7 +122,7 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: RaisedNavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
           setState(() {
