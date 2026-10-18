@@ -3,6 +3,7 @@ import 'package:car_logger/models/car.dart';
 import 'package:car_logger/pages/car_details_page.dart';
 import 'package:car_logger/pages/home_page.dart';
 import 'package:car_logger/services/storage_service.dart';
+import 'package:car_logger/widgets/raised_navigation_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,31 +14,74 @@ void main() {
     await StorageService.init();
   });
 
-  testWidgets('App theme configures NavigationBar with raised surfaceContainer and elevation', (tester) async {
+  testWidgets('RaisedNavigationBar renders with upward elevation shadow and top border', (tester) async {
+    const colorScheme = ColorScheme.light();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: colorScheme,
+        ),
+        home: Scaffold(
+          body: const Text('Body'),
+          bottomNavigationBar: RaisedNavigationBar(
+            selectedIndex: 0,
+            destinations: const [
+              NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
+              NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final raisedNavBarFinder = find.byType(RaisedNavigationBar);
+    expect(raisedNavBarFinder, findsOneWidget);
+
+    final containerFinder = find.descendant(
+      of: raisedNavBarFinder,
+      matching: find.byType(Container),
+    ).first;
+
+    final Container container = tester.widget(containerFinder);
+    final BoxDecoration decoration = container.decoration as BoxDecoration;
+
+    // Verify container background color is surfaceContainer
+    expect(decoration.color, equals(colorScheme.surfaceContainer));
+
+    // Verify upward elevation shadow is present with negative Y offset
+    expect(decoration.boxShadow, isNotNull);
+    expect(decoration.boxShadow!.isNotEmpty, isTrue);
+    final shadow = decoration.boxShadow!.first;
+    expect(shadow.offset.dy, lessThan(0)); // Negative Y casts upward onto canvas
+    expect(shadow.blurRadius, greaterThanOrEqualTo(8));
+
+    // Verify subtle top border is present
+    expect(decoration.border, isNotNull);
+    final border = decoration.border as Border;
+    expect(border.top.width, greaterThan(0));
+  });
+
+  testWidgets('HomePage uses RaisedNavigationBar with upward elevation shadow', (tester) async {
     await tester.pumpWidget(const CarLoggerApp());
     await tester.pumpAndSettle();
 
-    final navBarFinder = find.byType(NavigationBar);
-    expect(navBarFinder, findsOneWidget);
+    final raisedNavBarFinder = find.byType(RaisedNavigationBar);
+    expect(raisedNavBarFinder, findsOneWidget);
 
-    final materialFinder = find.descendant(
-      of: navBarFinder,
-      matching: find.byType(Material),
+    final containerFinder = find.descendant(
+      of: raisedNavBarFinder,
+      matching: find.byType(Container),
     ).first;
 
-    final Material material = tester.widget(materialFinder);
-    final BuildContext context = tester.element(navBarFinder);
-    final theme = Theme.of(context);
-
-    // Verify it uses surfaceContainer (distinct container color like Gmail)
-    expect(material.color, equals(theme.colorScheme.surfaceContainer));
-    // Verify it is raised with elevation
-    expect(material.elevation, equals(3));
-    // Verify it has shadowColor configured
-    expect(material.shadowColor, isNotNull);
+    final Container container = tester.widget(containerFinder);
+    final BoxDecoration decoration = container.decoration as BoxDecoration;
+    expect(decoration.boxShadow, isNotNull);
+    expect(decoration.boxShadow!.first.offset.dy, lessThan(0));
   });
 
-  testWidgets('HomePage and CarDetailsPage NavigationBars inherit theme styling', (tester) async {
+  testWidgets('CarDetailsPage uses RaisedNavigationBar with upward elevation shadow', (tester) async {
     final testCar = Car(
       id: 'test-car',
       make: 'Tesla',
@@ -47,30 +91,22 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          navigationBarTheme: NavigationBarThemeData(
-            elevation: 3,
-            backgroundColor: ColorScheme.fromSeed(seedColor: Colors.blue).surfaceContainer,
-            shadowColor: Colors.black12,
-          ),
-        ),
         home: CarDetailsPage(car: testCar),
       ),
     );
     await tester.pump();
 
-    final navBarFinder = find.byType(NavigationBar);
-    expect(navBarFinder, findsOneWidget);
+    final raisedNavBarFinder = find.byType(RaisedNavigationBar);
+    expect(raisedNavBarFinder, findsOneWidget);
 
-    final materialFinder = find.descendant(
-      of: navBarFinder,
-      matching: find.byType(Material),
+    final containerFinder = find.descendant(
+      of: raisedNavBarFinder,
+      matching: find.byType(Container),
     ).first;
 
-    final Material material = tester.widget(materialFinder);
-    expect(material.elevation, equals(3));
-    expect(material.shadowColor, equals(Colors.black12));
+    final Container container = tester.widget(containerFinder);
+    final BoxDecoration decoration = container.decoration as BoxDecoration;
+    expect(decoration.boxShadow, isNotNull);
+    expect(decoration.boxShadow!.first.offset.dy, lessThan(0));
   });
 }
