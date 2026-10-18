@@ -76,10 +76,57 @@ class Material3BodyContainer extends StatelessWidget {
   final double topRadius;
   final Color? color;
 
+  /// Gets the standard Material 3 enveloped body canvas color for the given context.
+  ///
+  /// In M3 container-based layouts (like Gmail), the body canvas is a distinct
+  /// sheet layer resting on top of the outer shell (header and navigation bar).
+  ///
+  /// In light mode, this is crisp pure white [Colors.white] / [ColorScheme.surfaceContainerLowest].
+  /// In dark mode, this is a deep dark canvas tone (#101216) that provides prominent contrast
+  /// against the elevated outer shell.
+  static Color getCanvasColor(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
+
+    if (isDark) {
+      return Color.alphaBlend(
+        colorScheme.surfaceContainerLowest,
+        const Color(0xFF101216),
+      );
+    } else {
+      return Colors.white;
+    }
+  }
+
+  /// Gets the standard Material 3 outer shell background color (for Header & Navigation Bar).
+  ///
+  /// This provides the contrasting backdrop behind the body canvas sheet,
+  /// matching the top app bar / header area and the bottom navigation bar.
+  ///
+  /// In light mode, this is a soft tinted container (#E9ECF2 / surfaceContainerHigh).
+  /// In dark mode, this is a prominent elevated surface container (#282B32 / surfaceContainerHighest).
+  static Color getShellColor(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
+
+    if (isDark) {
+      return Color.alphaBlend(
+        colorScheme.primary.withValues(alpha: 0.08),
+        Color.alphaBlend(colorScheme.surfaceContainerHighest, const Color(0xFF262930)),
+      );
+    } else {
+      return Color.alphaBlend(
+        colorScheme.primary.withValues(alpha: 0.05),
+        Color.alphaBlend(colorScheme.surfaceContainerHigh, const Color(0xFFE9ECF2)),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final surfaceColor = color ?? theme.colorScheme.surface;
+    final surfaceColor = color ?? getCanvasColor(context);
 
     return ClipPath(
       clipper: Material3ContainerClipper(radius: topRadius),

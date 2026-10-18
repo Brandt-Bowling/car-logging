@@ -54,4 +54,36 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('Material3BodyContainer provides distinct layers for shell and body canvas', (tester) async {
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(
+            useMaterial3: true,
+            brightness: brightness,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.blue,
+              brightness: brightness,
+            ),
+          ),
+          home: Builder(
+            builder: (context) {
+              final shell = Material3BodyContainer.getShellColor(context);
+              final canvas = Material3BodyContainer.getCanvasColor(context);
+              expect(shell != canvas, isTrue, reason: 'Shell and canvas must be distinct colors in $brightness');
+              return Scaffold(
+                backgroundColor: shell,
+                body: const Material3BodyContainer(
+                  child: Text('Layered body'),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Layered body'), findsOneWidget);
+    }
+  });
 }
