@@ -13,6 +13,7 @@ import '../widgets/add_car_modal.dart';
 import '../widgets/maintenance_record_dialog.dart';
 import 'car_details_page.dart';
 import '../services/storage_service.dart';
+import '../widgets/raised_navigation_bar.dart';
 import 'google_drive_sync_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -497,7 +498,7 @@ class _HomePageState extends State<HomePage> {
             ),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: RaisedNavigationBar(
         selectedIndex: _currentTab,
         backgroundColor: theme.colorScheme.surface,
         elevation: 0,
