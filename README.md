@@ -1,87 +1,84 @@
-# Car Logger
+# Car Logger ("Garage Journal")
 
-A modern Flutter application for tracking vehicle maintenance, tire logs, and general documentation ("Glovebox"). It integrates with Google Drive for automated synchronization and uses Gemini AI to parse uploaded receipt images and PDFs.
+A modern, native Android application built with **Kotlin** and **Jetpack Compose** following Google's official **Material 3 Expressive** design guidelines. It manages vehicle maintenance history, dynamic service intervals, tire lifecycle tracking, and glovebox document storage, with automated Google Drive receipt syncing and Gemini 2.5 Flash receipt parsing.
 
 ---
 
 ## Features
 
-- **Maintenance Logging:** Keep a record of all repairs, service actions, and odometer readings.
-- **Tire Tracking:** Log tire rotations, swaps, and replacements.
-- **Glovebox Document Storage:** Store receipt scans and important documents.
-- **Google Drive Sync:** Backup and sync your documents directly with a dedicated Google Drive folder.
-- **Automated Receipt Parsing:** Leveraging Gemini AI, the app automatically scans and extracts dates, odometer readings, and costs from receipt files synced with Google Drive.
+- **Material 3 Expressive UI:** Built strictly according to Google's canonical M3 Expressive specifications, featuring dynamic theming (`dynamicLightColorScheme` / `dynamicDarkColorScheme`), the signature enveloped body canvas sheet (28dp top radius resting on outer shell with zero bleed), expressive typography, and spring motion.
+- **Refactored Vehicle View:** Replaced standard bottom navigation with an M3 **Floating Toolbar** for subviews (Maintenance, Tires, Glovebox) with an attached/docked Floating Action Button for adding records.
+- **Maintenance & Dynamic Scheduler:** Tracks all service events, logs mileage, and calculates upcoming intervals (Oil Change, Tire Rotation, Cabin/Engine Filters, Brake Fluid Flush, Spark Plugs) with urgent alerts (<= 500 miles remaining).
+- **Tire Lifecycle Management:** Active tire set tracking with circular progress tread wear gauge, estimated remaining miles, and rotation logging.
+- **Glovebox Document Storage:** Store local registration, insurance card, and owner's manual copies with native Android viewing and quick odometer editing.
+- **Automated Receipt Parsing (Gemini AI):** Uses the official Google Gen AI Android SDK (`gemini-2.5-flash`) for multi-modal receipt extraction, with smart regex filename fallback.
+- **Google Drive Sync:** Direct Google Play Services Auth and Drive v3 integration to browse folders and sync receipt documents.
+- **Zero-Loss Data Migration:** Built-in `FlutterDataMigrator` automatically detects existing `FlutterSharedPreferences` and imports all previously saved vehicles, service records, and settings into Jetpack Room on first launch.
 
 ---
 
-## Getting Started
+## Project Structure
 
-### 1. Prerequisites
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (v3.11.0 or higher recommended)
-- A Google Account (for Drive backup & Gemini AI key)
-
-### 2. Run the App
-To start the app in development mode:
-```bash
-flutter pub get
-flutter run
+```
+├── app/
+│   ├── build.gradle.kts           # App-level build script (Compose, Room, Firebase, DataStore)
+│   ├── debug.keystore             # Keystore used for debug and release builds (for update continuity)
+│   ├── google-services.json       # Firebase configuration
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── AndroidManifest.xml
+│   │   │   └── kotlin/com/example/car_logger/
+│   │   │       ├── CarLoggerApplication.kt
+│   │   │       ├── MainActivity.kt
+│   │   │       ├── data/          # Room DB, Entities, DAOs, DataStore, Migration, Vehicle Database
+│   │   │       ├── services/      # AutoDevService, GoogleDriveService, GeminiAiService
+│   │   │       └── ui/            # Jetpack Compose Screens, M3 Floating Toolbar, Theme, Canvas
+│   │   └── test/                  # Unit test suites
+├── gradle/
+│   ├── libs.versions.toml         # Gradle Version Catalog
+│   └── wrapper/
+├── build.gradle.kts               # Root build script
+├── settings.gradle.kts            # Root settings script
+├── scripts/
+│   └── distribute.sh              # Local Firebase App Distribution helper script
+└── .github/workflows/
+    └── firebase_app_distribution.yml # CI/CD automated release pipeline
 ```
 
-> **Note for Git Worktrees:** Since `android/app/google-services.json` is ignored by git, it will not be copied automatically to new worktrees. Make sure to copy `google-services.json` from the main repository into `android/app/google-services.json` before building or debugging Android in a worktree.
+---
+
+## Building & Running
+
+### Requirements
+- Android SDK 35 (compileSdk 35, targetSdk 35, minSdk 26)
+- JDK 17 or JDK 21 (e.g. bundled with Android Studio)
+- Gradle 8.14 (managed via `./gradlew`)
+
+### Compile & Test
+```bash
+# Run unit tests
+./gradlew test
+
+# Assemble debug APK
+./gradlew assembleDebug
+
+# Assemble release APK
+./gradlew assembleRelease
+```
+
+The output release APK is generated at:
+`app/build/outputs/apk/release/app-release.apk`
 
 ---
 
-## Receipt Scanning Setup (Gemini AI Key)
+## Firebase App Distribution
 
-By default, the app uses a smart regex parser based on receipt filenames to extract dates, odometer readings, and costs offline. To enable advanced, fully automated scanning of receipt images and PDFs, you can configure a free Gemini API key.
-
-### How to Get a Free Gemini API Key:
-
-1. **Go to Google AI Studio:**
-   Navigate to [Google AI Studio (aistudio.google.com)](https://aistudio.google.com/).
-
-2. **Sign In:**
-   Log in using your preferred Google account.
-
-3. **Create API Key:**
-   - Click the **Get API Key** button (usually at the top left).
-   - Click **Create API Key**.
-   - You can create it in a new Google Cloud project or associate it with an existing one.
-   - Choose the **Free Tier**, which is ideal for personal, non-commercial use (currently offering generous free limits).
-
-4. **Copy the Key:**
-   Copy the generated API Key (it will start with `AIzaSy...`).
-
-### How to Configure the Key in the App:
-
-1. Open the **Car Logger** app.
-2. Navigate to the **Sync Settings** page (via the cloud icon or settings menu).
-3. Scroll to the **Receipt Scanning (Gemini AI)** card and click **Setup Key** or **Configure**.
-4. Paste your copied API Key in the field and click **Save**.
-5. The status will update to **Active (Gemini 1.5 Flash)**. Future receipt syncs will automatically use the AI model to extract details.
-
----
-
-## Google Drive Synchronization
-
-To back up and sync your receipt images/PDFs:
-1. Tap **Sign In with Google** on the Sync Settings screen.
-2. Select or create a folder in your Google Drive where receipts will be stored (e.g., `Car Receipts`).
-3. Place your receipt files in that folder. The app will sync them and automatically run receipt parsing using Gemini AI (if configured) or the smart filename parser fallback.
-
----
-
-## Deploying Updates to Firebase App Distribution
-
-Quickly push build updates to your registered testers:
+Deploy release builds directly to registered testers:
 
 ```bash
-# Push release build with auto-generated git release notes
+# Build & deploy release APK with latest git commit message
 ./scripts/distribute.sh
 
-# Push with custom release notes
-./scripts/distribute.sh "Updated UI layout and fixed sync bugs"
+# Deploy with custom release notes
+./scripts/distribute.sh "Updated M3 Expressive floating toolbar and tire wear gauge"
 ```
-
-For full options (tester groups, CI setup), see [docs/firebase_distribution.md](docs/firebase_distribution.md).
-

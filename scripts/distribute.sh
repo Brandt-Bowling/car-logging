@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# Firebase App Distribution Script for Car Logger
+# Firebase App Distribution Script for Car Logger (Native Android)
 # ==============================================================================
 # Usage:
 #   ./scripts/distribute.sh [RELEASE_NOTES]
@@ -13,7 +13,7 @@ set -e
 
 # Default Configuration
 APP_ID="1:28790911573:android:0e08bfb1f94d5b29b6dadc"
-APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+APK_PATH="app/build/outputs/apk/release/app-release.apk"
 RELEASE_NOTES=""
 TESTERS="brandt.bowling@gmail.com"
 TESTER_GROUPS=""
@@ -75,7 +75,7 @@ while [[ $# -gt 0 ]]; do
             echo "  -t, --testers <emails>   Comma-separated list of tester emails"
             echo "  -g, --groups <aliases>   Comma-separated list of tester group aliases"
             echo "  -b, --build-number <num> Explicit build number for versionName/versionCode"
-            echo "  --skip-build             Skip 'flutter build apk --release' step"
+            echo "  --skip-build             Skip './gradlew assembleRelease' step"
             echo "  -h, --help               Display this help message"
             echo ""
             exit 0
@@ -111,12 +111,12 @@ log_info "Release Notes: \"${RELEASE_NOTES}\""
 
 # Build Release APK
 if [ "$SKIP_BUILD" = false ]; then
-    log_info "Building Flutter Android Release APK..."
+    log_info "Building Android Release APK via Gradle..."
     if [ -z "$BUILD_NUMBER" ]; then
         BUILD_NUMBER=$(git rev-list --count HEAD 2>/dev/null || echo 1)
     fi
     log_info "Using build number: ${BUILD_NUMBER}"
-    flutter build apk --release --build-number="${BUILD_NUMBER}"
+    ./gradlew assembleRelease -PbuildNumber="${BUILD_NUMBER}"
     log_success "Build completed successfully."
 else
     log_warn "Skipping build step (--skip-build specified)."
