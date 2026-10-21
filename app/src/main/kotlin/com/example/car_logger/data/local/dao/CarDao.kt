@@ -14,6 +14,9 @@ interface CarDao {
     @Query("SELECT * FROM cars ORDER BY isArchived ASC, make ASC, model ASC")
     fun getAllCars(): Flow<List<CarEntity>>
 
+    @Query("SELECT * FROM cars")
+    suspend fun getAllCarsList(): List<CarEntity>
+
     @Query("SELECT * FROM cars WHERE id = :carId LIMIT 1")
     suspend fun getCarById(carId: String): CarEntity?
 

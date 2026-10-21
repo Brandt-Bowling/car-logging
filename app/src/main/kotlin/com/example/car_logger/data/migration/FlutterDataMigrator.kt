@@ -4,9 +4,13 @@ import android.content.Context
 import android.util.Log
 import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
+import com.example.car_logger.data.local.dao.CarDao
+import com.example.car_logger.data.local.dao.MaintenanceRecordDao
 import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.MaintenanceRecordEntity
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
@@ -17,23 +21,66 @@ import kotlinx.serialization.json.jsonPrimitive
 object FlutterDataMigrator {
     private const val TAG = "FlutterDataMigrator"
     private const val FLUTTER_PREFS_NAME = "FlutterSharedPreferences"
+    private const val FLUTTER_LIST_PREFIX = "VGhpcyBpcyB0aGUgcHJlZml4IGZvciBhIGxpc3Qu"
 
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
 
+    fun asStringOrNull(element: JsonElement?): String? {
+        if (element == null || element is JsonNull) return null
+        return try {
+            val str = element.jsonPrimitive.content
+            if (str.equals("null", ignoreCase = true) || str.isBlank()) null else str
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun asIntOrNull(element: JsonElement?): Int? {
+        if (element == null || element is JsonNull) return null
+        return try {
+            element.jsonPrimitive.intOrNull
+                ?: element.jsonPrimitive.content.toIntOrNull()
+                ?: element.jsonPrimitive.doubleOrNull?.toInt()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun asDoubleOrNull(element: JsonElement?): Double? {
+        if (element == null || element is JsonNull) return null
+        return try {
+            element.jsonPrimitive.doubleOrNull
+                ?: element.jsonPrimitive.content.toDoubleOrNull()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun asBooleanOrNull(element: JsonElement?): Boolean? {
+        if (element == null || element is JsonNull) return null
+        return try {
+            element.jsonPrimitive.booleanOrNull
+                ?: element.jsonPrimitive.content.toBooleanStrictOrNull()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun migrateIfNeeded(context: Context, database: AppDatabase, preferencesManager: PreferencesManager) {
-        if (preferencesManager.isMigrationComplete()) {
-            Log.d(TAG, "Migration already completed previously.")
+        if (preferencesManager.isMigrationV2Complete()) {
+            Log.d(TAG, "Migration v2 already completed previously.")
             return
         }
 
-        val flutterPrefs = context.getSharedPreferences(FLUTTER_PREFS_NAME, Context.MODE_PRIVATE)
-        val legacyCarsJson = flutterPrefs.getString("flutter.car_logger_cars", null)
-
         val carDao = database.carDao()
         val recordDao = database.maintenanceRecordDao()
+
+        val flutterPrefs = context.getSharedPreferences(FLUTTER_PREFS_NAME, Context.MODE_PRIVATE)
+        val legacyCarsJson = flutterPrefs.getString("flutter.car_logger_cars", null)
+            ?: flutterPrefs.getString("car_logger_cars", null)
 
         var migratedCarsCount = 0
         var migratedRecordsCount = 0
@@ -45,114 +92,143 @@ object FlutterDataMigrator {
 
                 for (elem in carsArray) {
                     val obj = elem.jsonObject
-                    val id = obj["id"]?.jsonPrimitive?.content ?: continue
-                    val make = obj["make"]?.jsonPrimitive?.content ?: ""
-                    val model = obj["model"]?.jsonPrimitive?.content ?: ""
-                    val year = obj["year"]?.jsonPrimitive?.intOrNull ?: 0
-                    val imageUrl = obj["imageUrl"]?.jsonPrimitive?.content
-                    val localImagePath = obj["localImagePath"]?.jsonPrimitive?.content
-                    val licensePlate = obj["licensePlate"]?.jsonPrimitive?.content
-                    val vin = obj["vin"]?.jsonPrimitive?.content
-                    val odometer = obj["odometer"]?.jsonPrimitive?.intOrNull
-                    val isEv = obj["isEv"]?.jsonPrimitive?.booleanOrNull ?: false
-                    val isArchived = obj["isArchived"]?.jsonPrimitive?.booleanOrNull ?: false
-                    val trim = obj["trim"]?.jsonPrimitive?.content
-                    val bodyStyle = obj["bodyStyle"]?.jsonPrimitive?.content
-                    val tireRotationInterval = obj["tireRotationInterval"]?.jsonPrimitive?.intOrNull
+                    val id = asStringOrNull(obj["id"]) ?: continue
+                    val make = asStringOrNull(obj["make"]) ?: ""
+                    val model = asStringOrNull(obj["model"]) ?: ""
+                    val year = asIntOrNull(obj["year"]) ?: 0
+                    val imageUrl = asStringOrNull(obj["imageUrl"])
+                    val localImagePath = asStringOrNull(obj["localImagePath"])
+                    val licensePlate = asStringOrNull(obj["licensePlate"])
+                    val vin = asStringOrNull(obj["vin"])
+                    val legacyOdo = asIntOrNull(obj["odometer"])
+                    val isEv = asBooleanOrNull(obj["isEv"]) ?: false
+                    val isArchived = asBooleanOrNull(obj["isArchived"]) ?: false
+                    val trim = asStringOrNull(obj["trim"])
+                    val bodyStyle = asStringOrNull(obj["bodyStyle"])
+                    val tireRotationInterval = asIntOrNull(obj["tireRotationInterval"])
+
+                    val existingCar = carDao.getCarById(id)
+                    val resolvedOdometer = listOfNotNull(existingCar?.odometer, legacyOdo).maxOrNull()
 
                     val carEntity = CarEntity(
                         id = id,
                         make = make,
                         model = model,
                         year = year,
-                        imageUrl = imageUrl,
-                        localImagePath = localImagePath,
+                        imageUrl = imageUrl ?: existingCar?.imageUrl?.takeIf { !it.equals("null", ignoreCase = true) },
+                        localImagePath = localImagePath ?: existingCar?.localImagePath?.takeIf { !it.equals("null", ignoreCase = true) },
                         licensePlate = licensePlate,
                         vin = vin,
-                        odometer = odometer,
+                        odometer = resolvedOdometer,
                         isEv = isEv,
-                        isArchived = isArchived,
+                        isArchived = existingCar?.isArchived ?: isArchived,
                         trim = trim,
                         bodyStyle = bodyStyle,
-                        tireRotationInterval = tireRotationInterval
+                        tireRotationInterval = tireRotationInterval ?: existingCar?.tireRotationInterval
                     )
                     carEntities.add(carEntity)
+                }
 
-                    // Migrate records for this car
-                    val recordsKey = "flutter.car_logger_records_$id"
-                    val recordsJson = flutterPrefs.getString(recordsKey, null)
-                    if (!recordsJson.isNullOrBlank()) {
-                        try {
-                            val recordsArray = json.parseToJsonElement(recordsJson).jsonArray
-                            val recordEntities = mutableListOf<MaintenanceRecordEntity>()
-                            for (recElem in recordsArray) {
-                                val recObj = recElem.jsonObject
-                                val recId = recObj["id"]?.jsonPrimitive?.content ?: continue
-                                val recCarId = recObj["carId"]?.jsonPrimitive?.content ?: id
-                                val recTitle = recObj["title"]?.jsonPrimitive?.content ?: ""
-                                val recDate = recObj["date"]?.jsonPrimitive?.content ?: ""
-                                val recOdometer = recObj["odometer"]?.jsonPrimitive?.intOrNull ?: 0
-                                val recDesc = recObj["description"]?.jsonPrimitive?.content
-                                val recReceipt = recObj["receiptUrl"]?.jsonPrimitive?.content
-                                val recCost = recObj["cost"]?.jsonPrimitive?.doubleOrNull
-                                val recDriveId = recObj["driveFileId"]?.jsonPrimitive?.content
+                // CRITICAL: Insert cars FIRST so foreign keys exist in Room for child maintenance records
+                if (carEntities.isNotEmpty()) {
+                    carDao.insertCars(carEntities)
+                    migratedCarsCount = carEntities.size
+                    Log.i(TAG, "Successfully inserted/updated $migratedCarsCount cars.")
+                }
 
-                                recordEntities.add(
-                                    MaintenanceRecordEntity(
-                                        id = recId,
-                                        carId = recCarId,
-                                        title = recTitle,
-                                        date = recDate,
-                                        odometer = recOdometer,
-                                        description = recDesc,
-                                        receiptUrl = recReceipt,
-                                        cost = recCost,
-                                        driveFileId = recDriveId
-                                    )
-                                )
-                            }
-                            if (recordEntities.isNotEmpty()) {
-                                recordDao.insertRecords(recordEntities)
-                                migratedRecordsCount += recordEntities.size
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to parse records for car $id: ${e.message}", e)
+                // Collect and insert records for all cars
+                val recordEntities = mutableListOf<MaintenanceRecordEntity>()
+                val processedRecordKeys = mutableSetOf<String>()
+
+                // 1. Check known cars for records
+                for (car in carEntities) {
+                    val candidateKeys = listOf(
+                        "flutter.car_logger_records_${car.id}",
+                        "car_logger_records_${car.id}"
+                    )
+                    for (recordsKey in candidateKeys) {
+                        if (processedRecordKeys.contains(recordsKey)) continue
+                        val recordsJson = flutterPrefs.getString(recordsKey, null)
+                        if (!recordsJson.isNullOrBlank()) {
+                            processedRecordKeys.add(recordsKey)
+                            parseRecordsJson(recordsJson, car.id, recordEntities)
                         }
                     }
                 }
 
-                if (carEntities.isNotEmpty()) {
-                    carDao.insertCars(carEntities)
-                    migratedCarsCount = carEntities.size
+                // 2. Scan all SharedPreferences keys for any additional record keys
+                val allPrefs = flutterPrefs.all
+                for ((key, value) in allPrefs) {
+                    if (key.startsWith("flutter.car_logger_records_") || key.startsWith("car_logger_records_")) {
+                        if (processedRecordKeys.contains(key)) continue
+                        val jsonStr = value as? String ?: continue
+                        if (jsonStr.isBlank()) continue
+                        val carIdFromKey = key.removePrefix("flutter.car_logger_records_")
+                            .removePrefix("car_logger_records_")
+                        processedRecordKeys.add(key)
+                        parseRecordsJson(jsonStr, carIdFromKey, recordEntities)
+                    }
+                }
+
+                // Filter records to ensure foreign key constraint is satisfied (carId must exist in carDao)
+                val validRecordEntities = recordEntities.filter { rec ->
+                    carDao.getCarById(rec.carId) != null
+                }
+
+                if (validRecordEntities.isNotEmpty()) {
+                    recordDao.insertRecords(validRecordEntities)
+                    migratedRecordsCount = validRecordEntities.size
+                    Log.i(TAG, "Successfully migrated $migratedRecordsCount maintenance records.")
                 }
 
                 // Migrate preferences and settings
-                flutterPrefs.getString("flutter.car_logger_garage_name", null)?.let {
-                    preferencesManager.setGarageName(it)
+                val garageName = flutterPrefs.getString("flutter.car_logger_garage_name", null)
+                    ?: flutterPrefs.getString("car_logger_garage_name", null)
+                if (!garageName.isNullOrBlank() && !garageName.equals("null", ignoreCase = true)) {
+                    preferencesManager.setGarageName(garageName)
                 }
+
                 val syncFolderId = flutterPrefs.getString("flutter.car_logger_sync_folder_id", null)
+                    ?: flutterPrefs.getString("car_logger_sync_folder_id", null)
                 val syncFolderName = flutterPrefs.getString("flutter.car_logger_sync_folder_name", null)
-                if (syncFolderId != null) {
-                    preferencesManager.setSyncFolder(syncFolderId, syncFolderName)
+                    ?: flutterPrefs.getString("car_logger_sync_folder_name", null)
+                if (!syncFolderId.isNullOrBlank() && !syncFolderId.equals("null", ignoreCase = true)) {
+                    preferencesManager.setSyncFolder(
+                        syncFolderId,
+                        syncFolderName?.takeIf { !it.equals("null", ignoreCase = true) }
+                    )
                 }
-                flutterPrefs.getString("flutter.car_logger_gemini_api_key", null)?.let {
-                    preferencesManager.setGeminiApiKey(it)
+
+                val geminiKey = flutterPrefs.getString("flutter.car_logger_gemini_api_key", null)
+                    ?: flutterPrefs.getString("car_logger_gemini_api_key", null)
+                if (!geminiKey.isNullOrBlank() && !geminiKey.equals("null", ignoreCase = true)) {
+                    preferencesManager.setGeminiApiKey(geminiKey)
                 }
-                flutterPrefs.getString("flutter.car_logger_auto_dev_api_key", null)?.let {
-                    preferencesManager.setAutoDevApiKey(it)
+
+                val autoDevKey = flutterPrefs.getString("flutter.car_logger_auto_dev_api_key", null)
+                    ?: flutterPrefs.getString("car_logger_auto_dev_api_key", null)
+                if (!autoDevKey.isNullOrBlank() && !autoDevKey.equals("null", ignoreCase = true)) {
+                    preferencesManager.setAutoDevApiKey(autoDevKey)
                 }
 
                 // Migrate imported files
                 val importedFilesSet = flutterPrefs.getStringSet("flutter.car_logger_imported_files", null)
+                    ?: flutterPrefs.getStringSet("car_logger_imported_files", null)
                 if (importedFilesSet != null) {
                     preferencesManager.setImportedFileIds(importedFilesSet)
                 } else {
                     val importedFilesJson = flutterPrefs.getString("flutter.car_logger_imported_files", null)
+                        ?: flutterPrefs.getString("car_logger_imported_files", null)
                     if (!importedFilesJson.isNullOrBlank()) {
                         try {
-                            val parsedSet = json.parseToJsonElement(importedFilesJson)
+                            val cleanJson = if (importedFilesJson.startsWith(FLUTTER_LIST_PREFIX)) {
+                                importedFilesJson.removePrefix(FLUTTER_LIST_PREFIX)
+                            } else {
+                                importedFilesJson
+                            }
+                            val parsedSet = json.parseToJsonElement(cleanJson)
                                 .jsonArray
-                                .map { it.jsonPrimitive.content }
+                                .mapNotNull { asStringOrNull(it) }
                                 .toSet()
                             preferencesManager.setImportedFileIds(parsedSet)
                         } catch (_: Exception) {}
@@ -165,15 +241,79 @@ object FlutterDataMigrator {
             }
         }
 
+        // Sanitize any corrupt "null" strings that may already be in the database from earlier runs
+        sanitizeExistingDatabase(carDao, recordDao)
+
         // If no cars existed in database after migration attempt, seed initial default cars
         if (carDao.getCarCount() == 0) {
             seedDefaultCars(carDao, recordDao)
         }
 
         preferencesManager.setMigrationComplete(true)
+        preferencesManager.setMigrationV2Complete(true)
     }
 
-    private suspend fun seedDefaultCars(carDao: com.example.car_logger.data.local.dao.CarDao, recordDao: com.example.car_logger.data.local.dao.MaintenanceRecordDao) {
+    private fun parseRecordsJson(
+        recordsJson: String,
+        fallbackCarId: String,
+        destination: MutableList<MaintenanceRecordEntity>
+    ) {
+        try {
+            val recordsArray = json.parseToJsonElement(recordsJson).jsonArray
+            for (recElem in recordsArray) {
+                val recObj = recElem.jsonObject
+                val recId = asStringOrNull(recObj["id"]) ?: continue
+                val recCarId = asStringOrNull(recObj["carId"]) ?: fallbackCarId
+                val recTitle = asStringOrNull(recObj["title"]) ?: ""
+                val recDate = asStringOrNull(recObj["date"]) ?: ""
+                val recOdometer = asIntOrNull(recObj["odometer"]) ?: 0
+                val recDesc = asStringOrNull(recObj["description"])
+                val recReceipt = asStringOrNull(recObj["receiptUrl"])
+                val recCost = asDoubleOrNull(recObj["cost"])
+                val recDriveId = asStringOrNull(recObj["driveFileId"])
+
+                destination.add(
+                    MaintenanceRecordEntity(
+                        id = recId,
+                        carId = recCarId,
+                        title = recTitle,
+                        date = recDate,
+                        odometer = recOdometer,
+                        description = recDesc,
+                        receiptUrl = recReceipt,
+                        cost = recCost,
+                        driveFileId = recDriveId
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse records JSON: ${e.message}", e)
+        }
+    }
+
+    private suspend fun sanitizeExistingDatabase(carDao: CarDao, recordDao: MaintenanceRecordDao) {
+        try {
+            val allCars = carDao.getAllCarsList()
+            for (car in allCars) {
+                val cleaned = car.cleanNullStrings()
+                if (cleaned != car) {
+                    carDao.updateCar(cleaned)
+                }
+            }
+
+            val allRecords = recordDao.getAllRecordsList()
+            for (rec in allRecords) {
+                val cleaned = rec.cleanNullStrings()
+                if (cleaned != rec) {
+                    recordDao.updateRecord(cleaned)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sanitizing database: ${e.message}", e)
+        }
+    }
+
+    private suspend fun seedDefaultCars(carDao: CarDao, recordDao: MaintenanceRecordDao) {
         val defaultCars = listOf(
             CarEntity(
                 id = "1",
