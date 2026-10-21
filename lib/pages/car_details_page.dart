@@ -29,7 +29,9 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
     _car = widget.car;
   }
 
-  void _onCarUpdated(Car updatedCar) {
+  Future<void> _onCarUpdated(Car updatedCar) async {
+    await StorageService.updateCar(updatedCar);
+    if (!mounted) return;
     setState(() {
       _car = updatedCar;
     });
@@ -39,7 +41,6 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
   Future<void> _toggleArchive() async {
     final newArchived = !_car.isArchived;
     final updatedCar = _car.copyWith(isArchived: newArchived);
-    await StorageService.updateCar(updatedCar);
     _onCarUpdated(updatedCar);
 
     if (!mounted) return;
@@ -109,7 +110,10 @@ class _CarDetailsPageState extends State<CarDetailsPage> {
               car: _car,
               onCarUpdated: _onCarUpdated,
             ),
-            TiresTab(car: _car),
+            TiresTab(
+              car: _car,
+              onCarUpdated: _onCarUpdated,
+            ),
             GloveboxTab(
               car: _car,
               onCarUpdated: _onCarUpdated,

@@ -1,11 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../models/car.dart';
 import '../../models/tire.dart';
+import '../../services/storage_service.dart';
+import '../../widgets/tire_rotation_interval_dialog.dart';
 
 class TiresTab extends StatelessWidget {
   final Car car;
+  final ValueChanged<Car>? onCarUpdated;
 
-  const TiresTab({super.key, required this.car});
+  const TiresTab({super.key, required this.car, this.onCarUpdated});
+
+  Future<void> _editRotationInterval(BuildContext context) async {
+    final newInterval = await showTireRotationIntervalDialog(
+      context,
+      currentInterval: car.effectiveTireRotationInterval,
+    );
+    if (newInterval != null && newInterval != car.tireRotationInterval) {
+      final updatedCar = car.copyWith(tireRotationInterval: newInterval);
+      await StorageService.updateCar(updatedCar);
+      onCarUpdated?.call(updatedCar);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +66,23 @@ class TiresTab extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Last Rotation'),
                   trailing: const Text('Not recorded'),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Rotation Interval'),
+                  subtitle: const Text('Recommended interval between rotations'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${NumberFormat.decimalPattern().format(car.effectiveTireRotationInterval)} miles',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.edit, size: 18),
+                    ],
+                  ),
+                  onTap: () => _editRotationInterval(context),
                 ),
               ],
             ),

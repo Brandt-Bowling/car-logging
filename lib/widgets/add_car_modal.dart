@@ -70,6 +70,7 @@ class _AddCarModalState extends State<AddCarModal> {
   String? _vin;
   int? _odometer;
   bool _isEv = false;
+  int? _tireRotationInterval;
 
   // Image picker
   final ImagePicker _picker = ImagePicker();
@@ -753,6 +754,7 @@ class _AddCarModalState extends State<AddCarModal> {
         isEv: _isEv,
         trim: _decodedTrim,
         bodyStyle: _decodedBodyStyle,
+        tireRotationInterval: _isEv ? (_tireRotationInterval ?? 7500) : _tireRotationInterval,
       );
 
       Navigator.pop(context, newCar);
@@ -1771,42 +1773,71 @@ class _AddCarModalState extends State<AddCarModal> {
               : theme.colorScheme.outlineVariant,
         ),
       ),
-      child: SwitchListTile(
-        title: Row(
-          children: [
-            const Text('Electric Vehicle (EV)'),
-            if (isAutoDetected) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Auto',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SwitchListTile(
+            title: Row(
+              children: [
+                const Text('Electric Vehicle (EV)'),
+                if (isAutoDetected) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Auto',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
                   ),
+                ],
+              ],
+            ),
+            subtitle: const Text('Disables oil change reminders'),
+            value: _isEv,
+            secondary: Icon(
+              Icons.electric_car,
+              color: _isEv ? theme.colorScheme.primary : null,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            onChanged: (bool value) {
+              setState(() {
+                _isEv = value;
+                if (value && _tireRotationInterval == null) {
+                  _tireRotationInterval = 7500;
+                }
+              });
+            },
+          ),
+          if (_isEv) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: TextFormField(
+                initialValue: (_tireRotationInterval ?? 7500).toString(),
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Tire Rotation Interval (miles)',
+                  hintText: 'e.g. 7500',
+                  suffixText: 'mi',
+                  prefixIcon: Icon(Icons.sync),
+                  border: OutlineInputBorder(),
                 ),
+                onChanged: (value) {
+                  _tireRotationInterval =
+                      int.tryParse(value.replaceAll(',', '').trim()) ?? 7500;
+                },
               ),
-            ],
+            ),
           ],
-        ),
-        subtitle: const Text('Disables oil change reminders'),
-        value: _isEv,
-        secondary: Icon(
-          Icons.electric_car,
-          color: _isEv ? theme.colorScheme.primary : null,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        onChanged: (bool value) {
-          setState(() {
-            _isEv = value;
-          });
-        },
+        ],
       ),
     );
   }

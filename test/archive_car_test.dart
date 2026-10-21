@@ -119,6 +119,16 @@ void main() {
       final reconstructed = Car.fromMap(map);
       expect(reconstructed.isArchived, isTrue);
 
+      // Tire rotation interval copyWith and serialization
+      final customIntervalCar = car.copyWith(tireRotationInterval: 6500);
+      expect(customIntervalCar.tireRotationInterval, 6500);
+      expect(customIntervalCar.effectiveTireRotationInterval, 6500);
+      final customMap = customIntervalCar.toMap();
+      expect(customMap['tireRotationInterval'], 6500);
+      final reconstructedCustom = Car.fromMap(customMap);
+      expect(reconstructedCustom.tireRotationInterval, 6500);
+      expect(reconstructedCustom.effectiveTireRotationInterval, 6500);
+
       // Default fromMap without isArchived
       final legacy = Car.fromMap({
         'id': 'c2',
@@ -127,6 +137,8 @@ void main() {
         'year': 2019,
       });
       expect(legacy.isArchived, isFalse);
+      expect(legacy.tireRotationInterval, isNull);
+      expect(legacy.effectiveTireRotationInterval, 7500);
     });
 
     test('StorageService.toggleArchiveCar flips isArchived', () async {

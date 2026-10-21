@@ -96,4 +96,137 @@ void main() {
     );
     expect(tireTile.trailing, isNull);
   });
+
+  testWidgets('MaintenanceTab shows Tire Rotation for EV in next scheduled maintenance notification', (
+    WidgetTester tester,
+  ) async {
+    final evCar = Car(
+      id: 'test_ev_car',
+      make: 'Tesla',
+      model: 'Model 3',
+      year: 2022,
+      odometer: 20000,
+      isEv: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MaintenanceTab(car: evCar),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Next Scheduled Maintenance'), findsOneWidget);
+    expect(find.text('Tire Rotation at 27,500 miles'), findsOneWidget);
+    expect(find.textContaining('Oil Change'), findsNothing);
+  });
+
+  testWidgets('MaintenanceTab shows Oil Change for non-EV in next scheduled maintenance notification', (
+    WidgetTester tester,
+  ) async {
+    final gasCar = Car(
+      id: 'test_gas_car',
+      make: 'Honda',
+      model: 'Civic',
+      year: 2020,
+      odometer: 30000,
+      isEv: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MaintenanceTab(car: gasCar),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Next Scheduled Maintenance'), findsOneWidget);
+    expect(find.text('Oil Change at 35,000 miles'), findsOneWidget);
+  });
+
+  testWidgets('MaintenanceTab uses configured tireRotationInterval when specified', (
+    WidgetTester tester,
+  ) async {
+    final evCar = Car(
+      id: 'test_ev_car_custom',
+      make: 'Tesla',
+      model: 'Model Y',
+      year: 2023,
+      odometer: 15000,
+      isEv: true,
+      tireRotationInterval: 6000,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MaintenanceTab(car: evCar),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Next Scheduled Maintenance'), findsOneWidget);
+    expect(find.text('Tire Rotation at 21,000 miles'), findsOneWidget);
+  });
+
+  testWidgets('MaintenanceTab allows configuring tire rotation interval via dialog', (
+    WidgetTester tester,
+  ) async {
+    Car currentCar = Car(
+      id: 'test_ev_car_edit',
+      make: 'Tesla',
+      model: 'Model 3',
+      year: 2022,
+      odometer: 20000,
+      isEv: true,
+      tireRotationInterval: 7500,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            return Scaffold(
+              body: MaintenanceTab(
+                car: currentCar,
+                onCarUpdated: (updated) {
+                  setState(() {
+                    currentCar = updated;
+                  });
+                },
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tire Rotation at 27,500 miles'), findsOneWidget);
+
+    // Tap configure interval icon button
+    await tester.tap(find.byTooltip('Configure Interval'));
+    await tester.pumpAndSettle();
+
+    // Verify dialog appears
+    expect(find.text('Tire Rotation Interval'), findsOneWidget);
+    expect(find.text('5000 mi'), findsOneWidget);
+
+    // Tap 5000 mi chip
+    await tester.tap(find.text('5000 mi'));
+    await tester.pumpAndSettle();
+
+    // Tap Save
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Verify updated interval is 5000 and card updates to 20000 + 5000 = 25000 miles
+    expect(currentCar.tireRotationInterval, 5000);
+    expect(find.text('Tire Rotation at 25,000 miles'), findsOneWidget);
+  });
 }

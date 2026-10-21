@@ -11,6 +11,7 @@ import '../models/car.dart';
 import '../models/maintenance_record.dart';
 import '../widgets/add_car_modal.dart';
 import '../widgets/maintenance_record_dialog.dart';
+import '../widgets/tire_rotation_interval_dialog.dart';
 import 'car_details_page.dart';
 import '../services/storage_service.dart';
 import '../widgets/material3_body_container.dart';
@@ -38,7 +39,7 @@ class _HomePageState extends State<HomePage> {
       final latestRecordOdo = records.isNotEmpty
           ? records.map((r) => r.odometer).reduce((a, b) => a > b ? a : b)
           : car.odometer!;
-      final serviceInterval = car.isEv ? 7500 : 5000;
+      final serviceInterval = car.isEv ? car.effectiveTireRotationInterval : 5000;
       final nextServiceOdo = latestRecordOdo + serviceInterval;
       final remainingMiles = nextServiceOdo - car.odometer!;
       if (remainingMiles <= 500) {
@@ -262,6 +263,25 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: const Icon(Icons.sync),
+              title: const Text('Tire Rotation Interval'),
+              subtitle: Text(
+                '${NumberFormat.decimalPattern().format(car.effectiveTireRotationInterval)} miles',
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                final newInterval = await showTireRotationIntervalDialog(
+                  context,
+                  currentInterval: car.effectiveTireRotationInterval,
+                );
+                if (newInterval != null && newInterval != car.tireRotationInterval) {
+                  final updatedCar = car.copyWith(tireRotationInterval: newInterval);
+                  await StorageService.updateCar(updatedCar);
+                  _loadCars();
+                }
+              },
+            ),
             ListTile(
               leading: Icon(car.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined),
               title: Text(car.isArchived ? 'Unarchive Vehicle' : 'Archive Vehicle'),
@@ -713,7 +733,7 @@ class _HomePageState extends State<HomePage> {
       final latestRecordOdo = records.isNotEmpty
           ? records.map((r) => r.odometer).reduce((a, b) => a > b ? a : b)
           : car.odometer!;
-      final serviceInterval = car.isEv ? 7500 : 5000;
+      final serviceInterval = car.isEv ? car.effectiveTireRotationInterval : 5000;
       final nextServiceOdo = latestRecordOdo + serviceInterval;
       final remainingMiles = nextServiceOdo - car.odometer!;
 
@@ -855,11 +875,11 @@ class _HomePageState extends State<HomePage> {
     final records = StorageService.getMaintenanceRecords(car.id);
     final carTotalSpent = records.fold<double>(0.0, (sum, r) => sum + (r.cost ?? 0.0));
 
-    // Next Service calculations (7.5k tire rotation interval for EV, 5k oil change for gas)
+    // Next Service calculations (tire rotation interval for EV, 5k oil change for gas)
     final latestRecordOdo = records.isNotEmpty
         ? records.map((r) => r.odometer).reduce((a, b) => a > b ? a : b)
         : (car.odometer ?? 0);
-    final serviceInterval = car.isEv ? 7500 : 5000;
+    final serviceInterval = car.isEv ? car.effectiveTireRotationInterval : 5000;
     final nextServiceOdo = latestRecordOdo + serviceInterval;
     final remainingMiles = car.odometer != null ? nextServiceOdo - car.odometer! : serviceInterval;
 
@@ -1017,14 +1037,34 @@ class _HomePageState extends State<HomePage> {
                               tooltip: 'Vehicle options',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              onSelected: (value) {
-                                if (value == 'archive') {
+                              onSelected: (value) async {
+                                if (value == 'interval') {
+                                  final newInterval = await showTireRotationIntervalDialog(
+                                    context,
+                                    currentInterval: car.effectiveTireRotationInterval,
+                                  );
+                                  if (newInterval != null && newInterval != car.tireRotationInterval) {
+                                    final updatedCar = car.copyWith(tireRotationInterval: newInterval);
+                                    await StorageService.updateCar(updatedCar);
+                                    _loadCars();
+                                  }
+                                } else if (value == 'archive') {
                                   _toggleArchiveCar(car);
                                 } else if (value == 'delete') {
                                   _deleteCarFlow(car);
                                 }
                               },
                               itemBuilder: (context) => [
+                                const PopupMenuItem<String>(
+                                  value: 'interval',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.sync, size: 20),
+                                      SizedBox(width: 8),
+                                      Text('Rotation Interval'),
+                                    ],
+                                  ),
+                                ),
                                 PopupMenuItem<String>(
                                   value: 'archive',
                                   child: Row(
@@ -1270,7 +1310,7 @@ class _HomePageState extends State<HomePage> {
       final latestRecordOdo = records.isNotEmpty
           ? records.map((r) => r.odometer).reduce((a, b) => a > b ? a : b)
           : (car.odometer ?? 0);
-      final serviceInterval = car.isEv ? 7500 : 5000;
+      final serviceInterval = car.isEv ? car.effectiveTireRotationInterval : 5000;
       final nextServiceOdo = latestRecordOdo + serviceInterval;
       final remainingMiles = car.odometer != null ? nextServiceOdo - car.odometer! : serviceInterval;
       final serviceName = car.isEv ? 'Tire Rotation' : 'Engine Oil & Filter Change';
