@@ -63,15 +63,19 @@ object FlutterDataMigrator {
         if (element == null || element is JsonNull) return null
         return try {
             element.jsonPrimitive.booleanOrNull
-                ?: element.jsonPrimitive.content.toBooleanStrictOrNull()
+                ?: when (element.jsonPrimitive.content.trim().lowercase()) {
+                    "true", "1" -> true
+                    "false", "0" -> false
+                    else -> null
+                }
         } catch (_: Exception) {
             null
         }
     }
 
     suspend fun migrateIfNeeded(context: Context, database: AppDatabase, preferencesManager: PreferencesManager) {
-        if (preferencesManager.isMigrationV2Complete()) {
-            Log.d(TAG, "Migration v2 already completed previously.")
+        if (preferencesManager.isMigrationV3Complete()) {
+            Log.d(TAG, "Migration v3 already completed previously.")
             return
         }
 
@@ -79,8 +83,12 @@ object FlutterDataMigrator {
         val recordDao = database.maintenanceRecordDao()
 
         val flutterPrefs = context.getSharedPreferences(FLUTTER_PREFS_NAME, Context.MODE_PRIVATE)
-        val legacyCarsJson = flutterPrefs.getString("flutter.car_logger_cars", null)
+        val defaultPrefs = context.getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE)
+        val rawCarsJson = flutterPrefs.getString("flutter.car_logger_cars", null)
             ?: flutterPrefs.getString("car_logger_cars", null)
+            ?: defaultPrefs.getString("flutter.car_logger_cars", null)
+            ?: defaultPrefs.getString("car_logger_cars", null)
+        val legacyCarsJson = rawCarsJson?.removePrefix(FLUTTER_LIST_PREFIX)
 
         var migratedCarsCount = 0
         var migratedRecordsCount = 0
@@ -102,7 +110,7 @@ object FlutterDataMigrator {
                     val vin = asStringOrNull(obj["vin"])
                     val legacyOdo = asIntOrNull(obj["odometer"])
                     val isEv = asBooleanOrNull(obj["isEv"]) ?: false
-                    val isArchived = asBooleanOrNull(obj["isArchived"]) ?: false
+                    val legacyIsArchived = asBooleanOrNull(obj["isArchived"])
                     val trim = asStringOrNull(obj["trim"])
                     val bodyStyle = asStringOrNull(obj["bodyStyle"])
                     val tireRotationInterval = asIntOrNull(obj["tireRotationInterval"])
@@ -121,7 +129,7 @@ object FlutterDataMigrator {
                         vin = vin,
                         odometer = resolvedOdometer,
                         isEv = isEv,
-                        isArchived = existingCar?.isArchived ?: isArchived,
+                        isArchived = legacyIsArchived ?: existingCar?.isArchived ?: false,
                         trim = trim,
                         bodyStyle = bodyStyle,
                         tireRotationInterval = tireRotationInterval ?: existingCar?.tireRotationInterval
@@ -149,6 +157,7 @@ object FlutterDataMigrator {
                     for (recordsKey in candidateKeys) {
                         if (processedRecordKeys.contains(recordsKey)) continue
                         val recordsJson = flutterPrefs.getString(recordsKey, null)
+                            ?: defaultPrefs.getString(recordsKey, null)
                         if (!recordsJson.isNullOrBlank()) {
                             processedRecordKeys.add(recordsKey)
                             parseRecordsJson(recordsJson, car.id, recordEntities)
@@ -156,9 +165,9 @@ object FlutterDataMigrator {
                     }
                 }
 
-                // 2. Scan all SharedPreferences keys for any additional record keys
-                val allPrefs = flutterPrefs.all
-                for ((key, value) in allPrefs) {
+                // 2. Scan SharedPreferences keys for any additional record keys
+                val combinedPrefs = flutterPrefs.all + defaultPrefs.all
+                for ((key, value) in combinedPrefs) {
                     if (key.startsWith("flutter.car_logger_records_") || key.startsWith("car_logger_records_")) {
                         if (processedRecordKeys.contains(key)) continue
                         val jsonStr = value as? String ?: continue
@@ -251,6 +260,7 @@ object FlutterDataMigrator {
 
         preferencesManager.setMigrationComplete(true)
         preferencesManager.setMigrationV2Complete(true)
+        preferencesManager.setMigrationV3Complete(true)
     }
 
     private fun parseRecordsJson(

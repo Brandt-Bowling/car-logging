@@ -134,12 +134,15 @@ fun HomeScreen(
                 },
                 actions = {
                     if (currentTab == GarageNavigationTab.GARAGE) {
-                        IconButton(onClick = { showArchivedOnly = !showArchivedOnly }) {
-                            Icon(
-                                imageVector = if (showArchivedOnly) Icons.Filled.Unarchive else Icons.Filled.Archive,
-                                contentDescription = if (showArchivedOnly) "Show Active" else "Show Archived",
-                                tint = if (showArchivedOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        val hasArchivedCars = cars.any { it.isArchived }
+                        if (hasArchivedCars || showArchivedOnly) {
+                            IconButton(onClick = { showArchivedOnly = !showArchivedOnly }) {
+                                Icon(
+                                    imageVector = if (showArchivedOnly) Icons.Filled.Unarchive else Icons.Filled.Archive,
+                                    contentDescription = if (showArchivedOnly) "Show All Vehicles" else "Filter Archived Only",
+                                    tint = if (showArchivedOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 },
@@ -184,7 +187,7 @@ fun HomeScreen(
                     val displayedCars = if (showArchivedOnly) {
                         cars.filter { it.isArchived }
                     } else {
-                        cars.filter { !it.isArchived }
+                        cars
                     }
                     GarageTab(
                         cars = displayedCars,
