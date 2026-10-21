@@ -14,3 +14,4 @@ val Shapes = Shapes(
 
 val EnvelopedCanvasShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 val FloatingToolbarShape = RoundedCornerShape(32.dp)
+val FabSquircleShape = RoundedCornerShape(16.dp)
