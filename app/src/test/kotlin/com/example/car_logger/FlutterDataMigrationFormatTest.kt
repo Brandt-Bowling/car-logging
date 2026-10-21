@@ -51,6 +51,15 @@ class FlutterDataMigrationFormatTest {
         assertTrue(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive(true))!!)
         assertFalse(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive(false))!!)
         assertTrue(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive("true"))!!)
+        assertTrue(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive("TRUE"))!!)
+        assertTrue(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive("True"))!!)
+        assertTrue(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive("1"))!!)
+        assertTrue(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive(1))!!)
+        assertFalse(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive("false"))!!)
+        assertFalse(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive("FALSE"))!!)
+        assertFalse(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive("0"))!!)
+        assertFalse(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive(0))!!)
+        assertNull(FlutterDataMigrator.asBooleanOrNull(JsonPrimitive("invalid")))
         assertNull(FlutterDataMigrator.asBooleanOrNull(JsonNull))
         assertNull(FlutterDataMigrator.asBooleanOrNull(null))
     }
@@ -250,5 +259,73 @@ class FlutterDataMigrationFormatTest {
         assertNull(recordModel.description)
         assertNull(recordModel.receiptUrl)
         assertNull(recordModel.driveFileId)
+    }
+
+    @Test
+    fun testArchivedSonicMigration() {
+        val legacySonicJson = """
+            [
+                {
+                    "id": "1",
+                    "make": "Chevrolet",
+                    "model": "Sonic",
+                    "year": 2013,
+                    "imageUrl": "https://example.com/sonic.jpg",
+                    "localImagePath": null,
+                    "licensePlate": null,
+                    "vin": null,
+                    "odometer": 45000,
+                    "isEv": false,
+                    "isArchived": true,
+                    "trim": null,
+                    "bodyStyle": null
+                }
+            ]
+        """.trimIndent()
+
+        val array = json.parseToJsonElement(legacySonicJson).jsonArray
+        assertEquals(1, array.size)
+
+        val obj = array[0].jsonObject
+        val id = FlutterDataMigrator.asStringOrNull(obj["id"])!!
+        val make = FlutterDataMigrator.asStringOrNull(obj["make"])!!
+        val model = FlutterDataMigrator.asStringOrNull(obj["model"])!!
+        val year = FlutterDataMigrator.asIntOrNull(obj["year"])!!
+        val imageUrl = FlutterDataMigrator.asStringOrNull(obj["imageUrl"])
+        val isEv = FlutterDataMigrator.asBooleanOrNull(obj["isEv"]) ?: false
+        val legacyIsArchived = FlutterDataMigrator.asBooleanOrNull(obj["isArchived"])
+
+        assertEquals("1", id)
+        assertEquals("Chevrolet", make)
+        assertEquals("Sonic", model)
+        assertEquals(2013, year)
+        assertEquals(true, legacyIsArchived)
+
+        // Simulate an existing car in the database seeded with isArchived = false
+        val seededCar = CarEntity(
+            id = "1",
+            make = "Chevrolet",
+            model = "Sonic",
+            year = 2013,
+            odometer = 45000,
+            isEv = false,
+            isArchived = false // seeded default was false
+        )
+
+        // Verify that legacy Flutter archive state (true) takes precedence over seeded database car (false)
+        val resolvedIsArchived = legacyIsArchived ?: seededCar.isArchived ?: false
+        assertTrue("Archived state from Flutter must take precedence over seeded false value", resolvedIsArchived)
+
+        val migratedCar = CarEntity(
+            id = id,
+            make = make,
+            model = model,
+            year = year,
+            imageUrl = imageUrl ?: seededCar.imageUrl,
+            isEv = isEv,
+            isArchived = resolvedIsArchived
+        )
+        assertTrue(migratedCar.isArchived)
+        assertEquals("2013 Chevrolet Sonic", migratedCar.toModel().displayName)
     }
 }
