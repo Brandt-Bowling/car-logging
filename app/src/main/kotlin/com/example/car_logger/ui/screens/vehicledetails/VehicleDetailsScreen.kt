@@ -21,10 +21,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.ui.components.EnvelopedBodyCanvas
@@ -50,6 +59,28 @@ fun VehicleDetailsScreen(
     val activeTire by viewModel.activeTire.collectAsState()
     val glovebox by viewModel.glovebox.collectAsState()
     val currentSubView by viewModel.currentSubView.collectAsState()
+
+    var isToolbarExpanded by rememberSaveable { mutableStateOf(true) }
+
+    LaunchedEffect(currentSubView) {
+        isToolbarExpanded = true
+    }
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // When scrolling down, available.y is negative -> collapse toolbar into FAB
+                if (available.y < -4f) {
+                    isToolbarExpanded = false
+                }
+                // When scrolling up, available.y is positive -> expand toolbar
+                else if (available.y > 4f) {
+                    isToolbarExpanded = true
+                }
+                return Offset.Zero
+            }
+        }
+    }
 
     if (car == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -96,6 +127,7 @@ fun VehicleDetailsScreen(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
+                .nestedScroll(nestedScrollConnection)
         ) {
             // Distinct enveloped body sheet
             EnvelopedBodyCanvas {
@@ -156,6 +188,7 @@ fun VehicleDetailsScreen(
                     VehicleSubView.TIRES -> "Tire Action"
                     VehicleSubView.GLOVEBOX -> "Upload Document"
                 },
+                expanded = isToolbarExpanded,
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
