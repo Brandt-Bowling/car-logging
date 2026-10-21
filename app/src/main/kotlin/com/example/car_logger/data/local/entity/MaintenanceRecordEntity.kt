@@ -35,10 +35,16 @@ data class MaintenanceRecordEntity(
         title = title,
         date = date,
         odometer = odometer,
-        description = description,
-        receiptUrl = receiptUrl,
+        description = description?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        receiptUrl = receiptUrl?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         cost = cost,
-        driveFileId = driveFileId
+        driveFileId = driveFileId?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
+    )
+
+    fun cleanNullStrings(): MaintenanceRecordEntity = copy(
+        description = description?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        receiptUrl = receiptUrl?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        driveFileId = driveFileId?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
     )
 
     companion object {

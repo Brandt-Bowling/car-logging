@@ -314,8 +314,10 @@ fun VehicleCard(
                     fontWeight = FontWeight.Bold
                 )
 
-                if (!car.trim.isNullOrBlank() || !car.bodyStyle.isNullOrBlank()) {
-                    val subtitle = listOfNotNull(car.trim, car.bodyStyle).joinToString(" • ")
+                val cleanTrim = car.trim?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
+                val cleanBodyStyle = car.bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
+                if (cleanTrim != null || cleanBodyStyle != null) {
+                    val subtitle = listOfNotNull(cleanTrim, cleanBodyStyle).joinToString(" • ")
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
@@ -352,14 +354,15 @@ fun VehicleCard(
                     }
 
                     // License Plate
-                    if (!car.licensePlate.isNullOrBlank()) {
+                    val cleanPlate = car.licensePlate?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
+                    if (cleanPlate != null) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier.padding(horizontal = 2.dp)
                         ) {
                             Text(
-                                text = car.licensePlate.uppercase(),
+                                text = cleanPlate.uppercase(),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)

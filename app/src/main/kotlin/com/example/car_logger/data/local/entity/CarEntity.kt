@@ -26,16 +26,25 @@ data class CarEntity(
         make = make,
         model = model,
         year = year,
-        imageUrl = imageUrl,
-        localImagePath = localImagePath,
-        licensePlate = licensePlate,
-        vin = vin,
+        imageUrl = imageUrl?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        localImagePath = localImagePath?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        licensePlate = licensePlate?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        vin = vin?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         odometer = odometer,
         isEv = isEv,
         isArchived = isArchived,
-        trim = trim,
-        bodyStyle = bodyStyle,
+        trim = trim?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        bodyStyle = bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         tireRotationInterval = tireRotationInterval
+    )
+
+    fun cleanNullStrings(): CarEntity = copy(
+        imageUrl = imageUrl?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        localImagePath = localImagePath?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        licensePlate = licensePlate?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        vin = vin?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        trim = trim?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        bodyStyle = bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
     )
 
     companion object {

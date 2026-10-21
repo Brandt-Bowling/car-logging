@@ -24,6 +24,7 @@ class PreferencesManager(private val context: Context) {
         val KEY_AUTO_DEV_API_KEY = stringPreferencesKey("auto_dev_api_key")
         val KEY_IMPORTED_FILE_IDS = stringSetPreferencesKey("imported_file_ids")
         val KEY_MIGRATION_V1_COMPLETE = booleanPreferencesKey("migration_from_flutter_v1_complete")
+        val KEY_MIGRATION_V2_COMPLETE = booleanPreferencesKey("migration_from_flutter_v2_complete")
         const val DEFAULT_GARAGE_NAME = "My Garage"
     }
 
@@ -55,6 +56,10 @@ class PreferencesManager(private val context: Context) {
         prefs[KEY_MIGRATION_V1_COMPLETE] ?: false
     }
 
+    val isMigrationV2CompleteFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_MIGRATION_V2_COMPLETE] ?: false
+    }
+
     suspend fun getGarageName(): String = garageNameFlow.first()
     suspend fun getSyncFolderId(): String? = syncFolderIdFlow.first()
     suspend fun getSyncFolderName(): String? = syncFolderNameFlow.first()
@@ -62,6 +67,7 @@ class PreferencesManager(private val context: Context) {
     suspend fun getAutoDevApiKey(): String? = autoDevApiKeyFlow.first()
     suspend fun getImportedFileIds(): Set<String> = importedFileIdsFlow.first()
     suspend fun isMigrationComplete(): Boolean = isMigrationCompleteFlow.first()
+    suspend fun isMigrationV2Complete(): Boolean = isMigrationV2CompleteFlow.first()
 
     suspend fun setGarageName(name: String) {
         val trimmed = name.trim()
@@ -132,6 +138,12 @@ class PreferencesManager(private val context: Context) {
     suspend fun setMigrationComplete(complete: Boolean = true) {
         context.dataStore.edit { prefs ->
             prefs[KEY_MIGRATION_V1_COMPLETE] = complete
+        }
+    }
+
+    suspend fun setMigrationV2Complete(complete: Boolean = true) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_MIGRATION_V2_COMPLETE] = complete
         }
     }
 }
