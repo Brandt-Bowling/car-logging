@@ -2,9 +2,6 @@ package com.example.car_logger.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -72,8 +69,7 @@ fun VehicleFloatingToolbar(
 ) {
     Row(
         modifier = modifier
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
@@ -89,13 +85,15 @@ fun VehicleFloatingToolbar(
                 shrinkTowards = Alignment.End
             )
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.padding(top = 8.dp, bottom = 8.dp, start = 4.dp, end = 12.dp)
+            ) {
                 Surface(
                     modifier = Modifier.height(64.dp),
                     shape = FloatingToolbarShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    tonalElevation = 6.dp,
-                    shadowElevation = 8.dp
+                    tonalElevation = 2.dp,
+                    shadowElevation = 3.dp
                 ) {
                     Row(
                         modifier = Modifier
@@ -152,8 +150,6 @@ fun VehicleFloatingToolbar(
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.width(12.dp))
             }
         }
 
@@ -164,8 +160,8 @@ fun VehicleFloatingToolbar(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             elevation = FloatingActionButtonDefaults.elevation(
-                defaultElevation = 6.dp,
-                pressedElevation = 10.dp
+                defaultElevation = 3.dp,
+                pressedElevation = 6.dp
             ),
             modifier = Modifier.size(56.dp)
         ) {
