@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.example.car_logger.data.model.Car
+import com.example.car_logger.ui.screens.dialogs.TireRotationIntervalDialog
 import com.example.car_logger.ui.theme.AmberUrgent
 import java.text.NumberFormat
 import java.util.Locale
@@ -64,9 +66,23 @@ fun GarageTab(
     onToggleArchive: (String) -> Unit,
     onDeleteCar: (String) -> Unit,
     onAddCarClick: () -> Unit,
+    onUpdateCar: ((Car) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var carToDelete by remember { mutableStateOf<Car?>(null) }
+    var carForRotationInterval by remember { mutableStateOf<Car?>(null) }
+
+    if (carForRotationInterval != null) {
+        val car = carForRotationInterval!!
+        TireRotationIntervalDialog(
+            currentInterval = car.effectiveTireRotationInterval,
+            onDismiss = { carForRotationInterval = null },
+            onConfirm = { newInterval ->
+                onUpdateCar?.invoke(car.copy(tireRotationInterval = newInterval))
+                carForRotationInterval = null
+            }
+        )
+    }
 
     if (carToDelete != null) {
         val car = carToDelete!!
@@ -137,7 +153,8 @@ fun GarageTab(
                     car = car,
                     onClick = { onCarClick(car) },
                     onToggleArchive = { onToggleArchive(car.id) },
-                    onDelete = { carToDelete = car }
+                    onDelete = { carToDelete = car },
+                    onEditRotationInterval = { carForRotationInterval = car }
                 )
             }
             item {
@@ -152,7 +169,8 @@ fun VehicleCard(
     car: Car,
     onClick: () -> Unit,
     onToggleArchive: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEditRotationInterval: (() -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -251,6 +269,18 @@ fun VehicleCard(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false }
                         ) {
+                            if (onEditRotationInterval != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Tire Rotation Interval") },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Sync, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onEditRotationInterval()
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(if (car.isArchived) "Unarchive" else "Archive") },
                                 leadingIcon = {

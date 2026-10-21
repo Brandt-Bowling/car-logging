@@ -106,7 +106,8 @@ fun VehicleDetailsScreen(
                             records = records,
                             onRecordClick = onOpenRecordDialog,
                             onAttachmentClick = onOpenAttachmentViewer,
-                            onDeleteRecord = { viewModel.deleteRecord(it) }
+                            onDeleteRecord = { viewModel.deleteRecord(it) },
+                            onUpdateCar = { viewModel.updateCar(it) }
                         )
                     }
                     VehicleSubView.TIRES -> {
@@ -114,7 +115,8 @@ fun VehicleDetailsScreen(
                             car = carItem,
                             activeTire = activeTire,
                             onLogRotation = { date, odo -> viewModel.logTireRotation(date, odo) },
-                            onInstallNewTire = { viewModel.installNewTireSet(it) }
+                            onInstallNewTire = { viewModel.installNewTireSet(it) },
+                            onUpdateCar = { viewModel.updateCar(it) }
                         )
                     }
                     VehicleSubView.GLOVEBOX -> {

@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -58,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.example.car_logger.data.model.Car
@@ -357,10 +359,36 @@ fun AddCarModalSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Electric Vehicle (EV)", style = MaterialTheme.typography.bodyMedium)
+                Column {
+                    Text("Electric Vehicle (EV)", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Disables oil change reminders",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Switch(
                     checked = isEv,
                     onCheckedChange = { viewModel.isEv.value = it }
+                )
+            }
+
+            if (isEv) {
+                Spacer(modifier = Modifier.height(12.dp))
+                val rotationInterval by viewModel.tireRotationInterval.collectAsState()
+                var intervalText by remember { mutableStateOf((rotationInterval ?: 7500).toString()) }
+
+                OutlinedTextField(
+                    value = intervalText,
+                    onValueChange = {
+                        intervalText = it
+                        viewModel.tireRotationInterval.value = it.replace(",", "").trim().toIntOrNull() ?: 7500
+                    },
+                    label = { Text("Tire Rotation Interval (miles)") },
+                    suffix = { Text("mi") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 

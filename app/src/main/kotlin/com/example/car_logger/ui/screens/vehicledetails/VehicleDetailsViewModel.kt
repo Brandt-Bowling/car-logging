@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.car_logger.data.local.AppDatabase
+import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.GloveboxEntity
 import com.example.car_logger.data.local.entity.TireEntity
 import com.example.car_logger.data.model.Car
@@ -66,6 +67,12 @@ class VehicleDetailsViewModel(
     fun toggleArchive() {
         viewModelScope.launch {
             carDao.toggleArchive(carId)
+        }
+    }
+
+    fun updateCar(updatedCar: Car) {
+        viewModelScope.launch {
+            carDao.updateCar(CarEntity.fromModel(updatedCar))
         }
     }
 

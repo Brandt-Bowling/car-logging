@@ -191,7 +191,8 @@ fun HomeScreen(
                         onCarClick = { onNavigateToCarDetails(it.id) },
                         onToggleArchive = { viewModel.toggleArchiveCar(it) },
                         onDeleteCar = { viewModel.deleteCar(it) },
-                        onAddCarClick = onOpenAddCarSheet
+                        onAddCarClick = onOpenAddCarSheet,
+                        onUpdateCar = { viewModel.updateCar(it) }
                     )
                 }
                 GarageNavigationTab.ACTIVITY -> {

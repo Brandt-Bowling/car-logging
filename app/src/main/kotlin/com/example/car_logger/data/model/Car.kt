@@ -16,8 +16,12 @@ data class Car(
     val isEv: Boolean = false,
     val isArchived: Boolean = false,
     val trim: String? = null,
-    val bodyStyle: String? = null
+    val bodyStyle: String? = null,
+    val tireRotationInterval: Int? = null
 ) {
     val displayName: String
         get() = "$year $make $model"
+
+    val effectiveTireRotationInterval: Int
+        get() = tireRotationInterval ?: 7500
 }

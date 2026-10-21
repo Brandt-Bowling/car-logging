@@ -44,4 +44,19 @@ class TireModelTest {
         // At 100000: 0 / 60000 = 0.0 (0%)
         assertEquals(0.0f, tire.treadWearPercentage(100000), 0.001f)
     }
+
+    @Test
+    fun testCarTireRotationIntervalDefaultsAndCustom() {
+        val evCarDefault = com.example.car_logger.data.model.Car(
+            id = "c1",
+            make = "Tesla",
+            model = "Model Y",
+            year = 2023,
+            isEv = true
+        )
+        assertEquals(7500, evCarDefault.effectiveTireRotationInterval)
+
+        val evCarCustom = evCarDefault.copy(tireRotationInterval = 6000)
+        assertEquals(6000, evCarCustom.effectiveTireRotationInterval)
+    }
 }

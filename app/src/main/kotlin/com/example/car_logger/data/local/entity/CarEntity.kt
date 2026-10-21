@@ -18,7 +18,8 @@ data class CarEntity(
     val isEv: Boolean = false,
     val isArchived: Boolean = false,
     val trim: String? = null,
-    val bodyStyle: String? = null
+    val bodyStyle: String? = null,
+    val tireRotationInterval: Int? = null
 ) {
     fun toModel(): Car = Car(
         id = id,
@@ -33,7 +34,8 @@ data class CarEntity(
         isEv = isEv,
         isArchived = isArchived,
         trim = trim,
-        bodyStyle = bodyStyle
+        bodyStyle = bodyStyle,
+        tireRotationInterval = tireRotationInterval
     )
 
     companion object {
@@ -50,7 +52,8 @@ data class CarEntity(
             isEv = car.isEv,
             isArchived = car.isArchived,
             trim = car.trim,
-            bodyStyle = car.bodyStyle
+            bodyStyle = car.bodyStyle,
+            tireRotationInterval = car.tireRotationInterval
         )
     }
 }

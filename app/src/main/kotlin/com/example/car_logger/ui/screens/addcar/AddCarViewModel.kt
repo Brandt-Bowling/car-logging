@@ -30,6 +30,7 @@ class AddCarViewModel(application: Application) : AndroidViewModel(application) 
     val selectedOdometer = MutableStateFlow<Int?>(null)
     val licensePlate = MutableStateFlow("")
     val isEv = MutableStateFlow(false)
+    val tireRotationInterval = MutableStateFlow<Int?>(7500)
     val selectedImageUrl = MutableStateFlow<String?>(null)
 
     fun onVinChange(vin: String) {
@@ -103,7 +104,8 @@ class AddCarViewModel(application: Application) : AndroidViewModel(application) 
             odometer = selectedOdometer.value,
             isEv = isEv.value,
             trim = decoded?.trim,
-            bodyStyle = decoded?.body ?: decoded?.style
+            bodyStyle = decoded?.body ?: decoded?.style,
+            tireRotationInterval = if (isEv.value) (tireRotationInterval.value ?: 7500) else tireRotationInterval.value
         )
     }
 }

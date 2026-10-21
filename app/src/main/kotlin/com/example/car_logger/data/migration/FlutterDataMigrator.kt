@@ -58,6 +58,7 @@ object FlutterDataMigrator {
                     val isArchived = obj["isArchived"]?.jsonPrimitive?.booleanOrNull ?: false
                     val trim = obj["trim"]?.jsonPrimitive?.content
                     val bodyStyle = obj["bodyStyle"]?.jsonPrimitive?.content
+                    val tireRotationInterval = obj["tireRotationInterval"]?.jsonPrimitive?.intOrNull
 
                     val carEntity = CarEntity(
                         id = id,
@@ -72,7 +73,8 @@ object FlutterDataMigrator {
                         isEv = isEv,
                         isArchived = isArchived,
                         trim = trim,
-                        bodyStyle = bodyStyle
+                        bodyStyle = bodyStyle,
+                        tireRotationInterval = tireRotationInterval
                     )
                     carEntities.add(carEntity)
 

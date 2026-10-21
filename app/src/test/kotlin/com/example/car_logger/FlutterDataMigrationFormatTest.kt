@@ -45,7 +45,8 @@ class FlutterDataMigrationFormatTest {
                     "year": 2018,
                     "imageUrl": null,
                     "isEv": true,
-                    "isArchived": true
+                    "isArchived": true,
+                    "tireRotationInterval": 6000
                 }
             ]
         """.trimIndent()
@@ -59,11 +60,13 @@ class FlutterDataMigrationFormatTest {
         assertEquals(2013, car1["year"]?.jsonPrimitive?.intOrNull)
         assertEquals(45000, car1["odometer"]?.jsonPrimitive?.intOrNull)
         assertFalse(car1["isEv"]?.jsonPrimitive?.booleanOrNull ?: true)
+        assertEquals(null, car1["tireRotationInterval"]?.jsonPrimitive?.intOrNull)
 
         val car2 = array[1].jsonObject
         assertEquals("c2", car2["id"]?.jsonPrimitive?.content)
         assertTrue(car2["isEv"]?.jsonPrimitive?.booleanOrNull ?: false)
         assertTrue(car2["isArchived"]?.jsonPrimitive?.booleanOrNull ?: false)
+        assertEquals(6000, car2["tireRotationInterval"]?.jsonPrimitive?.intOrNull)
     }
 
     @Test

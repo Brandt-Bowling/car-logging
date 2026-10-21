@@ -71,7 +71,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 car.odometer
             }
 
-            val interval = if (car.isEv) 7500 else 5000
+            val interval = if (car.isEv) car.effectiveTireRotationInterval else 5000
             val nextOdo = latestOdo + interval
             val remaining = nextOdo - car.odometer
 
@@ -128,6 +128,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteCar(carId: String) {
         viewModelScope.launch {
             carDao.deleteCarById(carId)
+        }
+    }
+
+    fun updateCar(car: Car) {
+        viewModelScope.launch {
+            carDao.updateCar(CarEntity.fromModel(car))
         }
     }
 

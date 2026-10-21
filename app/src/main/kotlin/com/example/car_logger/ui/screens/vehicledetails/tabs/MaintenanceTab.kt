@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.MaintenanceRecord
+import com.example.car_logger.ui.screens.dialogs.TireRotationIntervalDialog
 import com.example.car_logger.ui.theme.AmberUrgent
 import java.text.NumberFormat
 import java.util.Locale
@@ -57,10 +59,12 @@ fun MaintenanceTab(
     onRecordClick: (MaintenanceRecord) -> Unit,
     onAttachmentClick: (MaintenanceRecord) -> Unit,
     onDeleteRecord: (String) -> Unit,
+    onUpdateCar: ((Car) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedYear by remember { mutableStateOf<Int?>(null) }
+    var showIntervalDialog by remember { mutableStateOf(false) }
 
     val availableYears = remember(records) {
         records.mapNotNull { it.date.take(4).toIntOrNull() }.distinct().sortedDescending()
@@ -79,12 +83,22 @@ fun MaintenanceTab(
 
     // Next scheduled service calculation
     val latestOdo = records.maxOfOrNull { it.odometer } ?: (car.odometer ?: 0)
-    val interval = if (car.isEv) 7500 else 5000
+    val interval = if (car.isEv) car.effectiveTireRotationInterval else 5000
     val nextServiceOdo = latestOdo + interval
     val currentOdo = car.odometer ?: latestOdo
     val remainingMiles = nextServiceOdo - currentOdo
     val isUrgent = remainingMiles in 0..500
     val isOverdue = remainingMiles < 0
+
+    if (showIntervalDialog) {
+        TireRotationIntervalDialog(
+            currentInterval = car.effectiveTireRotationInterval,
+            onDismiss = { showIntervalDialog = false },
+            onConfirm = { newInterval ->
+                onUpdateCar?.invoke(car.copy(tireRotationInterval = newInterval))
+            }
+        )
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -118,25 +132,40 @@ fun MaintenanceTab(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        if (isUrgent || isOverdue) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isOverdue) MaterialTheme.colorScheme.error else AmberUrgent
-                            ) {
-                                Text(
-                                    text = if (isOverdue) "Overdue" else "Due Soon",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isOverdue) MaterialTheme.colorScheme.onError else androidx.compose.ui.graphics.Color.Black,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (car.isEv && onUpdateCar != null) {
+                                IconButton(
+                                    onClick = { showIntervalDialog = true },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Edit,
+                                        contentDescription = "Configure Interval",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            if (isUrgent || isOverdue) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (isOverdue) MaterialTheme.colorScheme.error else AmberUrgent
+                                ) {
+                                    Text(
+                                        text = if (isOverdue) "Overdue" else "Due Soon",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isOverdue) MaterialTheme.colorScheme.onError else androidx.compose.ui.graphics.Color.Black,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
                             }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    val serviceName = if (car.isEv) "Tire Rotation & Cabin Filter Inspection" else "Oil & Filter Change"
+                    val serviceName = if (car.isEv) "Tire Rotation" else "Oil Change"
                     Text(
                         text = "$serviceName at ${NumberFormat.getNumberInstance(Locale.US).format(nextServiceOdo)} miles",
                         style = MaterialTheme.typography.bodyMedium,

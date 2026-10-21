@@ -1,5 +1,6 @@
 package com.example.car_logger.ui.screens.vehicledetails.tabs
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.TireRepair
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Tire
 import com.example.car_logger.ui.components.TreadWearGauge
+import com.example.car_logger.ui.screens.dialogs.TireRotationIntervalDialog
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.util.Locale
@@ -54,10 +57,12 @@ fun TiresTab(
     activeTire: Tire?,
     onLogRotation: (String, Int) -> Unit,
     onInstallNewTire: (Tire) -> Unit,
+    onUpdateCar: ((Car) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showRotationDialog by remember { mutableStateOf(false) }
     var showNewTireDialog by remember { mutableStateOf(false) }
+    var showIntervalDialog by remember { mutableStateOf(false) }
 
     val currentOdo = car.odometer ?: 0
     val tire = activeTire ?: remember(car.id) {
@@ -201,6 +206,16 @@ fun TiresTab(
         )
     }
 
+    if (showIntervalDialog) {
+        TireRotationIntervalDialog(
+            currentInterval = car.effectiveTireRotationInterval,
+            onDismiss = { showIntervalDialog = false },
+            onConfirm = { newInterval ->
+                onUpdateCar?.invoke(car.copy(tireRotationInterval = newInterval))
+            }
+        )
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -296,6 +311,32 @@ fun TiresTab(
                             "Not logged"
                         }
                         Text(rotInfo, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = onUpdateCar != null) { showIntervalDialog = true },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Rotation Interval", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Recommended interval between rotations", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${NumberFormat.getNumberInstance(Locale.US).format(car.effectiveTireRotationInterval)} miles",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (onUpdateCar != null) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(Icons.Filled.Edit, contentDescription = "Edit Interval", modifier = Modifier.size(16.dp))
+                            }
+                        }
                     }
                 }
             }
