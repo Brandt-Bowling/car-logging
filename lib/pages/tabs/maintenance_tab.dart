@@ -5,6 +5,7 @@ import '../../models/maintenance_record.dart';
 import '../../services/storage_service.dart';
 import '../../widgets/maintenance_record_dialog.dart';
 import '../../widgets/drive_attachment_viewer_sheet.dart';
+import '../../widgets/tire_rotation_interval_dialog.dart';
 
 class MaintenanceTab extends StatefulWidget {
   final Car car;
@@ -676,16 +677,33 @@ class MaintenanceTabState extends State<MaintenanceTab> {
     );
   }
 
+  Future<void> _editTireRotationInterval(BuildContext context) async {
+    final newInterval = await showTireRotationIntervalDialog(
+      context,
+      currentInterval: widget.car.effectiveTireRotationInterval,
+    );
+    if (newInterval != null && newInterval != widget.car.tireRotationInterval) {
+      final updatedCar = widget.car.copyWith(tireRotationInterval: newInterval);
+      await StorageService.updateCar(updatedCar);
+      widget.onCarUpdated?.call(updatedCar);
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Find next scheduled maintenance (e.g. oil change at next 5,000 mi interval)
+    // Find next scheduled maintenance (e.g. tire rotation at next interval for EV, oil change at next 5,000 mi interval for gas)
     int latestOdometer = widget.car.id == '1' ? 45000 : (widget.car.odometer ?? 0);
     if (_records.isNotEmpty) {
       latestOdometer = _records.map((r) => r.odometer).reduce((a, b) => a > b ? a : b);
     }
-    final nextScheduledOdometer = latestOdometer + 5000;
+    final serviceInterval = widget.car.isEv ? widget.car.effectiveTireRotationInterval : 5000;
+    final serviceName = widget.car.isEv ? 'Tire Rotation' : 'Oil Change';
+    final nextScheduledOdometer = latestOdometer + serviceInterval;
     final groupedRecords = _groupedRecords;
     final sortedGroupYears = groupedRecords.keys.toList()..sort((a, b) => b.compareTo(a));
 
@@ -704,8 +722,16 @@ class MaintenanceTabState extends State<MaintenanceTab> {
               leading: const Icon(Icons.calendar_month),
               title: const Text('Next Scheduled Maintenance'),
               subtitle: Text(
-                'Oil Change at ${NumberFormat.decimalPattern().format(nextScheduledOdometer)} miles',
+                '$serviceName at ${NumberFormat.decimalPattern().format(nextScheduledOdometer)} miles',
               ),
+              trailing: widget.car.isEv
+                  ? IconButton(
+                      icon: const Icon(Icons.edit_outlined),
+                      tooltip: 'Configure Interval',
+                      onPressed: () => _editTireRotationInterval(context),
+                    )
+                  : null,
+              onTap: widget.car.isEv ? () => _editTireRotationInterval(context) : null,
             ),
           ),
           const SizedBox(height: 16),

@@ -13,6 +13,7 @@ class Car {
 
   final String? trim;
   final String? bodyStyle;
+  final int? tireRotationInterval;
 
   Car({
     required this.id,
@@ -28,7 +29,10 @@ class Car {
     this.isArchived = false,
     this.trim,
     this.bodyStyle,
+    this.tireRotationInterval,
   });
+
+  int get effectiveTireRotationInterval => tireRotationInterval ?? 7500;
 
   Car copyWith({
     String? id,
@@ -44,6 +48,7 @@ class Car {
     bool? isArchived,
     String? trim,
     String? bodyStyle,
+    int? tireRotationInterval,
   }) {
     return Car(
       id: id ?? this.id,
@@ -59,6 +64,7 @@ class Car {
       isArchived: isArchived ?? this.isArchived,
       trim: trim ?? this.trim,
       bodyStyle: bodyStyle ?? this.bodyStyle,
+      tireRotationInterval: tireRotationInterval ?? this.tireRotationInterval,
     );
   }
 
@@ -77,6 +83,7 @@ class Car {
       'isArchived': isArchived,
       'trim': trim,
       'bodyStyle': bodyStyle,
+      'tireRotationInterval': tireRotationInterval,
     };
   }
 
@@ -95,6 +102,7 @@ class Car {
       isArchived: map['isArchived'] ?? false,
       trim: map['trim'],
       bodyStyle: map['bodyStyle'],
+      tireRotationInterval: map['tireRotationInterval'],
     );
   }
 }
