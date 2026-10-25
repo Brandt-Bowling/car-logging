@@ -19,7 +19,9 @@ data class CarEntity(
     val isArchived: Boolean = false,
     val trim: String? = null,
     val bodyStyle: String? = null,
-    val tireRotationInterval: Int? = null
+    val tireRotationInterval: Int? = null,
+    val driveFolderId: String? = null,
+    val driveFolderName: String? = null
 ) {
     fun toModel(): Car = Car(
         id = id,
@@ -35,7 +37,9 @@ data class CarEntity(
         isArchived = isArchived,
         trim = trim?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         bodyStyle = bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
-        tireRotationInterval = tireRotationInterval
+        tireRotationInterval = tireRotationInterval,
+        driveFolderId = driveFolderId?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        driveFolderName = driveFolderName?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
     )
 
     fun cleanNullStrings(): CarEntity = copy(
@@ -44,7 +48,9 @@ data class CarEntity(
         licensePlate = licensePlate?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         vin = vin?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         trim = trim?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
-        bodyStyle = bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
+        bodyStyle = bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        driveFolderId = driveFolderId?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        driveFolderName = driveFolderName?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
     )
 
     companion object {
@@ -62,7 +68,9 @@ data class CarEntity(
             isArchived = car.isArchived,
             trim = car.trim,
             bodyStyle = car.bodyStyle,
-            tireRotationInterval = car.tireRotationInterval
+            tireRotationInterval = car.tireRotationInterval,
+            driveFolderId = car.driveFolderId,
+            driveFolderName = car.driveFolderName
         )
     }
 }

@@ -62,9 +62,6 @@ class MainActivity : ComponentActivity() {
                 var activeRecordForAttachment by remember { mutableStateOf<MaintenanceRecord?>(null) }
                 val attachmentSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-                var showFolderPickerSheet by remember { mutableStateOf(false) }
-                val folderPickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
                 NavHost(
                     navController = navController,
                     startDestination = "home",
@@ -89,8 +86,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onOpenAttachmentViewer = { record ->
                                 activeRecordForAttachment = record
-                            },
-                            onOpenFolderPicker = { showFolderPickerSheet = true }
+                            }
                         )
                     }
 
@@ -110,6 +106,8 @@ class MainActivity : ComponentActivity() {
 
                         VehicleDetailsScreen(
                             viewModel = detailsViewModel,
+                            googleDriveService = homeViewModel.googleDriveService,
+                            preferencesManager = homeViewModel.preferencesManager,
                             onNavigateBack = { navController.popBackStack() },
                             onOpenAddRecordDialog = { targetId ->
                                 targetCarIdForRecord = targetId
@@ -182,27 +180,6 @@ class MainActivity : ComponentActivity() {
                             coroutineScope.launch {
                                 attachmentSheetState.hide()
                                 activeRecordForAttachment = null
-                            }
-                        }
-                    )
-                }
-
-                // Drive Folder Picker Sheet
-                if (showFolderPickerSheet) {
-                    DriveFolderPickerSheet(
-                        sheetState = folderPickerSheetState,
-                        googleDriveService = homeViewModel.googleDriveService,
-                        onFolderSelected = { folderId, folderName ->
-                            coroutineScope.launch {
-                                homeViewModel.preferencesManager.setSyncFolder(folderId, folderName)
-                                folderPickerSheetState.hide()
-                                showFolderPickerSheet = false
-                            }
-                        },
-                        onDismissRequest = {
-                            coroutineScope.launch {
-                                folderPickerSheetState.hide()
-                                showFolderPickerSheet = false
                             }
                         }
                     )

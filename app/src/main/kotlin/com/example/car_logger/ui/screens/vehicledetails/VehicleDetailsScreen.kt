@@ -20,12 +20,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,30 +37,41 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.model.MaintenanceRecord
+import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.ui.components.EnvelopedBodyCanvas
 import com.example.car_logger.ui.components.VehicleFloatingToolbar
 import com.example.car_logger.ui.components.VehicleSubView
+import com.example.car_logger.ui.screens.dialogs.DriveFolderPickerSheet
 import com.example.car_logger.ui.screens.vehicledetails.tabs.GloveboxTab
 import com.example.car_logger.ui.screens.vehicledetails.tabs.MaintenanceTab
 import com.example.car_logger.ui.screens.vehicledetails.tabs.TiresTab
 import com.example.car_logger.ui.theme.ExpressiveThemeTokens
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VehicleDetailsScreen(
     viewModel: VehicleDetailsViewModel,
+    googleDriveService: GoogleDriveService,
+    preferencesManager: PreferencesManager,
     onNavigateBack: () -> Unit,
     onOpenAddRecordDialog: (String) -> Unit,
     onOpenRecordDialog: (MaintenanceRecord) -> Unit,
     onOpenAttachmentViewer: (MaintenanceRecord) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val coroutineScope = rememberCoroutineScope()
     val car by viewModel.car.collectAsState()
     val records by viewModel.records.collectAsState()
     val activeTire by viewModel.activeTire.collectAsState()
     val glovebox by viewModel.glovebox.collectAsState()
     val currentSubView by viewModel.currentSubView.collectAsState()
+    val isSyncingDrive by viewModel.isSyncingDrive.collectAsState()
+
+    var showFolderPickerSheet by remember { mutableStateOf(false) }
+    val folderPickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var isToolbarExpanded by rememberSaveable { mutableStateOf(true) }
 
@@ -155,11 +168,42 @@ fun VehicleDetailsScreen(
                         GloveboxTab(
                             car = carItem,
                             glovebox = glovebox,
+                            googleDriveService = googleDriveService,
+                            isSyncingDrive = isSyncingDrive,
+                            onOpenFolderPicker = { showFolderPickerSheet = true },
+                            onSyncDriveFolder = {
+                                viewModel.syncDriveFolder(googleDriveService, preferencesManager)
+                            },
                             onUpdateOdometer = { viewModel.updateOdometer(it) },
                             onUpdateDocument = { reg, ins, man -> viewModel.updateGloveboxDocument(reg, ins, man) }
                         )
                     }
                 }
+            }
+
+            if (showFolderPickerSheet) {
+                DriveFolderPickerSheet(
+                    sheetState = folderPickerSheetState,
+                    googleDriveService = googleDriveService,
+                    onFolderSelected = { folderId, folderName ->
+                        coroutineScope.launch {
+                            viewModel.updateDriveFolder(
+                                folderId = folderId,
+                                folderName = folderName,
+                                googleDriveService = googleDriveService,
+                                preferencesManager = preferencesManager
+                            )
+                            folderPickerSheetState.hide()
+                            showFolderPickerSheet = false
+                        }
+                    },
+                    onDismissRequest = {
+                        coroutineScope.launch {
+                            folderPickerSheetState.hide()
+                            showFolderPickerSheet = false
+                        }
+                    }
+                )
             }
 
             // M3 Expressive Floating Toolbar with Attached FAB (No bottom nav bar!)

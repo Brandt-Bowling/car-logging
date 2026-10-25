@@ -328,4 +328,33 @@ class FlutterDataMigrationFormatTest {
         assertTrue(migratedCar.isArchived)
         assertEquals("2013 Chevrolet Sonic", migratedCar.toModel().displayName)
     }
+
+    @Test
+    fun testPerCarDriveFolderMappingAndSanitization() {
+        val carWithDriveFolder = CarEntity(
+            id = "c1",
+            make = "Rivian",
+            model = "R1T",
+            year = 2023,
+            driveFolderId = "folder_rivian_123",
+            driveFolderName = "Rivian Receipts"
+        )
+        val model = carWithDriveFolder.toModel()
+        assertEquals("folder_rivian_123", model.driveFolderId)
+        assertEquals("Rivian Receipts", model.driveFolderName)
+
+        val roundTripEntity = CarEntity.fromModel(model)
+        assertEquals("folder_rivian_123", roundTripEntity.driveFolderId)
+        assertEquals("Rivian Receipts", roundTripEntity.driveFolderName)
+
+        val corruptedDriveCar = carWithDriveFolder.copy(
+            driveFolderId = "null",
+            driveFolderName = "   "
+        )
+        val cleaned = corruptedDriveCar.cleanNullStrings()
+        assertNull(cleaned.driveFolderId)
+        assertNull(cleaned.driveFolderName)
+        assertNull(corruptedDriveCar.toModel().driveFolderId)
+        assertNull(corruptedDriveCar.toModel().driveFolderName)
+    }
 }

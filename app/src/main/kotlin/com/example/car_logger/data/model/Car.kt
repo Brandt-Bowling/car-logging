@@ -17,7 +17,9 @@ data class Car(
     val isArchived: Boolean = false,
     val trim: String? = null,
     val bodyStyle: String? = null,
-    val tireRotationInterval: Int? = null
+    val tireRotationInterval: Int? = null,
+    val driveFolderId: String? = null,
+    val driveFolderName: String? = null
 ) {
     val displayName: String
         get() = "$year $make $model"
