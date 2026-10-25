@@ -22,7 +22,7 @@ import com.example.car_logger.data.local.entity.TireEntity
         TireEntity::class,
         GloveboxEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -32,10 +32,32 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun gloveboxDao(): GloveboxDao
 
     companion object {
+        private fun ensureAllCarColumns(db: SupportSQLiteDatabase) {
+            val statements = listOf(
+                "ALTER TABLE cars ADD COLUMN driveFolderId TEXT",
+                "ALTER TABLE cars ADD COLUMN driveFolderName TEXT",
+                "ALTER TABLE cars ADD COLUMN telemetryProvider TEXT",
+                "ALTER TABLE cars ADD COLUMN telemetryStatus TEXT",
+                "ALTER TABLE cars ADD COLUMN lastOdometerSyncTime INTEGER"
+            )
+            for (sql in statements) {
+                try {
+                    db.execSQL(sql)
+                } catch (_: Exception) {
+                    // Column already exists
+                }
+            }
+        }
+
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE cars ADD COLUMN driveFolderId TEXT")
-                db.execSQL("ALTER TABLE cars ADD COLUMN driveFolderName TEXT")
+                ensureAllCarColumns(db)
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                ensureAllCarColumns(db)
             }
         }
 
@@ -49,7 +71,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "car_logger_database"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

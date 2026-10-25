@@ -20,6 +20,9 @@ data class CarEntity(
     val trim: String? = null,
     val bodyStyle: String? = null,
     val tireRotationInterval: Int? = null,
+    val telemetryProvider: String? = null,
+    val telemetryStatus: String? = null,
+    val lastOdometerSyncTime: Long? = null,
     val driveFolderId: String? = null,
     val driveFolderName: String? = null
 ) {
@@ -38,6 +41,9 @@ data class CarEntity(
         trim = trim?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         bodyStyle = bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         tireRotationInterval = tireRotationInterval,
+        telemetryProvider = telemetryProvider?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        telemetryStatus = telemetryStatus?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        lastOdometerSyncTime = lastOdometerSyncTime,
         driveFolderId = driveFolderId?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         driveFolderName = driveFolderName?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
     )
@@ -49,6 +55,8 @@ data class CarEntity(
         vin = vin?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         trim = trim?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         bodyStyle = bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        telemetryProvider = telemetryProvider?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        telemetryStatus = telemetryStatus?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         driveFolderId = driveFolderId?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         driveFolderName = driveFolderName?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
     )
@@ -69,6 +77,9 @@ data class CarEntity(
             trim = car.trim,
             bodyStyle = car.bodyStyle,
             tireRotationInterval = car.tireRotationInterval,
+            telemetryProvider = car.telemetryProvider,
+            telemetryStatus = car.telemetryStatus,
+            lastOdometerSyncTime = car.lastOdometerSyncTime,
             driveFolderId = car.driveFolderId,
             driveFolderName = car.driveFolderName
         )

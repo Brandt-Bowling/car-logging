@@ -18,6 +18,9 @@ data class Car(
     val trim: String? = null,
     val bodyStyle: String? = null,
     val tireRotationInterval: Int? = null,
+    val telemetryProvider: String? = null,
+    val telemetryStatus: String? = null,
+    val lastOdometerSyncTime: Long? = null,
     val driveFolderId: String? = null,
     val driveFolderName: String? = null
 ) {

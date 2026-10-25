@@ -15,6 +15,7 @@ import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.Tire
 import com.example.car_logger.services.GeminiAiService
 import com.example.car_logger.services.GoogleDriveService
+import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.components.VehicleSubView
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,6 +36,14 @@ class VehicleDetailsViewModel(
     private val recordDao = database.maintenanceRecordDao()
     private val tireDao = database.tireDao()
     private val gloveboxDao = database.gloveboxDao()
+    private val preferencesManager = PreferencesManager(application)
+    val odometerSyncService = OdometerSyncService(preferencesManager, carDao)
+    val isSyncingOdometer: StateFlow<Boolean> = odometerSyncService.isSyncing
+    val cooldownHoursFlow: StateFlow<Int> = preferencesManager.syncCooldownHoursFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        PreferencesManager.DEFAULT_COOLDOWN_HOURS
+    )
 
     val currentSubView = MutableStateFlow(VehicleSubView.MAINTENANCE)
 
@@ -86,6 +95,13 @@ class VehicleDetailsViewModel(
     fun updateOdometer(newOdometer: Int) {
         viewModelScope.launch {
             carDao.updateOdometer(carId, newOdometer)
+        }
+    }
+
+    fun syncLiveOdometer(forceWake: Boolean = false) {
+        val currentCar = car.value ?: return
+        viewModelScope.launch {
+            odometerSyncService.syncVehicle(currentCar, isManual = true, forceWake = forceWake)
         }
     }
 

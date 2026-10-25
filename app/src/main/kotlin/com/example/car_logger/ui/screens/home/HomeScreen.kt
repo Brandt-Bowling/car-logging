@@ -214,7 +214,9 @@ fun HomeScreen(
                 GarageNavigationTab.SETTINGS -> {
                     SettingsTab(
                         preferencesManager = viewModel.preferencesManager,
-                        googleDriveService = viewModel.googleDriveService
+                        googleDriveService = viewModel.googleDriveService,
+                        odometerSyncService = viewModel.odometerSyncService,
+                        cars = cars
                     )
                 }
             }

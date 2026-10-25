@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.example.car_logger.data.model.Car
+import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.screens.dialogs.TireRotationIntervalDialog
 import com.example.car_logger.ui.theme.AmberUrgent
 import java.text.NumberFormat
@@ -367,6 +368,19 @@ fun VehicleCard(
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                        val syncBadge = when {
+                            car.telemetryStatus == "Asleep" -> " • Asleep"
+                            car.lastOdometerSyncTime != null ->
+                                OdometerSyncService.formatRelativeTime(car.lastOdometerSyncTime)?.let { " • $it" }
+                            else -> null
+                        }
+                        if (syncBadge != null) {
+                            Text(
+                                text = syncBadge,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     // License Plate

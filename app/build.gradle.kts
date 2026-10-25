@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,6 +9,16 @@ plugins {
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
 }
+
+val localProps = Properties().apply {
+    val propFile = rootProject.file("local.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
+fun getSecret(key: String): String =
+    (localProps.getProperty(key) ?: System.getenv(key) ?: "").trim()
 
 android {
     namespace = "com.example.car_logger"
@@ -21,6 +33,12 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appName"] = "Garage Journal"
+
+        buildConfigField("String", "SMARTCAR_APPLICATION_ID", "\"${getSecret("SMARTCAR_APPLICATION_ID")}\"")
+        buildConfigField("String", "SMARTCAR_CLIENT_ID", "\"${getSecret("SMARTCAR_CLIENT_ID")}\"")
+        buildConfigField("String", "SMARTCAR_CLIENT_SECRET", "\"${getSecret("SMARTCAR_CLIENT_SECRET")}\"")
+        buildConfigField("String", "TESLA_CLIENT_ID", "\"${getSecret("TESLA_CLIENT_ID")}\"")
+        buildConfigField("String", "TESLA_CLIENT_SECRET", "\"${getSecret("TESLA_CLIENT_SECRET")}\"")
     }
 
     signingConfigs {
