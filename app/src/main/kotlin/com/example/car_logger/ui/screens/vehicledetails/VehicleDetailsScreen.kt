@@ -94,6 +94,7 @@ fun VehicleDetailsScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = ExpressiveThemeTokens.shellColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         topBar = {
             TopAppBar(
                 title = {

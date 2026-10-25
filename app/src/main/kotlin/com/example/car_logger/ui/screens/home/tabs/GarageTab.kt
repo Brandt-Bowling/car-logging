@@ -1,6 +1,7 @@
 package com.example.car_logger.ui.screens.home.tabs
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -129,7 +130,8 @@ fun GarageTab(
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "No vehicles in your garage",
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -183,7 +185,8 @@ fun VehicleCard(
             .alpha(if (car.isArchived) 0.65f else 1f),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            contentColor = MaterialTheme.colorScheme.onSurface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -261,10 +264,19 @@ fun VehicleCard(
                     Box {
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            tonalElevation = 4.dp,
+                            shadowElevation = 2.dp
                         ) {
                             IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Filled.MoreVert, contentDescription = "Options", modifier = Modifier.size(18.dp))
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = "Options",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
                             }
                         }
                         DropdownMenu(
@@ -313,7 +325,8 @@ fun VehicleCard(
                 Text(
                     text = car.displayName,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 val cleanTrim = car.trim?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
@@ -351,7 +364,8 @@ fun VehicleCard(
                         Text(
                             text = formattedOdo,
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -361,12 +375,14 @@ fun VehicleCard(
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 2.dp)
                         ) {
                             Text(
                                 text = cleanPlate.uppercase(),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }

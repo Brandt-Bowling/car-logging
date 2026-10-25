@@ -216,7 +216,10 @@ fun SettingsTab(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Row(
@@ -244,7 +247,10 @@ fun SettingsTab(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
@@ -313,7 +319,10 @@ fun SettingsTab(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Row(
@@ -347,7 +356,10 @@ fun SettingsTab(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Row(
@@ -381,7 +393,10 @@ fun SettingsTab(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Row(

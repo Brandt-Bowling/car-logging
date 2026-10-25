@@ -117,7 +117,8 @@ fun MaintenanceTab(
                         isOverdue -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
                         isUrgent -> AmberUrgent.copy(alpha = 0.15f)
                         else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    }
+                    },
+                    contentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
@@ -284,7 +285,10 @@ fun MaintenanceTab(
                         .clip(RoundedCornerShape(16.dp))
                         .clickable { onRecordClick(record) },
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Row(
@@ -297,7 +301,8 @@ fun MaintenanceTab(
                             Text(
                                 text = record.title,
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             if (!record.description.isNullOrBlank()) {
                                 Text(

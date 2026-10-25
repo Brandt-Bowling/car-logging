@@ -44,6 +44,7 @@ fun GarageNavigationBar(
     NavigationBar(
         modifier = modifier,
         containerColor = ExpressiveThemeTokens.shellColor,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp
     ) {
         GarageNavigationTab.values().forEach { tab ->

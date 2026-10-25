@@ -123,7 +123,10 @@ fun GloveboxTab(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Row(
@@ -235,7 +238,10 @@ fun DocumentCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp)),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
