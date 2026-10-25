@@ -216,7 +216,9 @@ fun HomeScreen(
                     SettingsTab(
                         preferencesManager = viewModel.preferencesManager,
                         googleDriveService = viewModel.googleDriveService,
-                        onOpenFolderPicker = onOpenFolderPicker
+                        onOpenFolderPicker = onOpenFolderPicker,
+                        odometerSyncService = viewModel.odometerSyncService,
+                        cars = cars
                     )
                 }
             }

@@ -1,1 +1,41 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"car-logger-track","appId":"1:28790911573:android:0e08bfb1f94d5b29b6dadc","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"car-logger-track","configurations":{"android":"1:28790911573:android:0e08bfb1f94d5b29b6dadc"}}}}}}
+{
+  "hosting": {
+    "site": "car-logger-track",
+    "public": "hosting",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "!**/.well-known/**"
+    ],
+    "headers": [
+      {
+        "source": "/.well-known/appspecific/com.tesla.3p.public-key.pem",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-pem-file"
+          }
+        ]
+      }
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "car-logger-track",
+          "appId": "1:28790911573:android:0e08bfb1f94d5b29b6dadc",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "car-logger-track",
+          "configurations": {
+            "android": "1:28790911573:android:0e08bfb1f94d5b29b6dadc"
+          }
+        }
+      }
+    }
+  }
+}

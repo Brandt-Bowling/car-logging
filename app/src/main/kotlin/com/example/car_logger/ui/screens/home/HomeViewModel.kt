@@ -1,6 +1,7 @@
 package com.example.car_logger.ui.screens.home
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.car_logger.data.local.AppDatabase
@@ -10,12 +11,14 @@ import com.example.car_logger.data.local.entity.MaintenanceRecordEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.services.GoogleDriveService
+import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.components.GarageNavigationTab
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -34,6 +37,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val recordDao = database.maintenanceRecordDao()
     val preferencesManager = PreferencesManager(application)
     val googleDriveService = GoogleDriveService(application)
+    val odometerSyncService = OdometerSyncService(preferencesManager, carDao)
+    private var initialTelemetryChecked = false
 
     val currentTab = MutableStateFlow(GarageNavigationTab.GARAGE)
     val isSpeedDialOpen = MutableStateFlow(false)
@@ -45,7 +50,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     val cars: StateFlow<List<Car>> = carDao.getAllCars().combine(currentTab) { entities, _ ->
-        entities.map { it.toModel() }
+        val models = entities.map { it.toModel() }
+        if (!initialTelemetryChecked && models.isNotEmpty()) {
+            initialTelemetryChecked = true
+            viewModelScope.launch {
+                odometerSyncService.syncAllEligibleVehicles(models)
+            }
+        }
+        models
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
@@ -150,6 +162,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val car = carDao.getCarById(record.carId)
             if (car != null && (car.odometer == null || record.odometer > car.odometer)) {
                 carDao.updateOdometer(record.carId, record.odometer)
+            }
+        }
+    }
+
+    fun syncCarOdometer(car: Car, forceWake: Boolean = false) {
+        viewModelScope.launch {
+            odometerSyncService.syncVehicle(car = car, isManual = true, forceWake = forceWake)
+        }
+    }
+
+    fun handleOAuthCallback(uri: Uri) {
+        viewModelScope.launch {
+            val connected = odometerSyncService.handleOAuthCallback(uri)
+            if (connected) {
+                val currentCars = carDao.getAllCarsList().map { it.toModel() }
+                odometerSyncService.syncAllEligibleVehicles(currentCars)
             }
         }
     }

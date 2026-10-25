@@ -19,7 +19,10 @@ data class CarEntity(
     val isArchived: Boolean = false,
     val trim: String? = null,
     val bodyStyle: String? = null,
-    val tireRotationInterval: Int? = null
+    val tireRotationInterval: Int? = null,
+    val telemetryProvider: String? = null,
+    val telemetryStatus: String? = null,
+    val lastOdometerSyncTime: Long? = null
 ) {
     fun toModel(): Car = Car(
         id = id,
@@ -35,7 +38,10 @@ data class CarEntity(
         isArchived = isArchived,
         trim = trim?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         bodyStyle = bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
-        tireRotationInterval = tireRotationInterval
+        tireRotationInterval = tireRotationInterval,
+        telemetryProvider = telemetryProvider?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        telemetryStatus = telemetryStatus?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        lastOdometerSyncTime = lastOdometerSyncTime
     )
 
     fun cleanNullStrings(): CarEntity = copy(
@@ -44,7 +50,9 @@ data class CarEntity(
         licensePlate = licensePlate?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         vin = vin?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
         trim = trim?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
-        bodyStyle = bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
+        bodyStyle = bodyStyle?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        telemetryProvider = telemetryProvider?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() },
+        telemetryStatus = telemetryStatus?.takeIf { !it.equals("null", ignoreCase = true) && it.isNotBlank() }
     )
 
     companion object {
@@ -62,7 +70,10 @@ data class CarEntity(
             isArchived = car.isArchived,
             trim = car.trim,
             bodyStyle = car.bodyStyle,
-            tireRotationInterval = car.tireRotationInterval
+            tireRotationInterval = car.tireRotationInterval,
+            telemetryProvider = car.telemetryProvider,
+            telemetryStatus = car.telemetryStatus,
+            lastOdometerSyncTime = car.lastOdometerSyncTime
         )
     }
 }

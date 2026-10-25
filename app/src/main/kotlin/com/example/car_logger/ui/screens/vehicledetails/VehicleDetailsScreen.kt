@@ -8,9 +8,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TireRepair
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -18,6 +20,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -36,6 +39,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import com.example.car_logger.data.model.MaintenanceRecord
+import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.components.EnvelopedBodyCanvas
 import com.example.car_logger.ui.components.VehicleFloatingToolbar
 import com.example.car_logger.ui.components.VehicleSubView
@@ -90,6 +94,31 @@ fun VehicleDetailsScreen(
     }
 
     val carItem = car!!
+    val cooldownHours by viewModel.cooldownHoursFlow.collectAsState()
+    var showWakeConfirmDialog by remember { mutableStateOf(false) }
+
+    if (showWakeConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showWakeConfirmDialog = false },
+            title = { Text("Wake Vehicle?") },
+            text = { Text("Waking ${carItem.displayName} draws battery power. Poll odometer now?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showWakeConfirmDialog = false
+                        viewModel.syncLiveOdometer(forceWake = true)
+                    }
+                ) {
+                    Text("Wake & Poll", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWakeConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -110,6 +139,22 @@ fun VehicleDetailsScreen(
                     }
                 },
                 actions = {
+                    if (OdometerSyncService.resolveProviderForCar(carItem) != null) {
+                        IconButton(
+                            onClick = {
+                                val inCooldown = OdometerSyncService.isCooldownActive(carItem.lastOdometerSyncTime, cooldownHours)
+                                val isAsleep = carItem.telemetryStatus == "Asleep"
+                                val isSmartcar = OdometerSyncService.resolveProviderForCar(carItem) == OdometerSyncService.PROVIDER_SMARTCAR
+                                if (isAsleep || inCooldown || isSmartcar) {
+                                    showWakeConfirmDialog = true
+                                } else {
+                                    viewModel.syncLiveOdometer(forceWake = false)
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Filled.Sync, contentDescription = "Sync Odometer")
+                        }
+                    }
                     IconButton(onClick = { viewModel.toggleArchive() }) {
                         Icon(
                             imageVector = if (carItem.isArchived) Icons.Filled.Unarchive else Icons.Filled.Archive,

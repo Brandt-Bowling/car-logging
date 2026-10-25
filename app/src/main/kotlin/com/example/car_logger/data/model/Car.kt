@@ -17,7 +17,10 @@ data class Car(
     val isArchived: Boolean = false,
     val trim: String? = null,
     val bodyStyle: String? = null,
-    val tireRotationInterval: Int? = null
+    val tireRotationInterval: Int? = null,
+    val telemetryProvider: String? = null,
+    val telemetryStatus: String? = null,
+    val lastOdometerSyncTime: Long? = null
 ) {
     val displayName: String
         get() = "$year $make $model"

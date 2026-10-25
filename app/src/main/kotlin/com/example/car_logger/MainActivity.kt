@@ -1,5 +1,6 @@
 package com.example.car_logger
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -43,10 +44,25 @@ class MainActivity : ComponentActivity() {
 
     private val homeViewModel: HomeViewModel by viewModels()
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.data?.let { uri ->
+            if (uri.scheme == "carlogger" && uri.host == "oauth") {
+                homeViewModel.handleOAuthCallback(uri)
+            }
+        }
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        intent?.data?.let { uri ->
+            if (uri.scheme == "carlogger" && uri.host == "oauth") {
+                homeViewModel.handleOAuthCallback(uri)
+            }
+        }
 
         setContent {
             CarLoggerTheme {

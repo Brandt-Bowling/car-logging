@@ -38,6 +38,18 @@ interface CarDao {
     @Query("UPDATE cars SET odometer = :odometer WHERE id = :carId")
     suspend fun updateOdometer(carId: String, odometer: Int)
 
+    @Query("UPDATE cars SET odometer = :odometer, telemetryProvider = :provider, telemetryStatus = :status, lastOdometerSyncTime = :syncTime WHERE id = :carId")
+    suspend fun updateOdometerFromTelemetry(
+        carId: String,
+        odometer: Int,
+        provider: String,
+        status: String,
+        syncTime: Long
+    )
+
+    @Query("UPDATE cars SET telemetryProvider = :provider, telemetryStatus = :status WHERE id = :carId")
+    suspend fun updateTelemetryStatus(carId: String, provider: String, status: String)
+
     @Delete
     suspend fun deleteCar(car: CarEntity)
 

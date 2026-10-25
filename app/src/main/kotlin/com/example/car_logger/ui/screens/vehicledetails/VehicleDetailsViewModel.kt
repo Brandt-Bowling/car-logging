@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.car_logger.data.local.AppDatabase
+import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.GloveboxEntity
 import com.example.car_logger.data.local.entity.TireEntity
@@ -11,6 +12,7 @@ import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Glovebox
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.Tire
+import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.components.VehicleSubView
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,6 +33,14 @@ class VehicleDetailsViewModel(
     private val recordDao = database.maintenanceRecordDao()
     private val tireDao = database.tireDao()
     private val gloveboxDao = database.gloveboxDao()
+    private val preferencesManager = PreferencesManager(application)
+    val odometerSyncService = OdometerSyncService(preferencesManager, carDao)
+    val isSyncingOdometer: StateFlow<Boolean> = odometerSyncService.isSyncing
+    val cooldownHoursFlow: StateFlow<Int> = preferencesManager.syncCooldownHoursFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        PreferencesManager.DEFAULT_COOLDOWN_HOURS
+    )
 
     val currentSubView = MutableStateFlow(VehicleSubView.MAINTENANCE)
 
@@ -79,6 +89,13 @@ class VehicleDetailsViewModel(
     fun updateOdometer(newOdometer: Int) {
         viewModelScope.launch {
             carDao.updateOdometer(carId, newOdometer)
+        }
+    }
+
+    fun syncLiveOdometer(forceWake: Boolean = false) {
+        val currentCar = car.value ?: return
+        viewModelScope.launch {
+            odometerSyncService.syncVehicle(currentCar, isManual = true, forceWake = forceWake)
         }
     }
 
