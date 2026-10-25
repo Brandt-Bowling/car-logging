@@ -1,13 +1,13 @@
 package com.example.car_logger.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -23,13 +23,18 @@ fun EnvelopedBodyCanvas(
     modifier: Modifier = Modifier,
     topRadius: Dp = 28.dp,
     backgroundColor: Color = ExpressiveThemeTokens.canvasColor,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
     content: @Composable BoxScope.() -> Unit
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(topStart = topRadius, topEnd = topRadius))
-            .background(backgroundColor),
-        content = content
-    )
+    Surface(
+        modifier = modifier.fillMaxSize(),
+        shape = RoundedCornerShape(topStart = topRadius, topEnd = topRadius),
+        color = backgroundColor,
+        contentColor = contentColor
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            content = content
+        )
+    }
 }

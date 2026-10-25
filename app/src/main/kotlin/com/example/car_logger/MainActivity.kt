@@ -7,6 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,8 +50,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             CarLoggerTheme {
-                val navController = rememberNavController()
-                val coroutineScope = rememberCoroutineScope()
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.onBackground
+                ) {
+                    val navController = rememberNavController()
+                    val coroutineScope = rememberCoroutineScope()
 
                 // Modal state holders
                 var showAddCarSheet by remember { mutableStateOf(false) }
@@ -210,4 +217,5 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
 }
