@@ -58,13 +58,10 @@ import kotlinx.coroutines.launch
 fun SettingsTab(
     preferencesManager: PreferencesManager,
     googleDriveService: GoogleDriveService,
-    onOpenFolderPicker: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
     val garageName by preferencesManager.garageNameFlow.collectAsState(initial = PreferencesManager.DEFAULT_GARAGE_NAME)
-    val syncFolderId by preferencesManager.syncFolderIdFlow.collectAsState(initial = null)
-    val syncFolderName by preferencesManager.syncFolderNameFlow.collectAsState(initial = null)
     val geminiKey by preferencesManager.geminiApiKeyFlow.collectAsState(initial = null)
     val autoDevKey by preferencesManager.autoDevApiKeyFlow.collectAsState(initial = null)
     val currentUser by googleDriveService.currentUser.collectAsState()
@@ -268,30 +265,16 @@ fun SettingsTab(
 
                     if (currentUser != null) {
                         Text("Connected: ${currentUser?.email}", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        val folderLabel = syncFolderName ?: "No sync folder selected"
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Folder: $folderLabel", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilledTonalButton(onClick = onOpenFolderPicker) {
-                                Icon(Icons.Filled.DriveFileMove, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Choose Folder")
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        googleDriveService.signOut()
-                                    }
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    googleDriveService.signOut()
                                 }
-                            ) {
-                                Text("Disconnect")
                             }
+                        ) {
+                            Text("Disconnect")
                         }
                     } else {
                         Text(
