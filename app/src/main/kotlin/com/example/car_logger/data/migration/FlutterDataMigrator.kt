@@ -114,6 +114,8 @@ object FlutterDataMigrator {
                     val trim = asStringOrNull(obj["trim"])
                     val bodyStyle = asStringOrNull(obj["bodyStyle"])
                     val tireRotationInterval = asIntOrNull(obj["tireRotationInterval"])
+                    val driveFolderId = asStringOrNull(obj["driveFolderId"])
+                    val driveFolderName = asStringOrNull(obj["driveFolderName"])
 
                     val existingCar = carDao.getCarById(id)
                     val resolvedOdometer = listOfNotNull(existingCar?.odometer, legacyOdo).maxOrNull()
@@ -132,7 +134,9 @@ object FlutterDataMigrator {
                         isArchived = legacyIsArchived ?: existingCar?.isArchived ?: false,
                         trim = trim,
                         bodyStyle = bodyStyle,
-                        tireRotationInterval = tireRotationInterval ?: existingCar?.tireRotationInterval
+                        tireRotationInterval = tireRotationInterval ?: existingCar?.tireRotationInterval,
+                        driveFolderId = driveFolderId ?: existingCar?.driveFolderId?.takeIf { !it.equals("null", ignoreCase = true) },
+                        driveFolderName = driveFolderName ?: existingCar?.driveFolderName?.takeIf { !it.equals("null", ignoreCase = true) }
                     )
                     carEntities.add(carEntity)
                 }

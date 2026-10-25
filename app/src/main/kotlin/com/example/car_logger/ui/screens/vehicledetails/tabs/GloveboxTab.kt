@@ -19,7 +19,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.HealthAndSafety
@@ -30,14 +33,17 @@ import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Glovebox
+import com.example.car_logger.services.GoogleDriveService
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -58,11 +65,16 @@ import java.util.Locale
 fun GloveboxTab(
     car: Car,
     glovebox: Glovebox?,
+    googleDriveService: GoogleDriveService,
+    isSyncingDrive: Boolean,
+    onOpenFolderPicker: () -> Unit,
+    onSyncDriveFolder: () -> Unit,
     onUpdateOdometer: (Int) -> Unit,
     onUpdateDocument: (registration: String?, insurance: String?, manual: String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val currentUser by googleDriveService.currentUser.collectAsState()
     var showEditOdometerDialog by remember { mutableStateOf(false) }
 
     // File pickers
@@ -151,6 +163,67 @@ fun GloveboxTab(
                     }
                     IconButton(onClick = { showEditOdometerDialog = true }) {
                         Icon(Icons.Filled.Edit, contentDescription = "Edit Odometer")
+                    }
+                }
+            }
+        }
+
+        // Google Drive Sync Card (Per-Car)
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (currentUser != null) Icons.Filled.CloudDone else Icons.Filled.CloudOff,
+                            contentDescription = null,
+                            tint = if (currentUser != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("Google Drive Sync", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (currentUser != null) {
+                        val folderLabel = car.driveFolderName ?: "No sync folder selected"
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Folder: $folderLabel",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(onClick = onOpenFolderPicker) {
+                                Icon(Icons.Filled.DriveFileMove, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Choose Folder")
+                            }
+                            if (!car.driveFolderId.isNullOrBlank()) {
+                                OutlinedButton(
+                                    onClick = onSyncDriveFolder,
+                                    enabled = !isSyncingDrive
+                                ) {
+                                    Text(if (isSyncingDrive) "Syncing..." else "Sync Now")
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Sign in to Google Drive in Settings to choose a sync folder and import maintenance receipts for this vehicle.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

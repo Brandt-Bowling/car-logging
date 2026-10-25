@@ -62,7 +62,6 @@ fun HomeScreen(
     onOpenAddRecordDialog: (String?) -> Unit,
     onOpenRecordDialog: (MaintenanceRecord) -> Unit,
     onOpenAttachmentViewer: (MaintenanceRecord) -> Unit,
-    onOpenFolderPicker: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val currentTab by viewModel.currentTab.collectAsState()
@@ -216,7 +215,6 @@ fun HomeScreen(
                     SettingsTab(
                         preferencesManager = viewModel.preferencesManager,
                         googleDriveService = viewModel.googleDriveService,
-                        onOpenFolderPicker = onOpenFolderPicker,
                         odometerSyncService = viewModel.odometerSyncService,
                         cars = cars
                     )
