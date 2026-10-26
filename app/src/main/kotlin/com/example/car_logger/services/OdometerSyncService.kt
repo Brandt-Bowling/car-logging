@@ -780,10 +780,16 @@ class OdometerSyncService(
     }
 
     private suspend fun syncSmartcarVehicle(car: Car): OdometerSyncResult {
+        val (clientId, clientSecret) = getEffectiveSmartcarCredentials()
+        val hasLinkedAccount = !preferencesManager.getSmartcarUserId().isNullOrBlank() ||
+            !preferencesManager.getSmartcarVehicleId().isNullOrBlank()
         val token = getValidSmartcarAccessToken()
-            ?: return OdometerSyncResult.NotConfigured(car.id)
-
-        val (clientId, _) = getEffectiveSmartcarCredentials()
+        if (token.isNullOrBlank()) {
+            if (hasLinkedAccount && (clientId.isNullOrBlank() || clientSecret.isNullOrBlank())) {
+                return OdometerSyncResult.Error(car.id, "Missing Smartcar Client ID/Secret in build or Settings")
+            }
+            return OdometerSyncResult.NotConfigured(car.id)
+        }
         val isV3 = clientId?.startsWith("client_") == true ||
             !preferencesManager.getSmartcarUserId().isNullOrBlank()
 
