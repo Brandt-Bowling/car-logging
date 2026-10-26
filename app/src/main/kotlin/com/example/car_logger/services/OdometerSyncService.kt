@@ -176,6 +176,7 @@ class OdometerSyncService(
                         ?: return null
 
                     val userId = attrs?.get("userId")?.jsonPrimitive?.content
+                        ?: attrs?.get("user")?.jsonObject?.get("id")?.jsonPrimitive?.content
                         ?: rels?.get("user")?.jsonObject?.get("data")?.jsonObject?.get("id")?.jsonPrimitive?.content
                         ?: item["userId"]?.jsonPrimitive?.content
 
@@ -224,6 +225,21 @@ class OdometerSyncService(
                 val statusObj = attrsObj?.get("status")?.jsonObject ?: root["status"]?.jsonObject
                 val statusVal = statusObj?.get("value")?.jsonPrimitive?.content
                 if (!statusVal.isNullOrBlank() && !statusVal.equals("SUCCESS", ignoreCase = true)) {
+                    val errObj = statusObj["error"]?.jsonObject
+                    if (errObj != null) {
+                        val errType = errObj["type"]?.jsonPrimitive?.content
+                        val resType = errObj["resolution"]?.jsonObject?.get("type")?.jsonPrimitive?.content
+                        if (errType.equals("PERMISSION", ignoreCase = true) ||
+                            resType.equals("REAUTHENTICATE", ignoreCase = true)
+                        ) {
+                            return "Missing odometer permission — tap Reconnect in Settings"
+                        }
+                        val errDetail = errObj["detail"]?.jsonPrimitive?.content
+                        val errTitle = errObj["title"]?.jsonPrimitive?.content
+                        val errCode = errObj["code"]?.jsonPrimitive?.content
+                        val resolved = errDetail ?: errTitle ?: errCode
+                        if (!resolved.isNullOrBlank()) return resolved
+                    }
                     val reason = statusObj["messages"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.content
                     return if (!reason.isNullOrBlank()) "$statusVal ($reason)" else statusVal
                 }
@@ -307,10 +323,13 @@ class OdometerSyncService(
         }
         val encodedAppId = URLEncoder.encode(appId, "UTF-8")
         val encodedRedirect = URLEncoder.encode(SMARTCAR_REDIRECT_URI, "UTF-8")
+        val encodedScope = URLEncoder.encode("required:read_vehicle_info required:read_odometer", "UTF-8")
+            .replace("+", "%20")
         return "https://connect.smartcar.com/oauth/authorize" +
             "?application_id=$encodedAppId" +
             "&response_type=none" +
             "&redirect_uri=$encodedRedirect" +
+            "&scope=$encodedScope" +
             "&mode=live"
     }
 
@@ -346,26 +365,41 @@ class OdometerSyncService(
 
     suspend fun refreshSmartcarConnectionStatus(): Boolean = withContext(Dispatchers.IO) {
         val (clientId, _) = getEffectiveSmartcarCredentials()
-        if (clientId?.startsWith("client_") != true) {
+        if (clientId?.startsWith("client_") != true && preferencesManager.getSmartcarUserId().isNullOrBlank()) {
             return@withContext !preferencesManager.getSmartcarVehicleId().isNullOrBlank()
         }
-        val token = getValidSmartcarAccessToken() ?: return@withContext false
-        val connReq = Request.Builder()
-            .url("$SMARTCAR_V3_API_BASE/connections")
-            .addHeader("Authorization", "Bearer $token")
-            .build()
+        var token = getValidSmartcarAccessToken() ?: return@withContext false
+
+        fun fetchConnections(bearerToken: String): Pair<Int, String> {
+            val connReq = Request.Builder()
+                .url("$SMARTCAR_V3_API_BASE/connections")
+                .addHeader("Authorization", "Bearer $bearerToken")
+                .build()
+            return client.newCall(connReq).execute().use { resp ->
+                Pair(resp.code, resp.body?.string().orEmpty())
+            }
+        }
+
         try {
-            client.newCall(connReq).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext false
-                val preferredUserId = preferencesManager.getSmartcarUserId()
-                val parsed = parseSmartcarV3Connection(resp.body?.string().orEmpty(), preferredUserId)
-                if (parsed != null) {
-                    preferencesManager.setSmartcarVehicleId(parsed.first, parsed.second)
-                    true
-                } else {
-                    preferencesManager.clearSmartcarVehicleConnection()
-                    false
+            var (code, bodyStr) = fetchConnections(token)
+            if (code == 401) {
+                val refreshed = getValidSmartcarAccessToken(forceRefresh = true)
+                if (!refreshed.isNullOrBlank() && refreshed != token) {
+                    token = refreshed
+                    val retry = fetchConnections(token)
+                    code = retry.first
+                    bodyStr = retry.second
                 }
+            }
+            if (code !in 200..299) return@withContext false
+            val preferredUserId = preferencesManager.getSmartcarUserId()
+            val parsed = parseSmartcarV3Connection(bodyStr, preferredUserId)
+            if (parsed != null) {
+                preferencesManager.setSmartcarVehicleId(parsed.first, parsed.second)
+                true
+            } else {
+                preferencesManager.clearSmartcarVehicleConnection()
+                false
             }
         } catch (_: Exception) {
             false
@@ -405,6 +439,7 @@ class OdometerSyncService(
             return@withContext if (!code.isNullOrBlank()) {
                 exchangeSmartcarCode(code)
             } else {
+                getValidSmartcarAccessToken(forceRefresh = true)
                 val connected = refreshSmartcarConnectionStatus() || !userId.isNullOrBlank() || !vehicleId.isNullOrBlank()
                 if (connected) {
                     _lastSyncMessage.value = "Smartcar connected"
@@ -674,18 +709,24 @@ class OdometerSyncService(
         }
     }
 
-    private suspend fun getValidSmartcarAccessToken(): String? {
+    private suspend fun getValidSmartcarAccessToken(forceRefresh: Boolean = false): String? {
         val (access, refresh, expiry) = preferencesManager.getSmartcarTokens()
-        if (!access.isNullOrBlank() && (expiry == 0L || System.currentTimeMillis() < expiry - 60_000L)) {
+        val (clientId, clientSecret) = getEffectiveSmartcarCredentials()
+        val isV3Client = clientId?.startsWith("client_") == true
+        val now = System.currentTimeMillis()
+        val isUnexpired = !access.isNullOrBlank() && (
+            (!isV3Client && expiry == 0L) || (expiry > 0L && now < expiry - 60_000L)
+        )
+        if (!forceRefresh && isUnexpired) {
             return access
         }
-        val (clientId, clientSecret) = getEffectiveSmartcarCredentials()
+        val fallbackIfUnexpired = access?.takeIf { expiry == 0L || now < expiry }
         if (clientId.isNullOrBlank() || clientSecret.isNullOrBlank()) {
-            return access
+            return fallbackIfUnexpired
         }
 
         // Smartcar API v3 IAM Client Credentials Flow (client_...)
-        if (clientId.startsWith("client_") || refresh.isNullOrBlank()) {
+        if (isV3Client || refresh.isNullOrBlank()) {
             val body = FormBody.Builder()
                 .add("grant_type", "client_credentials")
                 .add("client_id", clientId)
@@ -699,15 +740,15 @@ class OdometerSyncService(
 
             return try {
                 client.newCall(request).execute().use { resp ->
-                    if (!resp.isSuccessful) return access
+                    if (!resp.isSuccessful) return fallbackIfUnexpired
                     val obj = json.parseToJsonElement(resp.body?.string().orEmpty()).jsonObject
-                    val newAccess = obj["access_token"]?.jsonPrimitive?.content ?: return access
+                    val newAccess = obj["access_token"]?.jsonPrimitive?.content ?: return fallbackIfUnexpired
                     val expires = obj["expires_in"]?.jsonPrimitive?.longOrNull ?: 3600L
                     preferencesManager.saveSmartcarTokens(newAccess, null, expires)
                     newAccess
                 }
             } catch (_: Exception) {
-                access
+                fallbackIfUnexpired
             }
         }
 
@@ -725,16 +766,16 @@ class OdometerSyncService(
 
         return try {
             client.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) return access
+                if (!resp.isSuccessful) return fallbackIfUnexpired
                 val obj = json.parseToJsonElement(resp.body?.string().orEmpty()).jsonObject
-                val newAccess = obj["access_token"]?.jsonPrimitive?.content ?: return access
+                val newAccess = obj["access_token"]?.jsonPrimitive?.content ?: return fallbackIfUnexpired
                 val newRefresh = obj["refresh_token"]?.jsonPrimitive?.content ?: refresh
                 val expires = obj["expires_in"]?.jsonPrimitive?.longOrNull ?: 7200L
                 preferencesManager.saveSmartcarTokens(newAccess, newRefresh, expires)
                 newAccess
             }
         } catch (_: Exception) {
-            access
+            fallbackIfUnexpired
         }
     }
 
@@ -743,7 +784,8 @@ class OdometerSyncService(
             ?: return OdometerSyncResult.NotConfigured(car.id)
 
         val (clientId, _) = getEffectiveSmartcarCredentials()
-        val isV3 = clientId?.startsWith("client_") == true
+        val isV3 = clientId?.startsWith("client_") == true ||
+            !preferencesManager.getSmartcarUserId().isNullOrBlank()
 
         if (isV3) {
             return syncSmartcarV3Vehicle(car, token)
@@ -804,31 +846,45 @@ class OdometerSyncService(
         }
     }
 
-    private suspend fun syncSmartcarV3Vehicle(car: Car, token: String): OdometerSyncResult {
-        val connReq = Request.Builder()
-            .url("$SMARTCAR_V3_API_BASE/connections")
-            .addHeader("Authorization", "Bearer $token")
-            .build()
+    private suspend fun syncSmartcarV3Vehicle(car: Car, initialToken: String): OdometerSyncResult {
+        var token = initialToken
+
+        fun executeConnectionsCall(bearerToken: String): Pair<Int, String> {
+            val connReq = Request.Builder()
+                .url("$SMARTCAR_V3_API_BASE/connections")
+                .addHeader("Authorization", "Bearer $bearerToken")
+                .build()
+            return client.newCall(connReq).execute().use { resp ->
+                Pair(resp.code, resp.body?.string().orEmpty())
+            }
+        }
 
         val (vehicleId, userId) = try {
-            client.newCall(connReq).execute().use { resp ->
-                val bodyStr = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) {
-                    val detail = parseSmartcarErrorDetail(bodyStr)
-                    val msg = if (detail != null) "Smartcar v3 (${resp.code}: $detail)" else "Smartcar v3 (${resp.code})"
-                    _lastSyncMessage.value = msg
-                    return OdometerSyncResult.Error(car.id, msg)
+            var (code, bodyStr) = executeConnectionsCall(token)
+            if (code == 401) {
+                val refreshed = getValidSmartcarAccessToken(forceRefresh = true)
+                if (!refreshed.isNullOrBlank() && refreshed != token) {
+                    token = refreshed
+                    val retry = executeConnectionsCall(token)
+                    code = retry.first
+                    bodyStr = retry.second
                 }
-                val preferredUserId = preferencesManager.getSmartcarUserId()
-                val parsed = parseSmartcarV3Connection(bodyStr, preferredUserId)
-                if (parsed == null) {
-                    preferencesManager.clearSmartcarVehicleConnection()
-                    val msg = "No vehicle linked in Smartcar — tap Connect in Settings"
-                    _lastSyncMessage.value = msg
-                    return OdometerSyncResult.Error(car.id, msg)
-                }
-                parsed
             }
+            if (code !in 200..299) {
+                val detail = parseSmartcarErrorDetail(bodyStr)
+                val msg = if (detail != null) "Smartcar v3 ($code: $detail)" else "Smartcar v3 ($code)"
+                _lastSyncMessage.value = msg
+                return OdometerSyncResult.Error(car.id, msg)
+            }
+            val preferredUserId = preferencesManager.getSmartcarUserId()
+            val parsed = parseSmartcarV3Connection(bodyStr, preferredUserId)
+            if (parsed == null) {
+                preferencesManager.clearSmartcarVehicleConnection()
+                val msg = "No vehicle linked in Smartcar — tap Connect in Settings"
+                _lastSyncMessage.value = msg
+                return OdometerSyncResult.Error(car.id, msg)
+            }
+            parsed
         } catch (e: Exception) {
             val msg = "Network error contacting Smartcar"
             _lastSyncMessage.value = msg
@@ -837,43 +893,55 @@ class OdometerSyncService(
 
         preferencesManager.setSmartcarVehicleId(vehicleId, userId)
 
-        val odoReqBuilder = Request.Builder()
-            .url("$SMARTCAR_V3_API_BASE/vehicles/$vehicleId/signals/odometer-traveleddistance")
-            .addHeader("Authorization", "Bearer $token")
-            .addHeader("sc-unit-system", "imperial")
-            .addHeader("Smartcar-Unit-System", "imperial")
-        if (!userId.isNullOrBlank()) {
-            odoReqBuilder.addHeader("sc-user-id", userId)
+        fun executeOdometerSignalCall(bearerToken: String): Pair<Int, String> {
+            val odoReqBuilder = Request.Builder()
+                .url("$SMARTCAR_V3_API_BASE/vehicles/$vehicleId/signals/odometer-traveleddistance")
+                .addHeader("Authorization", "Bearer $bearerToken")
+                .addHeader("sc-unit-system", "imperial")
+                .addHeader("Smartcar-Unit-System", "imperial")
+            if (!userId.isNullOrBlank()) {
+                odoReqBuilder.addHeader("sc-user-id", userId)
+            }
+            return client.newCall(odoReqBuilder.build()).execute().use { resp ->
+                Pair(resp.code, resp.body?.string().orEmpty())
+            }
         }
 
         return try {
-            client.newCall(odoReqBuilder.build()).execute().use { resp ->
-                val bodyStr = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) {
-                    val detail = parseSmartcarErrorDetail(bodyStr)
-                    val msg = if (detail != null) "Smartcar (${resp.code}: $detail)" else "Smartcar signal (${resp.code})"
-                    _lastSyncMessage.value = msg
-                    return OdometerSyncResult.Error(car.id, msg)
+            var (code, bodyStr) = executeOdometerSignalCall(token)
+            if (code == 401) {
+                val refreshed = getValidSmartcarAccessToken(forceRefresh = true)
+                if (!refreshed.isNullOrBlank() && refreshed != token) {
+                    token = refreshed
+                    val retry = executeOdometerSignalCall(token)
+                    code = retry.first
+                    bodyStr = retry.second
                 }
-                val newOdo = parseSmartcarOdometerMiles(bodyStr)
-                if (newOdo == null) {
-                    val detail = parseSmartcarErrorDetail(bodyStr) ?: "Invalid v3 odometer response"
-                    _lastSyncMessage.value = detail
-                    return OdometerSyncResult.Error(car.id, detail)
-                }
-
-                val finalOdo = maxOf(newOdo, car.odometer ?: 0)
-                val now = System.currentTimeMillis()
-                carDao.updateOdometerFromTelemetry(
-                    carId = car.id,
-                    odometer = finalOdo,
-                    provider = PROVIDER_SMARTCAR,
-                    status = "Synced",
-                    syncTime = now
-                )
-                _lastSyncMessage.value = "${car.model}: $finalOdo mi"
-                OdometerSyncResult.Updated(car.id, finalOdo, PROVIDER_SMARTCAR)
             }
+            if (code !in 200..299) {
+                val detail = parseSmartcarErrorDetail(bodyStr)
+                val msg = if (detail != null) "Smartcar ($code: $detail)" else "Smartcar signal ($code)"
+                _lastSyncMessage.value = msg
+                return OdometerSyncResult.Error(car.id, msg)
+            }
+            val newOdo = parseSmartcarOdometerMiles(bodyStr)
+            if (newOdo == null) {
+                val detail = parseSmartcarErrorDetail(bodyStr) ?: "Invalid v3 odometer response"
+                _lastSyncMessage.value = detail
+                return OdometerSyncResult.Error(car.id, detail)
+            }
+
+            val finalOdo = maxOf(newOdo, car.odometer ?: 0)
+            val now = System.currentTimeMillis()
+            carDao.updateOdometerFromTelemetry(
+                carId = car.id,
+                odometer = finalOdo,
+                provider = PROVIDER_SMARTCAR,
+                status = "Synced",
+                syncTime = now
+            )
+            _lastSyncMessage.value = "${car.model}: $finalOdo mi"
+            OdometerSyncResult.Updated(car.id, finalOdo, PROVIDER_SMARTCAR)
         } catch (e: Exception) {
             val msg = "Failed to read Smartcar v3 odometer (${e.javaClass.simpleName})"
             _lastSyncMessage.value = msg
