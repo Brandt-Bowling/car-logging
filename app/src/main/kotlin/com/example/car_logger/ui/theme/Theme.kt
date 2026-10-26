@@ -32,10 +32,11 @@ private val LightColorScheme = lightColorScheme(
     onErrorContainer = md_theme_light_onErrorContainer,
     background = md_theme_light_background,
     onBackground = md_theme_light_onBackground,
-    surface = md_theme_light_surface,
+    surface = CanvasLight,
     onSurface = md_theme_light_onSurface,
     surfaceVariant = md_theme_light_surfaceVariant,
     onSurfaceVariant = md_theme_light_onSurfaceVariant,
+    surfaceContainer = ShellLight,
     outline = md_theme_light_outline,
     outlineVariant = md_theme_light_outlineVariant
 )
@@ -59,10 +60,11 @@ private val DarkColorScheme = darkColorScheme(
     onErrorContainer = md_theme_dark_onErrorContainer,
     background = md_theme_dark_background,
     onBackground = md_theme_dark_onBackground,
-    surface = md_theme_dark_surface,
+    surface = CanvasDark,
     onSurface = md_theme_dark_onSurface,
     surfaceVariant = md_theme_dark_surfaceVariant,
     onSurfaceVariant = md_theme_dark_onSurfaceVariant,
+    surfaceContainer = ShellDark,
     outline = md_theme_dark_outline,
     outlineVariant = md_theme_dark_outlineVariant
 )
@@ -71,12 +73,12 @@ object ExpressiveThemeTokens {
     val shellColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) ShellDark else ShellLight
+        get() = MaterialTheme.colorScheme.surfaceContainer
 
     val canvasColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) CanvasDark else CanvasLight
+        get() = MaterialTheme.colorScheme.surface
 }
 
 @Composable
