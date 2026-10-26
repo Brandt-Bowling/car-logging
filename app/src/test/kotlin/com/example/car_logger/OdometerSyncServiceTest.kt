@@ -218,4 +218,37 @@ class OdometerSyncServiceTest {
             errMsg
         )
     }
+
+    @Test
+    fun `parseSmartcarErrorDetail detects v3 signal permission error`() {
+        val permErrorPayload = """
+            {
+              "data": {
+                "id": "odometer-traveleddistance",
+                "type": "signal",
+                "attributes": {
+                  "code": "odometer-traveleddistance",
+                  "name": "TraveledDistance",
+                  "group": "Odometer",
+                  "status": {
+                    "value": "ERROR",
+                    "error": {
+                      "type": "PERMISSION",
+                      "code": "UNKNOWN",
+                      "title": "Unknown",
+                      "detail": "Your application has insufficient permissions to access the requested resource. Please prompt the user to re-authenticate using Smartcar Connect.",
+                      "resolution": {
+                        "type": "REAUTHENTICATE"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+        """.trimIndent()
+        assertEquals(
+            "Missing odometer permission — tap Reconnect in Settings",
+            OdometerSyncService.parseSmartcarErrorDetail(permErrorPayload)
+        )
+    }
 }

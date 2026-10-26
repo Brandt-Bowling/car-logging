@@ -297,7 +297,8 @@ fun SettingsTab(
                         FilledTonalButton(
                             onClick = {
                                 coroutineScope.launch {
-                                    preferencesManager.setSmartcarCredentials(clientId, clientSecret, accessToken.ifBlank { null })
+                                    val tokenToSave = if (clientId.trim().startsWith("client_")) "" else accessToken.ifBlank { null }
+                                    preferencesManager.setSmartcarCredentials(clientId, clientSecret, tokenToSave)
                                     val url = odometerSyncService.resolveSmartcarAuthUrl(clientId)
                                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                                     showSmartcarDialog = false
@@ -305,7 +306,7 @@ fun SettingsTab(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Sign In with Smartcar")
+                            Text(if (smartcarConnected) "Reconnect Smartcar" else "Sign In with Smartcar")
                         }
                     }
                     if (smartcarConnected) {
@@ -705,6 +706,7 @@ fun SettingsTab(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                     // Smartcar (Blazer EV) Row
+                    val gmSyncTimeText = OdometerSyncService.formatRelativeTime(gmCar?.lastOdometerSyncTime)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -712,7 +714,6 @@ fun SettingsTab(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Smartcar (Blazer EV)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                            val gmSyncTimeText = OdometerSyncService.formatRelativeTime(gmCar?.lastOdometerSyncTime)
                             val gmSub = when {
                                 !smartcarConnected && gmSyncTimeText == null -> "Not linked"
                                 gmSyncTimeText != null && gmCar != null && OdometerSyncService.isCooldownActive(gmCar.lastOdometerSyncTime, cooldownHours) ->
@@ -724,7 +725,7 @@ fun SettingsTab(
                             Text(gmSub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (!smartcarConnected && odometerSyncService != null) {
+                            if ((!smartcarConnected || gmSyncTimeText == null) && odometerSyncService != null) {
                                 TextButton(
                                     onClick = {
                                         coroutineScope.launch {
@@ -738,7 +739,7 @@ fun SettingsTab(
                                         }
                                     }
                                 ) {
-                                    Text("Connect")
+                                    Text(if (smartcarConnected) "Reconnect" else "Connect")
                                 }
                             }
                             if (gmCar != null && odometerSyncService != null) {

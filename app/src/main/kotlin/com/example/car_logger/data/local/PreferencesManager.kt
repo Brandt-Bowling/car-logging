@@ -242,8 +242,14 @@ class PreferencesManager(private val context: Context) {
             else prefs[KEY_SMARTCAR_CLIENT_SECRET] = clientSecret.trim()
 
             if (accessToken != null) {
-                if (accessToken.isBlank()) prefs.remove(KEY_SMARTCAR_ACCESS_TOKEN)
-                else prefs[KEY_SMARTCAR_ACCESS_TOKEN] = accessToken.trim()
+                val trimmedToken = accessToken.trim()
+                if (trimmedToken.isEmpty()) {
+                    prefs.remove(KEY_SMARTCAR_ACCESS_TOKEN)
+                    prefs.remove(KEY_SMARTCAR_TOKEN_EXPIRY)
+                } else if (trimmedToken != prefs[KEY_SMARTCAR_ACCESS_TOKEN]) {
+                    prefs[KEY_SMARTCAR_ACCESS_TOKEN] = trimmedToken
+                    prefs.remove(KEY_SMARTCAR_TOKEN_EXPIRY)
+                }
             }
         }
     }
