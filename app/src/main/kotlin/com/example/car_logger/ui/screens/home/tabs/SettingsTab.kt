@@ -2,6 +2,7 @@ package com.example.car_logger.ui.screens.home.tabs
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +43,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,6 +57,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.WakeProtectionPolicy
 import com.example.car_logger.data.model.Car
@@ -82,6 +87,32 @@ fun SettingsTab(
     val cooldownHours by preferencesManager.syncCooldownHoursFlow.collectAsState(initial = PreferencesManager.DEFAULT_COOLDOWN_HOURS)
     val smartcarConnected by preferencesManager.smartcarConnectedFlow.collectAsState(initial = false)
     val teslaConnected by preferencesManager.teslaConnectedFlow.collectAsState(initial = false)
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner, odometerSyncService, cars) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && odometerSyncService != null) {
+                coroutineScope.launch {
+                    val isLinked = odometerSyncService.refreshSmartcarConnectionStatus()
+                    val gmCar = cars.firstOrNull {
+                        OdometerSyncService.resolveProviderForCar(it) == OdometerSyncService.PROVIDER_SMARTCAR
+                    }
+                    if (isLinked && gmCar != null && gmCar.lastOdometerSyncTime == null) {
+                        val result = odometerSyncService.syncVehicle(gmCar, isManual = true, forceWake = true)
+                        Toast.makeText(
+                            context,
+                            OdometerSyncService.formatSyncResultMessage(gmCar, result),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     var showGarageNameDialog by remember { mutableStateOf(false) }
     var showGeminiKeyDialog by remember { mutableStateOf(false) }
@@ -228,7 +259,8 @@ fun SettingsTab(
         var accessToken by remember { mutableStateOf("") }
 
         LaunchedEffect(Unit) {
-            val (id, secret) = preferencesManager.getSmartcarCredentials()
+            val (id, secret) = odometerSyncService?.getEffectiveSmartcarCredentials()
+                ?: preferencesManager.getSmartcarCredentials()
             val (token, _, _) = preferencesManager.getSmartcarTokens()
             clientId = id.orEmpty()
             clientSecret = secret.orEmpty()
@@ -261,12 +293,12 @@ fun SettingsTab(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    if (clientId.isNotBlank() && odometerSyncService != null) {
+                    if (odometerSyncService != null) {
                         FilledTonalButton(
                             onClick = {
                                 coroutineScope.launch {
                                     preferencesManager.setSmartcarCredentials(clientId, clientSecret, accessToken.ifBlank { null })
-                                    val url = odometerSyncService.buildSmartcarAuthUrl(clientId)
+                                    val url = odometerSyncService.resolveSmartcarAuthUrl(clientId)
                                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                                     showSmartcarDialog = false
                                 }
@@ -274,6 +306,20 @@ fun SettingsTab(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Sign In with Smartcar")
+                        }
+                    }
+                    if (smartcarConnected) {
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    preferencesManager.disconnectSmartcar()
+                                    Toast.makeText(context, "Smartcar disconnected", Toast.LENGTH_SHORT).show()
+                                    showSmartcarDialog = false
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Disconnect Smartcar")
                         }
                     }
                 }
@@ -305,7 +351,8 @@ fun SettingsTab(
         var accessToken by remember { mutableStateOf("") }
 
         LaunchedEffect(Unit) {
-            val (id, secret) = preferencesManager.getTeslaCredentials()
+            val (id, secret) = odometerSyncService?.getEffectiveTeslaCredentials()
+                ?: preferencesManager.getTeslaCredentials()
             val (token, _, _) = preferencesManager.getTeslaTokens()
             clientId = id.orEmpty()
             clientSecret = secret.orEmpty()
@@ -353,6 +400,20 @@ fun SettingsTab(
                             Text("Sign In with Tesla")
                         }
                     }
+                    if (teslaConnected) {
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    preferencesManager.disconnectTesla()
+                                    Toast.makeText(context, "Tesla disconnected", Toast.LENGTH_SHORT).show()
+                                    showTeslaDialog = false
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Disconnect Tesla")
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -389,8 +450,18 @@ fun SettingsTab(
                     onClick = {
                         val carToSync = targetCar
                         carPendingForceWake = null
+                        Toast.makeText(
+                            context,
+                            "Polling ${carToSync.displayName} odometer...",
+                            Toast.LENGTH_SHORT
+                        ).show()
                         coroutineScope.launch {
-                            odometerSyncService.syncVehicle(carToSync, isManual = true, forceWake = true)
+                            val result = odometerSyncService.syncVehicle(carToSync, isManual = true, forceWake = true)
+                            Toast.makeText(
+                                context,
+                                OdometerSyncService.formatSyncResultMessage(carToSync, result),
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
                     }
                 ) {
@@ -641,13 +712,14 @@ fun SettingsTab(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Smartcar (Blazer EV)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            val gmSyncTimeText = OdometerSyncService.formatRelativeTime(gmCar?.lastOdometerSyncTime)
                             val gmSub = when {
-                                !smartcarConnected -> "Not linked"
-                                gmCar != null && OdometerSyncService.isCooldownActive(gmCar.lastOdometerSyncTime, cooldownHours) ->
-                                    "Cooldown (${OdometerSyncService.remainingCooldownHours(gmCar.lastOdometerSyncTime, cooldownHours)}h)"
-                                gmCar?.lastOdometerSyncTime != null ->
-                                    "Synced ${OdometerSyncService.formatRelativeTime(gmCar.lastOdometerSyncTime)}"
-                                else -> "Connected"
+                                !smartcarConnected && gmSyncTimeText == null -> "Not linked"
+                                gmSyncTimeText != null && gmCar != null && OdometerSyncService.isCooldownActive(gmCar.lastOdometerSyncTime, cooldownHours) ->
+                                    "Synced $gmSyncTimeText • Cooldown (${OdometerSyncService.remainingCooldownHours(gmCar.lastOdometerSyncTime, cooldownHours)}h)"
+                                gmSyncTimeText != null ->
+                                    "Synced $gmSyncTimeText"
+                                else -> "Connected • Not yet synced"
                             }
                             Text(gmSub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -657,8 +729,8 @@ fun SettingsTab(
                                     onClick = {
                                         coroutineScope.launch {
                                             val (id, _) = odometerSyncService.getEffectiveSmartcarCredentials()
-                                            if (!id.isNullOrBlank()) {
-                                                val url = odometerSyncService.buildSmartcarAuthUrl(id)
+                                            if (!id.isNullOrBlank() || OdometerSyncService.DEFAULT_SMARTCAR_APPLICATION_ID.isNotBlank()) {
+                                                val url = odometerSyncService.resolveSmartcarAuthUrl(id.orEmpty())
                                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                                             } else {
                                                 showSmartcarDialog = true
@@ -668,7 +740,8 @@ fun SettingsTab(
                                 ) {
                                     Text("Connect")
                                 }
-                            } else if (smartcarConnected && gmCar != null && odometerSyncService != null) {
+                            }
+                            if (gmCar != null && odometerSyncService != null) {
                                 TextButton(onClick = { carPendingForceWake = gmCar }) {
                                     Text("Poll")
                                 }
@@ -687,12 +760,15 @@ fun SettingsTab(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Tesla Fleet (Model 3)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            val teslaSyncTimeText = OdometerSyncService.formatRelativeTime(teslaCar?.lastOdometerSyncTime)
                             val teslaSub = when {
                                 !teslaConnected -> "Not linked"
+                                teslaCar?.telemetryStatus == "Asleep" && teslaSyncTimeText != null ->
+                                    "Synced $teslaSyncTimeText • Asleep (No wake)"
                                 teslaCar?.telemetryStatus == "Asleep" -> "Asleep (No wake)"
-                                teslaCar?.lastOdometerSyncTime != null ->
-                                    "Synced ${OdometerSyncService.formatRelativeTime(teslaCar.lastOdometerSyncTime)}"
-                                else -> "Connected"
+                                teslaSyncTimeText != null ->
+                                    "Synced $teslaSyncTimeText"
+                                else -> "Connected • Not yet synced"
                             }
                             Text(teslaSub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -716,8 +792,18 @@ fun SettingsTab(
                             } else if (teslaConnected && teslaCar != null && odometerSyncService != null) {
                                 TextButton(
                                     onClick = {
+                                        Toast.makeText(
+                                            context,
+                                            "Checking ${teslaCar.displayName} status...",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                         coroutineScope.launch {
-                                            odometerSyncService.syncVehicle(teslaCar, isManual = true, forceWake = false)
+                                            val result = odometerSyncService.syncVehicle(teslaCar, isManual = true, forceWake = false)
+                                            Toast.makeText(
+                                                context,
+                                                OdometerSyncService.formatSyncResultMessage(teslaCar, result),
+                                                Toast.LENGTH_LONG
+                                            ).show()
                                         }
                                     }
                                 ) {

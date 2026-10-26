@@ -44,12 +44,14 @@ class PreferencesManager(private val context: Context) {
         val KEY_WAKE_POLICY = stringPreferencesKey("telemetry_wake_policy")
         val KEY_SYNC_COOLDOWN_HOURS = intPreferencesKey("telemetry_cooldown_hours")
 
+        val KEY_SMARTCAR_APPLICATION_ID = stringPreferencesKey("smartcar_application_id")
         val KEY_SMARTCAR_CLIENT_ID = stringPreferencesKey("smartcar_client_id")
         val KEY_SMARTCAR_CLIENT_SECRET = stringPreferencesKey("smartcar_client_secret")
         val KEY_SMARTCAR_ACCESS_TOKEN = stringPreferencesKey("smartcar_access_token")
         val KEY_SMARTCAR_REFRESH_TOKEN = stringPreferencesKey("smartcar_refresh_token")
         val KEY_SMARTCAR_TOKEN_EXPIRY = longPreferencesKey("smartcar_token_expiry")
         val KEY_SMARTCAR_VEHICLE_ID = stringPreferencesKey("smartcar_vehicle_id")
+        val KEY_SMARTCAR_USER_ID = stringPreferencesKey("smartcar_user_id")
 
         val KEY_TESLA_CLIENT_ID = stringPreferencesKey("tesla_client_id")
         val KEY_TESLA_CLIENT_SECRET = stringPreferencesKey("tesla_client_secret")
@@ -202,9 +204,9 @@ class PreferencesManager(private val context: Context) {
 
     val smartcarClientIdFlow: Flow<String?> = context.dataStore.data.map { it[KEY_SMARTCAR_CLIENT_ID] }
     val smartcarConnectedFlow: Flow<Boolean> = context.dataStore.data.map {
-        !it[KEY_SMARTCAR_ACCESS_TOKEN].isNullOrBlank() ||
-            (com.example.car_logger.BuildConfig.SMARTCAR_CLIENT_ID.isNotBlank() &&
-                com.example.car_logger.BuildConfig.SMARTCAR_CLIENT_SECRET.isNotBlank())
+        !it[KEY_SMARTCAR_VEHICLE_ID].isNullOrBlank() ||
+            !it[KEY_SMARTCAR_USER_ID].isNullOrBlank() ||
+            !it[KEY_SMARTCAR_REFRESH_TOKEN].isNullOrBlank()
     }
 
     val teslaClientIdFlow: Flow<String?> = context.dataStore.data.map { it[KEY_TESLA_CLIENT_ID] }
@@ -262,9 +264,35 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun getSmartcarVehicleId(): String? = context.dataStore.data.map { it[KEY_SMARTCAR_VEHICLE_ID] }.first()
 
-    suspend fun setSmartcarVehicleId(vehicleId: String) {
+    suspend fun setSmartcarVehicleId(vehicleId: String, userId: String? = null) {
         context.dataStore.edit { prefs ->
             prefs[KEY_SMARTCAR_VEHICLE_ID] = vehicleId
+            if (!userId.isNullOrBlank()) {
+                prefs[KEY_SMARTCAR_USER_ID] = userId
+            }
+        }
+    }
+
+    suspend fun getSmartcarUserId(): String? = context.dataStore.data.map { it[KEY_SMARTCAR_USER_ID] }.first()
+
+    suspend fun setSmartcarUserId(userId: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SMARTCAR_USER_ID] = userId
+        }
+    }
+
+    suspend fun getSmartcarApplicationId(): String? = context.dataStore.data.map { it[KEY_SMARTCAR_APPLICATION_ID] }.first()
+
+    suspend fun setSmartcarApplicationId(appId: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SMARTCAR_APPLICATION_ID] = appId
+        }
+    }
+
+    suspend fun clearSmartcarVehicleConnection() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(KEY_SMARTCAR_VEHICLE_ID)
+            prefs.remove(KEY_SMARTCAR_USER_ID)
         }
     }
 
@@ -274,6 +302,7 @@ class PreferencesManager(private val context: Context) {
             prefs.remove(KEY_SMARTCAR_REFRESH_TOKEN)
             prefs.remove(KEY_SMARTCAR_TOKEN_EXPIRY)
             prefs.remove(KEY_SMARTCAR_VEHICLE_ID)
+            prefs.remove(KEY_SMARTCAR_USER_ID)
         }
     }
 

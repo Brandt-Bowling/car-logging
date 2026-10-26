@@ -13,9 +13,12 @@ import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.components.GarageNavigationTab
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -40,6 +43,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val odometerSyncService = OdometerSyncService(preferencesManager, carDao)
     private var initialTelemetryChecked = false
 
+    private val _toastMessage = MutableSharedFlow<String>(extraBufferCapacity = 2)
+    val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
+
     val currentTab = MutableStateFlow(GarageNavigationTab.GARAGE)
     val isSpeedDialOpen = MutableStateFlow(false)
 
@@ -54,6 +60,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (!initialTelemetryChecked && models.isNotEmpty()) {
             initialTelemetryChecked = true
             viewModelScope.launch {
+                odometerSyncService.refreshSmartcarConnectionStatus()
                 odometerSyncService.syncAllEligibleVehicles(models)
             }
         }
@@ -168,16 +175,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun syncCarOdometer(car: Car, forceWake: Boolean = false) {
         viewModelScope.launch {
-            odometerSyncService.syncVehicle(car = car, isManual = true, forceWake = forceWake)
+            val result = odometerSyncService.syncVehicle(car = car, isManual = true, forceWake = forceWake)
+            _toastMessage.tryEmit(OdometerSyncService.formatSyncResultMessage(car, result))
         }
     }
 
     fun handleOAuthCallback(uri: Uri) {
         viewModelScope.launch {
+            val isSmartcar = uri.path.orEmpty().contains("smartcar", ignoreCase = true)
+            val providerLabel = if (isSmartcar) "Smartcar" else "Tesla"
             val connected = odometerSyncService.handleOAuthCallback(uri)
             if (connected) {
+                _toastMessage.tryEmit("$providerLabel connected! Syncing odometer...")
+                val targetProvider = if (isSmartcar) {
+                    OdometerSyncService.PROVIDER_SMARTCAR
+                } else {
+                    OdometerSyncService.PROVIDER_TESLA
+                }
                 val currentCars = carDao.getAllCarsList().map { it.toModel() }
-                odometerSyncService.syncAllEligibleVehicles(currentCars)
+                val matchingCars = currentCars.filter {
+                    !it.isArchived && OdometerSyncService.resolveProviderForCar(it) == targetProvider
+                }
+                for (car in matchingCars) {
+                    val result = odometerSyncService.syncVehicle(car = car, isManual = true, forceWake = true)
+                    _toastMessage.tryEmit(OdometerSyncService.formatSyncResultMessage(car, result))
+                }
+            } else {
+                _toastMessage.tryEmit("Failed to connect $providerLabel")
             }
         }
     }

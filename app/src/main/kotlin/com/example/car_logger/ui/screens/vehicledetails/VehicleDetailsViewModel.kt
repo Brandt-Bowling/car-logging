@@ -15,6 +15,7 @@ import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.Tire
 import com.example.car_logger.services.GeminiAiService
 import com.example.car_logger.services.GoogleDriveService
+import com.example.car_logger.services.OdometerSyncResult
 import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.components.VehicleSubView
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -98,10 +99,11 @@ class VehicleDetailsViewModel(
         }
     }
 
-    fun syncLiveOdometer(forceWake: Boolean = false) {
+    fun syncLiveOdometer(forceWake: Boolean = false, onResult: ((OdometerSyncResult) -> Unit)? = null) {
         val currentCar = car.value ?: return
         viewModelScope.launch {
-            odometerSyncService.syncVehicle(currentCar, isManual = true, forceWake = forceWake)
+            val result = odometerSyncService.syncVehicle(currentCar, isManual = true, forceWake = forceWake)
+            onResult?.invoke(result)
         }
     }
 
