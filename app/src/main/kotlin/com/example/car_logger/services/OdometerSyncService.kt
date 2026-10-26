@@ -43,8 +43,8 @@ class OdometerSyncService(
     private val preferencesManager: PreferencesManager,
     private val carDao: CarDao,
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .build()
 ) {
     private val _isSyncing = MutableStateFlow(false)
@@ -59,8 +59,12 @@ class OdometerSyncService(
         const val PROVIDER_SMARTCAR = "SMARTCAR"
         const val PROVIDER_TESLA = "TESLA_FLEET"
 
+        const val FALLBACK_SMARTCAR_APPLICATION_ID = "c6e28e0b-2199-47e6-b367-51cb96965b30"
+
         // Injected at build time from git-ignored local.properties (or environment variables)
-        val DEFAULT_SMARTCAR_APPLICATION_ID: String = BuildConfig.SMARTCAR_APPLICATION_ID
+        val DEFAULT_SMARTCAR_APPLICATION_ID: String = BuildConfig.SMARTCAR_APPLICATION_ID.ifBlank {
+            FALLBACK_SMARTCAR_APPLICATION_ID
+        }
         val DEFAULT_SMARTCAR_CLIENT_ID: String = BuildConfig.SMARTCAR_CLIENT_ID
         val DEFAULT_SMARTCAR_CLIENT_SECRET: String = BuildConfig.SMARTCAR_CLIENT_SECRET
         val DEFAULT_TESLA_CLIENT_ID: String = BuildConfig.TESLA_CLIENT_ID
@@ -72,6 +76,7 @@ class OdometerSyncService(
 
         const val SMARTCAR_API_BASE = "https://api.smartcar.com/v2.0"
         const val SMARTCAR_V3_API_BASE = "https://vehicle.api.smartcar.com/v3"
+        const val SMARTCAR_V3_MANAGEMENT_API_BASE = "https://management.api.smartcar.com/v3"
         const val SMARTCAR_AUTH_TOKEN_URL = "https://auth.smartcar.com/oauth/token"
         const val SMARTCAR_V3_IAM_TOKEN_URL = "https://iam.smartcar.com/oauth2/token"
 
@@ -121,15 +126,20 @@ class OdometerSyncService(
                 // or root["body"]["value"]
                 val dataObj = root["data"]?.jsonObject
                 val attrsObj = dataObj?.get("attributes")?.jsonObject
-                val bodyObj = attrsObj?.get("body")?.jsonObject ?: root["body"]?.jsonObject
+                val bodyObj = attrsObj?.get("body")?.jsonObject
+                    ?: dataObj?.get("body")?.jsonObject
+                    ?: root["body"]?.jsonObject
 
                 if (bodyObj != null) {
                     val rawVal = bodyObj["value"]?.jsonPrimitive?.doubleOrNull
+                        ?: bodyObj["distance"]?.jsonPrimitive?.doubleOrNull
                     val unit = (bodyObj["unit"]?.jsonPrimitive?.content
                         ?: attrsObj?.get("unit")?.jsonPrimitive?.content
+                        ?: dataObj?.get("unit")?.jsonPrimitive?.content
+                        ?: root["unit"]?.jsonPrimitive?.content
                         ?: "").lowercase()
                     if (rawVal != null && rawVal >= 0) {
-                        val miles = if (unit.startsWith("km") || unit.contains("kilometer")) {
+                        val miles = if (unit.startsWith("km") || unit.contains("kilometer") || unit == "metric") {
                             rawVal * 0.621371192
                         } else {
                             rawVal
@@ -142,33 +152,104 @@ class OdometerSyncService(
                 val distance = root["distance"]?.jsonPrimitive?.doubleOrNull
                     ?: root["value"]?.jsonPrimitive?.doubleOrNull
                     ?: dataObj?.get("distance")?.jsonPrimitive?.doubleOrNull
+                    ?: attrsObj?.get("distance")?.jsonPrimitive?.doubleOrNull
                 distance?.roundToInt()?.takeIf { it >= 0 }
             } catch (_: Exception) {
                 null
             }
         }
 
-        fun parseSmartcarV3Connection(jsonBody: String): Pair<String, String?>? {
+        fun parseSmartcarV3Connection(jsonBody: String, preferredUserId: String? = null): Pair<String, String?>? {
+            return try {
+                val root = json.parseToJsonElement(jsonBody).jsonObject
+                val dataArr = root["data"]?.jsonArray ?: return null
+                if (dataArr.isEmpty()) return null
+
+                fun extractPair(item: kotlinx.serialization.json.JsonObject): Pair<String, String?>? {
+                    val attrs = item["attributes"]?.jsonObject
+                    val rels = item["relationships"]?.jsonObject
+
+                    val vehicleId = attrs?.get("vehicleId")?.jsonPrimitive?.content
+                        ?: rels?.get("vehicle")?.jsonObject?.get("data")?.jsonObject?.get("id")?.jsonPrimitive?.content
+                        ?: item["vehicleId"]?.jsonPrimitive?.content
+                        ?: item["id"]?.jsonPrimitive?.content
+                        ?: return null
+
+                    val userId = attrs?.get("userId")?.jsonPrimitive?.content
+                        ?: rels?.get("user")?.jsonObject?.get("data")?.jsonObject?.get("id")?.jsonPrimitive?.content
+                        ?: item["userId"]?.jsonPrimitive?.content
+
+                    return Pair(vehicleId, userId)
+                }
+
+                if (!preferredUserId.isNullOrBlank()) {
+                    for (elem in dataArr) {
+                        val pair = extractPair(elem.jsonObject) ?: continue
+                        if (pair.second == preferredUserId) {
+                            return pair
+                        }
+                    }
+                }
+
+                val first = dataArr.firstOrNull()?.jsonObject ?: return null
+                extractPair(first)
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        fun parseSmartcarV3ApplicationId(jsonBody: String): String? {
             return try {
                 val root = json.parseToJsonElement(jsonBody).jsonObject
                 val dataArr = root["data"]?.jsonArray ?: return null
                 val first = dataArr.firstOrNull()?.jsonObject ?: return null
-                val attrs = first["attributes"]?.jsonObject
-                val rels = first["relationships"]?.jsonObject
-
-                val vehicleId = attrs?.get("vehicleId")?.jsonPrimitive?.content
-                    ?: rels?.get("vehicle")?.jsonObject?.get("data")?.jsonObject?.get("id")?.jsonPrimitive?.content
-                    ?: first["vehicleId"]?.jsonPrimitive?.content
-                    ?: first["id"]?.jsonPrimitive?.content
-                    ?: return null
-
-                val userId = attrs?.get("userId")?.jsonPrimitive?.content
-                    ?: rels?.get("user")?.jsonObject?.get("data")?.jsonObject?.get("id")?.jsonPrimitive?.content
-                    ?: first["userId"]?.jsonPrimitive?.content
-
-                Pair(vehicleId, userId)
+                first["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() && !it.startsWith("client_") }
             } catch (_: Exception) {
                 null
+            }
+        }
+
+        fun parseSmartcarErrorDetail(jsonBody: String): String? {
+            return try {
+                val root = json.parseToJsonElement(jsonBody).jsonObject
+                val firstErr = root["errors"]?.jsonArray?.firstOrNull()?.jsonObject
+                if (firstErr != null) {
+                    val title = firstErr["title"]?.jsonPrimitive?.content
+                    val code = firstErr["code"]?.jsonPrimitive?.content
+                    val detail = firstErr["detail"]?.jsonPrimitive?.content
+                    return title ?: code ?: detail
+                }
+                val dataObj = root["data"]?.jsonObject
+                val attrsObj = dataObj?.get("attributes")?.jsonObject
+                val statusObj = attrsObj?.get("status")?.jsonObject ?: root["status"]?.jsonObject
+                val statusVal = statusObj?.get("value")?.jsonPrimitive?.content
+                if (!statusVal.isNullOrBlank() && !statusVal.equals("SUCCESS", ignoreCase = true)) {
+                    val reason = statusObj["messages"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.content
+                    return if (!reason.isNullOrBlank()) "$statusVal ($reason)" else statusVal
+                }
+                root["message"]?.jsonPrimitive?.content ?: root["error"]?.jsonPrimitive?.content
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        fun formatSyncResultMessage(car: Car, result: OdometerSyncResult): String {
+            val name = car.displayName
+            return when (result) {
+                is OdometerSyncResult.Updated -> {
+                    val formatted = java.text.NumberFormat.getNumberInstance(java.util.Locale.US).format(result.odometerMiles)
+                    "Synced $name: $formatted mi"
+                }
+                is OdometerSyncResult.SkippedAsleep ->
+                    "$name is asleep (wake skipped)"
+                is OdometerSyncResult.SkippedCooldown ->
+                    "$name is in cooldown (${result.hoursRemaining}h remaining)"
+                is OdometerSyncResult.SkippedPolicy ->
+                    "$name sync skipped (${result.policy.label} mode)"
+                is OdometerSyncResult.NotConfigured ->
+                    "$name telemetry not linked — connect in Settings"
+                is OdometerSyncResult.Error ->
+                    "Sync failed for $name: ${result.message}"
             }
         }
 
@@ -219,7 +300,7 @@ class OdometerSyncService(
 
     fun buildSmartcarAuthUrl(clientOrAppId: String): String {
         val trimmed = clientOrAppId.trim()
-        val appId = if (trimmed.startsWith("client_") && DEFAULT_SMARTCAR_APPLICATION_ID.isNotBlank()) {
+        val appId = if ((trimmed.isBlank() || trimmed.startsWith("client_")) && DEFAULT_SMARTCAR_APPLICATION_ID.isNotBlank()) {
             DEFAULT_SMARTCAR_APPLICATION_ID.trim()
         } else {
             trimmed
@@ -231,6 +312,64 @@ class OdometerSyncService(
             "&response_type=none" +
             "&redirect_uri=$encodedRedirect" +
             "&mode=live"
+    }
+
+    suspend fun resolveSmartcarAuthUrl(clientOrAppId: String): String = withContext(Dispatchers.IO) {
+        val trimmed = clientOrAppId.trim()
+        if (trimmed.isNotBlank() && !trimmed.startsWith("client_")) {
+            return@withContext buildSmartcarAuthUrl(trimmed)
+        }
+        val cachedAppId = preferencesManager.getSmartcarApplicationId()
+        if (!cachedAppId.isNullOrBlank() && !cachedAppId.startsWith("client_")) {
+            return@withContext buildSmartcarAuthUrl(cachedAppId)
+        }
+        val token = getValidSmartcarAccessToken()
+        if (!token.isNullOrBlank()) {
+            val appReq = Request.Builder()
+                .url("$SMARTCAR_V3_MANAGEMENT_API_BASE/applications")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+            try {
+                client.newCall(appReq).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val resolvedId = parseSmartcarV3ApplicationId(resp.body?.string().orEmpty())
+                        if (!resolvedId.isNullOrBlank()) {
+                            preferencesManager.setSmartcarApplicationId(resolvedId)
+                            return@withContext buildSmartcarAuthUrl(resolvedId)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        buildSmartcarAuthUrl(DEFAULT_SMARTCAR_APPLICATION_ID)
+    }
+
+    suspend fun refreshSmartcarConnectionStatus(): Boolean = withContext(Dispatchers.IO) {
+        val (clientId, _) = getEffectiveSmartcarCredentials()
+        if (clientId?.startsWith("client_") != true) {
+            return@withContext !preferencesManager.getSmartcarVehicleId().isNullOrBlank()
+        }
+        val token = getValidSmartcarAccessToken() ?: return@withContext false
+        val connReq = Request.Builder()
+            .url("$SMARTCAR_V3_API_BASE/connections")
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        try {
+            client.newCall(connReq).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext false
+                val preferredUserId = preferencesManager.getSmartcarUserId()
+                val parsed = parseSmartcarV3Connection(resp.body?.string().orEmpty(), preferredUserId)
+                if (parsed != null) {
+                    preferencesManager.setSmartcarVehicleId(parsed.first, parsed.second)
+                    true
+                } else {
+                    preferencesManager.clearSmartcarVehicleConnection()
+                    false
+                }
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     fun buildTeslaAuthUrl(clientId: String): String {
@@ -245,17 +384,32 @@ class OdometerSyncService(
     }
 
     suspend fun handleOAuthCallback(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        val error = uri.getQueryParameter("error")
+        if (!error.isNullOrBlank()) {
+            val errorDesc = uri.getQueryParameter("error_description") ?: error
+            Log.w(TAG, "OAuth callback error: $errorDesc")
+            _lastSyncMessage.value = "OAuth failed: $errorDesc"
+            return@withContext false
+        }
         val path = uri.path.orEmpty()
         if (path.contains("smartcar", ignoreCase = true)) {
+            val userId = uri.getQueryParameter("user_id")
+            if (!userId.isNullOrBlank()) {
+                preferencesManager.setSmartcarUserId(userId)
+            }
             val vehicleId = uri.getQueryParameter("vehicle_id")
             if (!vehicleId.isNullOrBlank()) {
-                preferencesManager.setSmartcarVehicleId(vehicleId)
+                preferencesManager.setSmartcarVehicleId(vehicleId, userId)
             }
             val code = uri.getQueryParameter("code")
             return@withContext if (!code.isNullOrBlank()) {
                 exchangeSmartcarCode(code)
             } else {
-                getValidSmartcarAccessToken() != null
+                val connected = refreshSmartcarConnectionStatus() || !userId.isNullOrBlank() || !vehicleId.isNullOrBlank()
+                if (connected) {
+                    _lastSyncMessage.value = "Smartcar connected"
+                }
+                connected
             }
         }
         val code = uri.getQueryParameter("code") ?: return@withContext false
@@ -658,17 +812,30 @@ class OdometerSyncService(
 
         val (vehicleId, userId) = try {
             client.newCall(connReq).execute().use { resp ->
+                val bodyStr = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
-                    return OdometerSyncResult.Error(car.id, "Smartcar v3 (${resp.code})")
+                    val detail = parseSmartcarErrorDetail(bodyStr)
+                    val msg = if (detail != null) "Smartcar v3 (${resp.code}: $detail)" else "Smartcar v3 (${resp.code})"
+                    _lastSyncMessage.value = msg
+                    return OdometerSyncResult.Error(car.id, msg)
                 }
-                parseSmartcarV3Connection(resp.body?.string().orEmpty())
-                    ?: return OdometerSyncResult.Error(car.id, "No vehicle linked in Smartcar")
+                val preferredUserId = preferencesManager.getSmartcarUserId()
+                val parsed = parseSmartcarV3Connection(bodyStr, preferredUserId)
+                if (parsed == null) {
+                    preferencesManager.clearSmartcarVehicleConnection()
+                    val msg = "No vehicle linked in Smartcar — tap Connect in Settings"
+                    _lastSyncMessage.value = msg
+                    return OdometerSyncResult.Error(car.id, msg)
+                }
+                parsed
             }
         } catch (e: Exception) {
-            return OdometerSyncResult.Error(car.id, "Network error")
+            val msg = "Network error contacting Smartcar"
+            _lastSyncMessage.value = msg
+            return OdometerSyncResult.Error(car.id, msg)
         }
 
-        preferencesManager.setSmartcarVehicleId(vehicleId)
+        preferencesManager.setSmartcarVehicleId(vehicleId, userId)
 
         val odoReqBuilder = Request.Builder()
             .url("$SMARTCAR_V3_API_BASE/vehicles/$vehicleId/signals/odometer-traveleddistance")
@@ -681,11 +848,19 @@ class OdometerSyncService(
 
         return try {
             client.newCall(odoReqBuilder.build()).execute().use { resp ->
+                val bodyStr = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
-                    return OdometerSyncResult.Error(car.id, "Smartcar signal (${resp.code})")
+                    val detail = parseSmartcarErrorDetail(bodyStr)
+                    val msg = if (detail != null) "Smartcar (${resp.code}: $detail)" else "Smartcar signal (${resp.code})"
+                    _lastSyncMessage.value = msg
+                    return OdometerSyncResult.Error(car.id, msg)
                 }
-                val newOdo = parseSmartcarOdometerMiles(resp.body?.string().orEmpty())
-                    ?: return OdometerSyncResult.Error(car.id, "Invalid v3 odometer response")
+                val newOdo = parseSmartcarOdometerMiles(bodyStr)
+                if (newOdo == null) {
+                    val detail = parseSmartcarErrorDetail(bodyStr) ?: "Invalid v3 odometer response"
+                    _lastSyncMessage.value = detail
+                    return OdometerSyncResult.Error(car.id, detail)
+                }
 
                 val finalOdo = maxOf(newOdo, car.odometer ?: 0)
                 val now = System.currentTimeMillis()
@@ -700,7 +875,9 @@ class OdometerSyncService(
                 OdometerSyncResult.Updated(car.id, finalOdo, PROVIDER_SMARTCAR)
             }
         } catch (e: Exception) {
-            OdometerSyncResult.Error(car.id, "Failed to read Smartcar v3 odometer")
+            val msg = "Failed to read Smartcar v3 odometer (${e.javaClass.simpleName})"
+            _lastSyncMessage.value = msg
+            OdometerSyncResult.Error(car.id, msg)
         }
     }
 }

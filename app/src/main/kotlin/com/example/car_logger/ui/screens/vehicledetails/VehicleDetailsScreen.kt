@@ -1,8 +1,10 @@
 package com.example.car_logger.ui.screens.vehicledetails
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -39,7 +41,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.services.GoogleDriveService
@@ -66,6 +70,7 @@ fun VehicleDetailsScreen(
     onOpenAttachmentViewer: (MaintenanceRecord) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val car by viewModel.car.collectAsState()
     val records by viewModel.records.collectAsState()
@@ -73,6 +78,7 @@ fun VehicleDetailsScreen(
     val glovebox by viewModel.glovebox.collectAsState()
     val currentSubView by viewModel.currentSubView.collectAsState()
     val isSyncingDrive by viewModel.isSyncingDrive.collectAsState()
+    val isSyncingOdometer by viewModel.isSyncingOdometer.collectAsState()
 
     var showFolderPickerSheet by remember { mutableStateOf(false) }
     val folderPickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -119,7 +125,18 @@ fun VehicleDetailsScreen(
                 TextButton(
                     onClick = {
                         showWakeConfirmDialog = false
-                        viewModel.syncLiveOdometer(forceWake = true)
+                        Toast.makeText(
+                            context,
+                            "Polling ${carItem.displayName} odometer...",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        viewModel.syncLiveOdometer(forceWake = true) { result ->
+                            Toast.makeText(
+                                context,
+                                OdometerSyncService.formatSyncResultMessage(carItem, result),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
                 ) {
                     Text("Wake & Poll", color = MaterialTheme.colorScheme.error)
@@ -154,6 +171,7 @@ fun VehicleDetailsScreen(
                 actions = {
                     if (OdometerSyncService.resolveProviderForCar(carItem) != null) {
                         IconButton(
+                            enabled = !isSyncingOdometer,
                             onClick = {
                                 val inCooldown = OdometerSyncService.isCooldownActive(carItem.lastOdometerSyncTime, cooldownHours)
                                 val isAsleep = carItem.telemetryStatus == "Asleep"
@@ -161,11 +179,29 @@ fun VehicleDetailsScreen(
                                 if (isAsleep || inCooldown || isSmartcar) {
                                     showWakeConfirmDialog = true
                                 } else {
-                                    viewModel.syncLiveOdometer(forceWake = false)
+                                    Toast.makeText(
+                                        context,
+                                        "Syncing ${carItem.displayName} odometer...",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    viewModel.syncLiveOdometer(forceWake = false) { result ->
+                                        Toast.makeText(
+                                            context,
+                                            OdometerSyncService.formatSyncResultMessage(carItem, result),
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
                                 }
                             }
                         ) {
-                            Icon(Icons.Filled.Sync, contentDescription = "Sync Odometer")
+                            if (isSyncingOdometer) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Filled.Sync, contentDescription = "Sync Odometer")
+                            }
                         }
                     }
                     IconButton(onClick = { viewModel.toggleArchive() }) {

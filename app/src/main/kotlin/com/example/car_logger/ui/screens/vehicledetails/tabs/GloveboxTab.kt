@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Glovebox
 import com.example.car_logger.services.GoogleDriveService
+import com.example.car_logger.services.OdometerSyncService
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -159,6 +160,14 @@ fun GloveboxTab(
                                 "Not logged"
                             }
                             Text(odoFormatted, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            val syncRel = OdometerSyncService.formatRelativeTime(car.lastOdometerSyncTime)
+                            if (syncRel != null) {
+                                Text(
+                                    text = "Synced $syncRel",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                     IconButton(onClick = { showEditOdometerDialog = true }) {

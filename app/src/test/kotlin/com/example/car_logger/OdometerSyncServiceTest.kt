@@ -1,6 +1,7 @@
 package com.example.car_logger
 
 import com.example.car_logger.data.model.Car
+import com.example.car_logger.services.OdometerSyncResult
 import com.example.car_logger.services.OdometerSyncService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -134,5 +135,87 @@ class OdometerSyncServiceTest {
         assertEquals(OdometerSyncService.PROVIDER_SMARTCAR, OdometerSyncService.resolveProviderForCar(blazerEv))
         assertEquals(OdometerSyncService.PROVIDER_TESLA, OdometerSyncService.resolveProviderForCar(model3))
         assertNull(OdometerSyncService.resolveProviderForCar(otherCar))
+    }
+
+    @Test
+    fun `parseSmartcarV3Connection supports JSON API relationships and empty list`() {
+        val emptyPayload = """{"data":[],"meta":{"totalCount":0}}"""
+        assertNull(OdometerSyncService.parseSmartcarV3Connection(emptyPayload))
+
+        val relsPayload = """
+            {
+              "data": [
+                {
+                  "id": "conn_1",
+                  "type": "connection",
+                  "relationships": {
+                    "user": {
+                      "data": {
+                        "id": "usr_rel_111",
+                        "type": "user"
+                      }
+                    },
+                    "vehicle": {
+                      "data": {
+                        "id": "veh_rel_222",
+                        "type": "vehicle"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+        """.trimIndent()
+        val parsed = OdometerSyncService.parseSmartcarV3Connection(relsPayload)
+        assertEquals("veh_rel_222", parsed?.first)
+        assertEquals("usr_rel_111", parsed?.second)
+    }
+
+    @Test
+    fun `parseSmartcarV3ApplicationId extracts UUID from applications payload`() {
+        val payload = """
+            {
+              "data": [
+                {
+                  "id": "c6e28e0b-2199-47e6-b367-51cb96965b30",
+                  "type": "application",
+                  "attributes": {
+                    "name": "Garage Journal",
+                    "clientId": "client_01M5REPWJCMZEPD8QKP13FJN4H"
+                  }
+                }
+              ]
+            }
+        """.trimIndent()
+        assertEquals(
+            "c6e28e0b-2199-47e6-b367-51cb96965b30",
+            OdometerSyncService.parseSmartcarV3ApplicationId(payload)
+        )
+    }
+
+    @Test
+    fun `formatSyncResultMessage produces clear confirmation and error messages`() {
+        val blazerEv = Car(
+            id = "1",
+            make = "Chevrolet",
+            model = "Blazer EV",
+            year = 2024,
+            isEv = true
+        )
+
+        val updatedMsg = OdometerSyncService.formatSyncResultMessage(
+            blazerEv,
+            OdometerSyncResult.Updated("1", 14820, OdometerSyncService.PROVIDER_SMARTCAR)
+        )
+        assertEquals("Synced 2024 Chevrolet Blazer EV: 14,820 mi", updatedMsg)
+
+        val errMsg = OdometerSyncService.formatSyncResultMessage(
+            blazerEv,
+            OdometerSyncResult.Error("1", "No vehicle linked in Smartcar — tap Connect in Settings")
+        )
+        assertEquals(
+            "Sync failed for 2024 Chevrolet Blazer EV: No vehicle linked in Smartcar — tap Connect in Settings",
+            errMsg
+        )
     }
 }
