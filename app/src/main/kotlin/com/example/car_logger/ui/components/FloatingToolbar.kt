@@ -1,12 +1,15 @@
 package com.example.car_logger.ui.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,10 +38,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.example.car_logger.ui.theme.ExpressiveMotionTokens
 import com.example.car_logger.ui.theme.FabSquircleShape
 import com.example.car_logger.ui.theme.FloatingToolbarShape
+import com.example.car_logger.ui.theme.expressiveBounceClick
 
 enum class VehicleSubView(
     val title: String,
@@ -55,7 +61,7 @@ enum class VehicleSubView(
  * pill-shaped floating container (64dp container height) holding the subview destinations
  * and an attached 56dp squircle FAB, adhering to Google Material 3 design specifications.
  * Supports a collapsible state (expanded = false) that collapses the toolbar destinations
- * into the FAB when scrolling.
+ * into the FAB when scrolling, animated using expressive spring physics.
  */
 @Composable
 fun VehicleFloatingToolbar(
@@ -76,12 +82,12 @@ fun VehicleFloatingToolbar(
         // Collapsible floating pill toolbar for sub views (64dp height per M3 specs)
         AnimatedVisibility(
             visible = expanded,
-            enter = fadeIn(animationSpec = tween(200)) + expandHorizontally(
-                animationSpec = tween(300),
+            enter = fadeIn(animationSpec = ExpressiveMotionTokens.SnappySpring) + expandHorizontally(
+                animationSpec = ExpressiveMotionTokens.SpatialSizeSpring,
                 expandFrom = Alignment.End
             ),
-            exit = fadeOut(animationSpec = tween(150)) + shrinkHorizontally(
-                animationSpec = tween(250),
+            exit = fadeOut(animationSpec = ExpressiveMotionTokens.SnappySpring) + shrinkHorizontally(
+                animationSpec = ExpressiveMotionTokens.SpatialSizeSpring,
                 shrinkTowards = Alignment.End
             )
         ) {
@@ -108,8 +114,9 @@ fun VehicleFloatingToolbar(
                                 targetValue = if (isSelected) {
                                     MaterialTheme.colorScheme.secondaryContainer
                                 } else {
-                                    androidx.compose.ui.graphics.Color.Transparent
+                                    Color.Transparent
                                 },
+                                animationSpec = ExpressiveMotionTokens.ColorSpring,
                                 label = "pill_background"
                             )
                             val contentColor by animateColorAsState(
@@ -118,6 +125,7 @@ fun VehicleFloatingToolbar(
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
+                                animationSpec = ExpressiveMotionTokens.ColorSpring,
                                 label = "pill_content"
                             )
 
@@ -126,7 +134,9 @@ fun VehicleFloatingToolbar(
                                     .height(48.dp)
                                     .clip(RoundedCornerShape(24.dp))
                                     .background(backgroundTint)
-                                    .clickable { onSubViewSelected(subView) }
+                                    .expressiveBounceClick(pressedScale = 0.96f) {
+                                        onSubViewSelected(subView)
+                                    }
                                     .padding(horizontal = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -136,7 +146,15 @@ fun VehicleFloatingToolbar(
                                     tint = contentColor,
                                     modifier = Modifier.size(24.dp)
                                 )
-                                AnimatedVisibility(visible = isSelected) {
+                                AnimatedVisibility(
+                                    visible = isSelected,
+                                    enter = fadeIn(animationSpec = ExpressiveMotionTokens.SnappySpring) + expandHorizontally(
+                                        animationSpec = ExpressiveMotionTokens.SpatialSizeSpring
+                                    ),
+                                    exit = fadeOut(animationSpec = ExpressiveMotionTokens.SnappySpring) + shrinkHorizontally(
+                                        animationSpec = ExpressiveMotionTokens.SpatialSizeSpring
+                                    )
+                                ) {
                                     Row {
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
@@ -163,13 +181,24 @@ fun VehicleFloatingToolbar(
                 defaultElevation = 3.dp,
                 pressedElevation = 6.dp
             ),
-            modifier = Modifier.size(56.dp)
+            modifier = Modifier
+                .size(56.dp)
+                .expressiveBounceClick(pressedScale = 0.92f)
         ) {
-            Icon(
-                imageVector = fabIcon,
-                contentDescription = fabContentDescription,
-                modifier = Modifier.size(24.dp)
-            )
+            AnimatedContent(
+                targetState = fabIcon,
+                transitionSpec = {
+                    (scaleIn(animationSpec = ExpressiveMotionTokens.BouncySpring) + fadeIn(ExpressiveMotionTokens.SnappySpring))
+                        .togetherWith(scaleOut(animationSpec = ExpressiveMotionTokens.SnappySpring) + fadeOut(ExpressiveMotionTokens.SnappySpring))
+                },
+                label = "fab_icon_transition"
+            ) { icon ->
+                Icon(
+                    imageVector = icon,
+                    contentDescription = fabContentDescription,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }

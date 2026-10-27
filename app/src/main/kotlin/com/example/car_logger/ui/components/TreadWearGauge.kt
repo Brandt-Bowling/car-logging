@@ -1,7 +1,6 @@
 package com.example.car_logger.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
@@ -18,6 +17,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.car_logger.ui.theme.ExpressiveMotionTokens
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -31,7 +31,7 @@ fun TreadWearGauge(
 ) {
     val animatedProgress by animateFloatAsState(
         targetValue = percentage.coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 800),
+        animationSpec = ExpressiveMotionTokens.SoftSpring,
         label = "tread_wear_progress"
     )
 

@@ -19,10 +19,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,6 +45,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.MaintenanceRecord
+import com.example.car_logger.ui.theme.ExpressiveMotionTokens
+import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -145,7 +147,7 @@ fun ActivityTab(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        imageVector = Icons.Filled.ReceiptLong,
+                        imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
                         contentDescription = null,
                         modifier = Modifier.size(56.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -169,7 +171,12 @@ fun ActivityTab(
                         record = record,
                         car = car,
                         onClick = { onRecordClick(record) },
-                        onAttachmentClick = { onAttachmentClick(record) }
+                        onAttachmentClick = { onAttachmentClick(record) },
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = ExpressiveMotionTokens.ItemFadeSpring,
+                            fadeOutSpec = ExpressiveMotionTokens.ItemFadeSpring,
+                            placementSpec = ExpressiveMotionTokens.ItemPlacementSpring
+                        )
                     )
                 }
                 item {
@@ -185,13 +192,14 @@ fun RecordListItem(
     record: MaintenanceRecord,
     car: Car?,
     onClick: () -> Unit,
-    onAttachmentClick: () -> Unit
+    onAttachmentClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .expressiveBounceClick(pressedScale = 0.98f, onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),

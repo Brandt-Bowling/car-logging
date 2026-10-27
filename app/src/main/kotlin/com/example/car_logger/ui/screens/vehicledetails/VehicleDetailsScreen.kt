@@ -1,6 +1,12 @@
 package com.example.car_logger.ui.screens.vehicledetails
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -55,6 +61,7 @@ import com.example.car_logger.ui.screens.dialogs.DriveFolderPickerSheet
 import com.example.car_logger.ui.screens.vehicledetails.tabs.GloveboxTab
 import com.example.car_logger.ui.screens.vehicledetails.tabs.MaintenanceTab
 import com.example.car_logger.ui.screens.vehicledetails.tabs.TiresTab
+import com.example.car_logger.ui.theme.ExpressiveMotionTokens
 import com.example.car_logger.ui.theme.ExpressiveThemeTokens
 import kotlinx.coroutines.launch
 
@@ -224,41 +231,63 @@ fun VehicleDetailsScreen(
                 .fillMaxSize()
                 .nestedScroll(nestedScrollConnection)
         ) {
-            // Distinct enveloped body sheet
+            // Distinct enveloped body sheet with springy subview transitions
             EnvelopedBodyCanvas {
-                when (currentSubView) {
-                    VehicleSubView.MAINTENANCE -> {
-                        MaintenanceTab(
-                            car = carItem,
-                            records = records,
-                            onRecordClick = onOpenRecordDialog,
-                            onAttachmentClick = onOpenAttachmentViewer,
-                            onDeleteRecord = { viewModel.deleteRecord(it) },
-                            onUpdateCar = { viewModel.updateCar(it) }
+                AnimatedContent(
+                    targetState = currentSubView,
+                    transitionSpec = {
+                        val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                        (slideInHorizontally(
+                            initialOffsetX = { fullWidth -> direction * fullWidth / 4 },
+                            animationSpec = ExpressiveMotionTokens.SpatialOffsetSpring
+                        ) + fadeIn(
+                            animationSpec = ExpressiveMotionTokens.SpatialSpring
+                        )).togetherWith(
+                            slideOutHorizontally(
+                                targetOffsetX = { fullWidth -> -direction * fullWidth / 4 },
+                                animationSpec = ExpressiveMotionTokens.SpatialOffsetSpring
+                            ) + fadeOut(
+                                animationSpec = ExpressiveMotionTokens.SpatialSpring
+                            )
                         )
-                    }
-                    VehicleSubView.TIRES -> {
-                        TiresTab(
-                            car = carItem,
-                            activeTire = activeTire,
-                            onLogRotation = { date, odo -> viewModel.logTireRotation(date, odo) },
-                            onInstallNewTire = { viewModel.installNewTireSet(it) },
-                            onUpdateCar = { viewModel.updateCar(it) }
-                        )
-                    }
-                    VehicleSubView.GLOVEBOX -> {
-                        GloveboxTab(
-                            car = carItem,
-                            glovebox = glovebox,
-                            googleDriveService = googleDriveService,
-                            isSyncingDrive = isSyncingDrive,
-                            onOpenFolderPicker = { showFolderPickerSheet = true },
-                            onSyncDriveFolder = {
-                                viewModel.syncDriveFolder(googleDriveService, preferencesManager)
-                            },
-                            onUpdateOdometer = { viewModel.updateOdometer(it) },
-                            onUpdateDocument = { reg, ins, man -> viewModel.updateGloveboxDocument(reg, ins, man) }
-                        )
+                    },
+                    label = "vehicle_subview_transition",
+                    modifier = Modifier.fillMaxSize()
+                ) { subView ->
+                    when (subView) {
+                        VehicleSubView.MAINTENANCE -> {
+                            MaintenanceTab(
+                                car = carItem,
+                                records = records,
+                                onRecordClick = onOpenRecordDialog,
+                                onAttachmentClick = onOpenAttachmentViewer,
+                                onDeleteRecord = { viewModel.deleteRecord(it) },
+                                onUpdateCar = { viewModel.updateCar(it) }
+                            )
+                        }
+                        VehicleSubView.TIRES -> {
+                            TiresTab(
+                                car = carItem,
+                                activeTire = activeTire,
+                                onLogRotation = { date, odo -> viewModel.logTireRotation(date, odo) },
+                                onInstallNewTire = { viewModel.installNewTireSet(it) },
+                                onUpdateCar = { viewModel.updateCar(it) }
+                            )
+                        }
+                        VehicleSubView.GLOVEBOX -> {
+                            GloveboxTab(
+                                car = carItem,
+                                glovebox = glovebox,
+                                googleDriveService = googleDriveService,
+                                isSyncingDrive = isSyncingDrive,
+                                onOpenFolderPicker = { showFolderPickerSheet = true },
+                                onSyncDriveFolder = {
+                                    viewModel.syncDriveFolder(googleDriveService, preferencesManager)
+                                },
+                                onUpdateOdometer = { viewModel.updateOdometer(it) },
+                                onUpdateDocument = { reg, ins, man -> viewModel.updateGloveboxDocument(reg, ins, man) }
+                            )
+                        }
                     }
                 }
             }
