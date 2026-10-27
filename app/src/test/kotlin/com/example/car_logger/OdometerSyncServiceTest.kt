@@ -251,4 +251,27 @@ class OdometerSyncServiceTest {
             OdometerSyncService.parseSmartcarErrorDetail(permErrorPayload)
         )
     }
+
+    @Test
+    fun `buildSmartcarAuthUrl constructs clean url without scope parameter`() {
+        val testAppId = "c6e28e0b-2199-47e6-b367-51cb96965b30"
+        val url = OdometerSyncService.buildSmartcarAuthUrl(testAppId)
+
+        assertTrue(url.startsWith("https://connect.smartcar.com/oauth/authorize?"))
+        assertTrue(url.contains("application_id=$testAppId"))
+        assertTrue(url.contains("response_type=none"))
+        assertTrue(url.contains("redirect_uri=https%3A%2F%2Fcar-logger-track.web.app%2Foauth%2Fsmartcar"))
+        assertTrue(url.contains("mode=live"))
+        assertFalse("Url should not contain scope parameter because v3 permissions are configured in Smartcar Dashboard", url.contains("scope="))
+    }
+
+    @Test
+    fun `buildSmartcarAuthUrl falls back from client_id prefix to default application id`() {
+        val clientPrefixedId = "client_01M5REPWJCMZEPD8QKP13FJN4H"
+        val url = OdometerSyncService.buildSmartcarAuthUrl(clientPrefixedId)
+
+        assertTrue(url.contains("application_id=c6e28e0b-2199-47e6-b367-51cb96965b30"))
+        assertFalse(url.contains("client_01M5REPWJCMZEPD8QKP13FJN4H"))
+        assertFalse(url.contains("scope="))
+    }
 }

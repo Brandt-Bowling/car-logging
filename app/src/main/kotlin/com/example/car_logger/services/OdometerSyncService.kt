@@ -312,26 +312,25 @@ class OdometerSyncService(
                 else -> null
             }
         }
+
+        fun buildSmartcarAuthUrl(clientOrAppId: String): String {
+            val trimmed = clientOrAppId.trim()
+            val appId = if ((trimmed.isBlank() || trimmed.startsWith("client_")) && DEFAULT_SMARTCAR_APPLICATION_ID.isNotBlank()) {
+                DEFAULT_SMARTCAR_APPLICATION_ID.trim()
+            } else {
+                trimmed
+            }
+            val encodedAppId = URLEncoder.encode(appId, "UTF-8")
+            val encodedRedirect = URLEncoder.encode(SMARTCAR_REDIRECT_URI, "UTF-8")
+            return "https://connect.smartcar.com/oauth/authorize" +
+                "?application_id=$encodedAppId" +
+                "&response_type=none" +
+                "&redirect_uri=$encodedRedirect" +
+                "&mode=live"
+        }
     }
 
-    fun buildSmartcarAuthUrl(clientOrAppId: String): String {
-        val trimmed = clientOrAppId.trim()
-        val appId = if ((trimmed.isBlank() || trimmed.startsWith("client_")) && DEFAULT_SMARTCAR_APPLICATION_ID.isNotBlank()) {
-            DEFAULT_SMARTCAR_APPLICATION_ID.trim()
-        } else {
-            trimmed
-        }
-        val encodedAppId = URLEncoder.encode(appId, "UTF-8")
-        val encodedRedirect = URLEncoder.encode(SMARTCAR_REDIRECT_URI, "UTF-8")
-        val encodedScope = URLEncoder.encode("required:read_vehicle_info required:read_odometer", "UTF-8")
-            .replace("+", "%20")
-        return "https://connect.smartcar.com/oauth/authorize" +
-            "?application_id=$encodedAppId" +
-            "&response_type=none" +
-            "&redirect_uri=$encodedRedirect" +
-            "&scope=$encodedScope" +
-            "&mode=live"
-    }
+    fun buildSmartcarAuthUrl(clientOrAppId: String): String = Companion.buildSmartcarAuthUrl(clientOrAppId)
 
     suspend fun resolveSmartcarAuthUrl(clientOrAppId: String): String = withContext(Dispatchers.IO) {
         val trimmed = clientOrAppId.trim()
