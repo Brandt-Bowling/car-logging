@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Glovebox
 import com.example.car_logger.services.GoogleDriveService
+import com.example.car_logger.ui.theme.expressiveBounceClick
 import com.example.car_logger.services.OdometerSyncService
 import java.text.NumberFormat
 import java.util.Locale
@@ -318,7 +319,8 @@ fun DocumentCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp)),
+            .clip(RoundedCornerShape(18.dp))
+            .expressiveBounceClick(pressedScale = 0.98f),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),

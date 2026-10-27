@@ -7,6 +7,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +44,7 @@ import com.example.car_logger.ui.screens.home.HomeViewModel
 import com.example.car_logger.ui.screens.vehicledetails.VehicleDetailsScreen
 import com.example.car_logger.ui.screens.vehicledetails.VehicleDetailsViewModel
 import com.example.car_logger.ui.theme.CarLoggerTheme
+import com.example.car_logger.ui.theme.ExpressiveMotionTokens
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -96,7 +101,39 @@ class MainActivity : ComponentActivity() {
                 NavHost(
                     navController = navController,
                     startDestination = "home",
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    enterTransition = {
+                        slideInHorizontally(
+                            initialOffsetX = { fullWidth -> fullWidth },
+                            animationSpec = ExpressiveMotionTokens.SpatialOffsetSpring
+                        ) + fadeIn(
+                            animationSpec = ExpressiveMotionTokens.SpatialSpring
+                        )
+                    },
+                    exitTransition = {
+                        slideOutHorizontally(
+                            targetOffsetX = { fullWidth -> -fullWidth / 4 },
+                            animationSpec = ExpressiveMotionTokens.SpatialOffsetSpring
+                        ) + fadeOut(
+                            animationSpec = ExpressiveMotionTokens.SpatialSpring
+                        )
+                    },
+                    popEnterTransition = {
+                        slideInHorizontally(
+                            initialOffsetX = { fullWidth -> -fullWidth / 4 },
+                            animationSpec = ExpressiveMotionTokens.SpatialOffsetSpring
+                        ) + fadeIn(
+                            animationSpec = ExpressiveMotionTokens.SpatialSpring
+                        )
+                    },
+                    popExitTransition = {
+                        slideOutHorizontally(
+                            targetOffsetX = { fullWidth -> fullWidth },
+                            animationSpec = ExpressiveMotionTokens.SpatialOffsetSpring
+                        ) + fadeOut(
+                            animationSpec = ExpressiveMotionTokens.SpatialSpring
+                        )
+                    }
                 ) {
                     composable("home") {
                         HomeScreen(
