@@ -1,5 +1,6 @@
 package com.example.car_logger.ui.screens.home.tabs
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.car_logger.ui.screens.home.ScheduledServiceItem
 import com.example.car_logger.ui.theme.AmberUrgent
+import com.example.car_logger.ui.theme.ExpressiveMotionTokens
+import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -78,7 +82,14 @@ fun ScheduleTab(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(scheduledServices) { item ->
-                ScheduledServiceCard(item = item)
+                ScheduledServiceCard(
+                    item = item,
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = ExpressiveMotionTokens.ItemFadeSpring,
+                        fadeOutSpec = ExpressiveMotionTokens.ItemFadeSpring,
+                        placementSpec = ExpressiveMotionTokens.ItemPlacementSpring
+                    )
+                )
             }
             item {
                 Spacer(modifier = Modifier.height(80.dp))
@@ -88,7 +99,10 @@ fun ScheduleTab(
 }
 
 @Composable
-fun ScheduledServiceCard(item: ScheduledServiceItem) {
+fun ScheduledServiceCard(
+    item: ScheduledServiceItem,
+    modifier: Modifier = Modifier
+) {
     val isOverdue = item.remainingMiles < 0
     val isUrgent = item.isUrgent
 
@@ -99,9 +113,10 @@ fun ScheduledServiceCard(item: ScheduledServiceItem) {
     }
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp)),
+            .clip(RoundedCornerShape(20.dp))
+            .expressiveBounceClick(pressedScale = 0.98f),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = cardColor,
@@ -185,15 +200,21 @@ fun ScheduledServiceCard(item: ScheduledServiceItem) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Progress bar
-            val progress = when {
+            // Spring-animated progress bar
+            val targetProgress = when {
                 isOverdue -> 1f
                 item.remainingMiles > 5000 -> 0.1f
                 else -> (5000 - item.remainingMiles) / 5000f
             }.coerceIn(0f, 1f)
 
+            val animatedProgress by animateFloatAsState(
+                targetValue = targetProgress,
+                animationSpec = ExpressiveMotionTokens.SoftSpring,
+                label = "service_progress"
+            )
+
             LinearProgressIndicator(
-                progress = { progress },
+                progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)

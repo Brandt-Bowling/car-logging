@@ -1,5 +1,6 @@
 package com.example.car_logger.ui.screens.vehicledetails.tabs
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +50,8 @@ import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.ui.screens.dialogs.TireRotationIntervalDialog
 import com.example.car_logger.ui.theme.AmberUrgent
+import com.example.car_logger.ui.theme.ExpressiveMotionTokens
+import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -186,14 +189,20 @@ fun MaintenanceTab(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    val progress = when {
+                    val targetProgress = when {
                         isOverdue -> 1f
                         remainingMiles > interval -> 0.1f
                         else -> (interval - remainingMiles).toFloat() / interval.toFloat()
                     }.coerceIn(0f, 1f)
 
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = targetProgress,
+                        animationSpec = ExpressiveMotionTokens.SoftSpring,
+                        label = "maintenance_progress"
+                    )
+
                     LinearProgressIndicator(
-                        progress = { progress },
+                        progress = { animatedProgress },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(6.dp)
@@ -283,7 +292,12 @@ fun MaintenanceTab(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .clickable { onRecordClick(record) },
+                        .animateItem(
+                            fadeInSpec = ExpressiveMotionTokens.ItemFadeSpring,
+                            fadeOutSpec = ExpressiveMotionTokens.ItemFadeSpring,
+                            placementSpec = ExpressiveMotionTokens.ItemPlacementSpring
+                        )
+                        .expressiveBounceClick(pressedScale = 0.98f) { onRecordClick(record) },
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
