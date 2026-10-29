@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
@@ -50,8 +51,8 @@ class GeminiAiService(
     companion object {
         private const val TAG = "GeminiAiService"
         private const val MODEL_NAME = "gemini-2.5-flash"
-        private const val IMAGEN_MODEL = "imagen-3.0-generate-002"
-        private const val IMAGEN_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+        private const val IMAGE_MODEL = "gemini-2.5-flash-image"
+        private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
         private val json = Json {
             ignoreUnknownKeys = true
@@ -238,30 +239,17 @@ class GeminiAiService(
         }
 
         try {
-            val url = "$IMAGEN_BASE_URL/$IMAGEN_MODEL:predict?key=$apiKey"
-            val requestJson = buildJsonObject {
-                put("instances", buildJsonArray {
-                    add(buildJsonObject {
-                        put("prompt", prompt)
-                    })
-                })
-                put("parameters", buildJsonObject {
-                    put("sampleCount", 1)
-                    put("aspectRatio", aspectRatio)
-                    put("outputMimeType", "image/jpeg")
-                })
+            var response = executeImageRequest(apiKey, prompt, aspectRatio)
+            var bodyString = response.body?.string() ?: ""
+
+            // If imageConfig is rejected by API/proxy, retry once without imageConfig
+            if (!response.isSuccessful && response.code == 400 && bodyString.contains("imageConfig")) {
+                response.close()
+                response = executeImageRequest(apiKey, prompt, aspectRatio = null)
+                bodyString = response.body?.string() ?: ""
             }
 
-            val requestBody = requestJson.toString().toRequestBody("application/json".toMediaType())
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("Content-Type", "application/json")
-                .addHeader("Accept", "application/json")
-                .post(requestBody)
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                val bodyString = response.body?.string() ?: ""
+            response.use {
                 if (!response.isSuccessful) {
                     val errorMsg = try {
                         val errorRoot = json.parseToJsonElement(bodyString).jsonObject
@@ -273,14 +261,41 @@ class GeminiAiService(
                 }
 
                 val root = json.parseToJsonElement(bodyString).jsonObject
-                val predictions = root["predictions"]?.jsonArray
-                if (predictions.isNullOrEmpty()) {
-                    return@withContext Result.failure(Exception("No image returned from Imagen API"))
+
+                // 1. Extract base64 image data from candidates[0].content.parts[].inlineData.data
+                var base64Bytes: String? = null
+                var textExplanation: String? = null
+                val candidates = root["candidates"]?.jsonArray
+                val firstCandidate = candidates?.firstOrNull()?.jsonObject
+                val parts = firstCandidate?.get("content")?.jsonObject?.get("parts")?.jsonArray
+
+                if (parts != null) {
+                    for (part in parts) {
+                        val partObj = part.jsonObject
+                        val inlineData = partObj["inlineData"]?.jsonObject
+                        val data = inlineData?.get("data")?.jsonPrimitive?.content
+                            ?: inlineData?.get("bytesBase64Encoded")?.jsonPrimitive?.content
+                        if (!data.isNullOrBlank()) {
+                            base64Bytes = data
+                            break
+                        }
+                        if (partObj["text"] != null) {
+                            textExplanation = partObj["text"]?.jsonPrimitive?.content
+                        }
+                    }
                 }
 
-                val firstPrediction = predictions[0].jsonObject
-                val base64Bytes = firstPrediction["bytesBase64Encoded"]?.jsonPrimitive?.content
-                    ?: return@withContext Result.failure(Exception("Missing base64 data in response"))
+                // 2. Fallback to legacy Imagen predictions format if present
+                if (base64Bytes == null) {
+                    val predictions = root["predictions"]?.jsonArray
+                    val firstPrediction = predictions?.firstOrNull()?.jsonObject
+                    base64Bytes = firstPrediction?.get("bytesBase64Encoded")?.jsonPrimitive?.content
+                }
+
+                if (base64Bytes.isNullOrBlank()) {
+                    val detail = textExplanation?.let { ": $it" } ?: ""
+                    return@withContext Result.failure(Exception("No image returned from Gemini AI$detail"))
+                }
 
                 val imageBytes = Base64.decode(base64Bytes, Base64.DEFAULT)
                 return@withContext Result.success(imageBytes)
@@ -289,5 +304,44 @@ class GeminiAiService(
             Log.e(TAG, "Error generating vehicle image", e)
             return@withContext Result.failure(e)
         }
+    }
+
+    private fun executeImageRequest(
+        apiKey: String,
+        prompt: String,
+        aspectRatio: String?
+    ): okhttp3.Response {
+        val url = "$GEMINI_BASE_URL/$IMAGE_MODEL:generateContent?key=$apiKey"
+        val requestJson = buildJsonObject {
+            put("contents", buildJsonArray {
+                add(buildJsonObject {
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject {
+                            put("text", prompt)
+                        })
+                    })
+                })
+            })
+            put("generationConfig", buildJsonObject {
+                put("responseModalities", buildJsonArray {
+                    add(JsonPrimitive("IMAGE"))
+                })
+                if (!aspectRatio.isNullOrBlank()) {
+                    put("imageConfig", buildJsonObject {
+                        put("aspectRatio", aspectRatio)
+                    })
+                }
+            })
+        }
+
+        val requestBody = requestJson.toString().toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Accept", "application/json")
+            .post(requestBody)
+            .build()
+
+        return client.newCall(request).execute()
     }
 }
