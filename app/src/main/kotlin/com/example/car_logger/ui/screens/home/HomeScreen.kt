@@ -250,7 +250,26 @@ fun HomeScreen(
                                 onToggleArchive = { viewModel.toggleArchiveCar(it) },
                                 onDeleteCar = { viewModel.deleteCar(it) },
                                 onAddCarClick = onOpenAddCarSheet,
-                                onUpdateCar = { viewModel.updateCar(it) }
+                                onUpdateCar = { viewModel.updateCar(it) },
+                                onGenerateAiImage = { car, color, trim, env ->
+                                    viewModel.generateVehicleAiImage(
+                                        year = car.year,
+                                        make = car.make,
+                                        model = car.model,
+                                        color = color,
+                                        trim = trim,
+                                        environment = env
+                                    )
+                                },
+                                onSaveCustomImage = { car, bytes ->
+                                    viewModel.saveCustomVehicleImage(car, bytes)
+                                },
+                                onSaveImageFromUri = { car, uri ->
+                                    viewModel.saveVehicleImageFromUri(car, uri)
+                                },
+                                onResetVehicleImage = { car ->
+                                    viewModel.resetVehicleImage(car)
+                                }
                             )
                         }
                         GarageNavigationTab.ACTIVITY -> {

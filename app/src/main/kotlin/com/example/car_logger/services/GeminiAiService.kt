@@ -2,6 +2,7 @@ package com.example.car_logger.services
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.Base64
 import android.util.Log
 import com.example.car_logger.data.local.PreferencesManager
 import com.google.ai.client.generativeai.GenerativeModel
@@ -11,12 +12,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 @Serializable
@@ -31,11 +41,17 @@ data class ParsedReceiptResult(
 )
 
 class GeminiAiService(
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager? = null,
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .build()
 ) {
     companion object {
         private const val TAG = "GeminiAiService"
         private const val MODEL_NAME = "gemini-2.5-flash"
+        private const val IMAGEN_MODEL = "imagen-3.0-generate-002"
+        private const val IMAGEN_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
         private val json = Json {
             ignoreUnknownKeys = true
@@ -53,8 +69,8 @@ class GeminiAiService(
             val dateMatcher = datePattern.matcher(fileName)
             if (dateMatcher.find()) {
                 val y = dateMatcher.group(1)
-                val m = dateMatcher.group(2).padStart(2, '0')
-                val d = dateMatcher.group(3).padStart(2, '0')
+                val m = dateMatcher.group(2)?.padStart(2, '0') ?: "01"
+                val d = dateMatcher.group(3)?.padStart(2, '0') ?: "01"
                 date = "$y-$m-$d"
             }
 
@@ -64,7 +80,7 @@ class GeminiAiService(
             val odoMatcher = odoPattern.matcher(cleanName)
             while (odoMatcher.find()) {
                 val numStr = odoMatcher.group(1)
-                val num = numStr.toIntOrNull() ?: 0
+                val num = numStr?.toIntOrNull() ?: 0
                 if (num in 500..500000 && num > odometer) {
                     odometer = num
                 }
@@ -75,7 +91,7 @@ class GeminiAiService(
             val costPattern = Pattern.compile("""\$(?:[0-9]+(?:\.[0-9]{2})?)""")
             val costMatcher = costPattern.matcher(cleanName)
             if (costMatcher.find()) {
-                cost = costMatcher.group(0).removePrefix("$").toDoubleOrNull()
+                cost = costMatcher.group(0)?.removePrefix("$")?.toDoubleOrNull()
             }
 
             // 4. Extract Title based on common keywords
@@ -108,7 +124,7 @@ class GeminiAiService(
         mimeType: String,
         fileBytes: ByteArray?
     ): ParsedReceiptResult = withContext(Dispatchers.IO) {
-        val apiKey = preferencesManager.getGeminiApiKey()
+        val apiKey = preferencesManager?.getGeminiApiKey()
 
         if (!apiKey.isNullOrBlank() && fileBytes != null && fileBytes.isNotEmpty()) {
             try {
@@ -195,5 +211,83 @@ class GeminiAiService(
             cost = cost,
             description = description
         )
+    }
+
+    fun buildVehiclePrompt(
+        year: Int,
+        make: String,
+        model: String,
+        color: String,
+        trim: String? = null,
+        environment: String = "clean paved driveway"
+    ): String {
+        val trimPart = trim?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
+        val envPart = environment.takeIf { it.isNotBlank() }?.let { " parked on a $it" } ?: ""
+        return "A realistic, high-quality, professional exterior automotive photograph of a $year $make $model$trimPart in $color paint, front three-quarters angle,$envPart in bright natural daylight, clean background, sharp focus, 4k."
+    }
+
+    suspend fun generateVehicleImage(
+        prompt: String,
+        aspectRatio: String = "16:9"
+    ): Result<ByteArray> = withContext(Dispatchers.IO) {
+        val apiKey = preferencesManager?.getGeminiApiKey()
+        if (apiKey.isNullOrBlank()) {
+            return@withContext Result.failure(
+                IllegalStateException("Gemini API key is not configured. Please add your Gemini API key in Settings.")
+            )
+        }
+
+        try {
+            val url = "$IMAGEN_BASE_URL/$IMAGEN_MODEL:predict?key=$apiKey"
+            val requestJson = buildJsonObject {
+                put("instances", buildJsonArray {
+                    add(buildJsonObject {
+                        put("prompt", prompt)
+                    })
+                })
+                put("parameters", buildJsonObject {
+                    put("sampleCount", 1)
+                    put("aspectRatio", aspectRatio)
+                    put("outputMimeType", "image/jpeg")
+                })
+            }
+
+            val requestBody = requestJson.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Accept", "application/json")
+                .post(requestBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val bodyString = response.body?.string() ?: ""
+                if (!response.isSuccessful) {
+                    val errorMsg = try {
+                        val errorRoot = json.parseToJsonElement(bodyString).jsonObject
+                        errorRoot["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content ?: bodyString
+                    } catch (e: Exception) {
+                        bodyString.ifBlank { "HTTP ${response.code}" }
+                    }
+                    return@withContext Result.failure(Exception("Image generation failed: $errorMsg"))
+                }
+
+                val root = json.parseToJsonElement(bodyString).jsonObject
+                val predictions = root["predictions"]?.jsonArray
+                if (predictions.isNullOrEmpty()) {
+                    return@withContext Result.failure(Exception("No image returned from Imagen API"))
+                }
+
+                val firstPrediction = predictions[0].jsonObject
+                val base64Bytes = firstPrediction["bytesBase64Encoded"]?.jsonPrimitive?.content
+                    ?: return@withContext Result.failure(Exception("Missing base64 data in response"))
+
+                val imageBytes = Base64.decode(base64Bytes, Base64.DEFAULT)
+                return@withContext Result.success(imageBytes)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error generating vehicle image", e)
+            return@withContext Result.failure(e)
+        }
     }
 }

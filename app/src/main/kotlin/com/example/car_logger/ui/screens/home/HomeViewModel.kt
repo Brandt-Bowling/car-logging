@@ -10,6 +10,8 @@ import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.MaintenanceRecordEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.MaintenanceRecord
+import com.example.car_logger.data.vehicle.VehicleImageRepository
+import com.example.car_logger.services.GeminiAiService
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.components.GarageNavigationTab
@@ -41,6 +43,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val preferencesManager = PreferencesManager(application)
     val googleDriveService = GoogleDriveService(application)
     val odometerSyncService = OdometerSyncService(preferencesManager, carDao)
+    val vehicleImageRepository = VehicleImageRepository(application, carDao)
+    val geminiAiService = GeminiAiService(preferencesManager)
     private var initialTelemetryChecked = false
 
     private val _toastMessage = MutableSharedFlow<String>(extraBufferCapacity = 2)
@@ -202,6 +206,61 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else {
                 _toastMessage.tryEmit("Failed to connect $providerLabel")
+            }
+        }
+    }
+
+    suspend fun generateVehicleAiImage(
+        year: Int,
+        make: String,
+        model: String,
+        color: String,
+        trim: String? = null,
+        environment: String? = null
+    ): Result<ByteArray> {
+        val prompt = geminiAiService.buildVehiclePrompt(
+            year = year,
+            make = make,
+            model = model,
+            color = color,
+            trim = trim,
+            environment = environment ?: "clean paved driveway"
+        )
+        return geminiAiService.generateVehicleImage(prompt)
+    }
+
+    fun saveCustomVehicleImage(car: Car, imageBytes: ByteArray, onComplete: ((Car) -> Unit)? = null) {
+        viewModelScope.launch {
+            val result = vehicleImageRepository.saveCustomImage(car, imageBytes)
+            result.onSuccess { updatedCar ->
+                _toastMessage.emit("Updated photo for ${car.displayName}")
+                onComplete?.invoke(updatedCar)
+            }.onFailure { err ->
+                _toastMessage.emit("Failed to save image: ${err.message}")
+            }
+        }
+    }
+
+    fun saveVehicleImageFromUri(car: Car, uri: Uri, onComplete: ((Car) -> Unit)? = null) {
+        viewModelScope.launch {
+            val result = vehicleImageRepository.saveImageFromUri(car, uri)
+            result.onSuccess { updatedCar ->
+                _toastMessage.emit("Updated photo for ${car.displayName}")
+                onComplete?.invoke(updatedCar)
+            }.onFailure { err ->
+                _toastMessage.emit("Failed to import photo: ${err.message}")
+            }
+        }
+    }
+
+    fun resetVehicleImage(car: Car, onComplete: ((Car) -> Unit)? = null) {
+        viewModelScope.launch {
+            val result = vehicleImageRepository.resetToDefaultImage(car)
+            result.onSuccess { updatedCar ->
+                _toastMessage.emit("Reset photo for ${car.displayName}")
+                onComplete?.invoke(updatedCar)
+            }.onFailure { err ->
+                _toastMessage.emit("Failed to reset photo: ${err.message}")
             }
         }
     }
