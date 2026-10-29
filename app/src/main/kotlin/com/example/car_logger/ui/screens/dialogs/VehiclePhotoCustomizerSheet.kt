@@ -274,7 +274,7 @@ fun VehiclePhotoCustomizerSheet(
 
             when (selectedTab) {
                 0 -> {
-                    // TAB 0: AI Generator (Imagen 3)
+                    // TAB 0: AI Generator (Gemini Flash Image)
                     Text(
                         text = "Vehicle Paint Color",
                         style = MaterialTheme.typography.labelLarge,
@@ -388,7 +388,7 @@ fun VehiclePhotoCustomizerSheet(
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                "Generating photo with Imagen 3...",
+                                "Generating photo with Gemini AI...",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -470,7 +470,7 @@ fun VehiclePhotoCustomizerSheet(
                         ) {
                             Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Generate with Imagen 3", fontWeight = FontWeight.SemiBold)
+                            Text("Generate with Gemini AI", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
