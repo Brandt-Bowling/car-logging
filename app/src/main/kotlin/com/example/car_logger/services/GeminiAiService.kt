@@ -59,6 +59,29 @@ class GeminiAiService(
             isLenient = true
         }
 
+        fun parseImageGenerationError(statusCode: Int, rawBody: String): String {
+            val rawErrorMsg = try {
+                val errorRoot = json.parseToJsonElement(rawBody).jsonObject
+                errorRoot["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content ?: rawBody
+            } catch (e: Exception) {
+                rawBody.ifBlank { "HTTP $statusCode" }
+            }
+
+            return when {
+                rawErrorMsg.contains("free_tier_requests", ignoreCase = true) ||
+                (rawErrorMsg.contains("limit: 0") && rawErrorMsg.contains("quota", ignoreCase = true)) -> {
+                    "Gemini Image Generation requires a Google AI Studio project with billing enabled (Pay-As-You-Go). The Free Tier has a limit of 0 for image generation. Please enable billing in Google AI Studio or use 'Choose from Photo Library'."
+                }
+                statusCode == 429 -> {
+                    "Rate limit or quota exceeded. Note that image generation requires a Google AI Studio project with billing enabled."
+                }
+                statusCode == 403 || statusCode == 401 -> {
+                    "Invalid or unauthorized Gemini API key. Please verify your key in Settings."
+                }
+                else -> "Image generation failed: $rawErrorMsg"
+            }
+        }
+
         fun parseFromFileName(fileName: String): ParsedReceiptResult {
             val cleanName = fileName.substringBeforeLast(".")
                 .replace("_", " ")
@@ -251,13 +274,8 @@ class GeminiAiService(
 
             response.use {
                 if (!response.isSuccessful) {
-                    val errorMsg = try {
-                        val errorRoot = json.parseToJsonElement(bodyString).jsonObject
-                        errorRoot["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content ?: bodyString
-                    } catch (e: Exception) {
-                        bodyString.ifBlank { "HTTP ${response.code}" }
-                    }
-                    return@withContext Result.failure(Exception("Image generation failed: $errorMsg"))
+                    val friendlyMsg = parseImageGenerationError(response.code, bodyString)
+                    return@withContext Result.failure(Exception(friendlyMsg))
                 }
 
                 val root = json.parseToJsonElement(bodyString).jsonObject

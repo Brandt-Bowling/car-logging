@@ -49,4 +49,28 @@ class VehicleImagePromptAndRepositoryTest {
         assertNotNull(url)
         assertTrue(url!!.contains("3GNKDCRJ1RS284858-1.jpg"))
     }
+
+    @Test
+    fun testParseImageGenerationErrorWithFreeTierLimitZero() {
+        val rawBody = """
+            {
+              "error": {
+                "code": 429,
+                "message": "You exceeded your current quota, please check your plan and billing details. Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.5-flash-preview-image",
+                "status": "RESOURCE_EXHAUSTED"
+              }
+            }
+        """.trimIndent()
+
+        val parsed = GeminiAiService.parseImageGenerationError(429, rawBody)
+        assertTrue(parsed.contains("billing enabled"))
+        assertTrue(parsed.contains("Free Tier has a limit of 0"))
+    }
+
+    @Test
+    fun testParseImageGenerationErrorWithAuthFailure() {
+        val rawBody = """{"error": {"code": 401, "message": "API key not valid"}}"""
+        val parsed = GeminiAiService.parseImageGenerationError(401, rawBody)
+        assertTrue(parsed.contains("Invalid or unauthorized Gemini API key"))
+    }
 }
