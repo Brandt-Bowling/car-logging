@@ -1,8 +1,10 @@
 package com.example.car_logger.ui.screens.home.tabs
 
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -35,13 +38,16 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,10 +64,12 @@ import coil3.compose.AsyncImage
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.screens.dialogs.TireRotationIntervalDialog
+import com.example.car_logger.ui.screens.dialogs.VehiclePhotoCustomizerSheet
 import com.example.car_logger.ui.theme.AmberUrgent
 import java.text.NumberFormat
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GarageTab(
     cars: List<Car>,
@@ -70,10 +78,38 @@ fun GarageTab(
     onDeleteCar: (String) -> Unit,
     onAddCarClick: () -> Unit,
     onUpdateCar: ((Car) -> Unit)? = null,
+    onGenerateAiImage: (suspend (car: Car, color: String, trim: String?, env: String?) -> Result<ByteArray>)? = null,
+    onSaveCustomImage: ((car: Car, bytes: ByteArray) -> Unit)? = null,
+    onSaveImageFromUri: ((car: Car, uri: Uri) -> Unit)? = null,
+    onResetVehicleImage: ((car: Car) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var carToDelete by remember { mutableStateOf<Car?>(null) }
     var carForRotationInterval by remember { mutableStateOf<Car?>(null) }
+    var carForPhotoCustomizer by remember { mutableStateOf<Car?>(null) }
+    val photoSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    if (carForPhotoCustomizer != null) {
+        val car = carForPhotoCustomizer!!
+        VehiclePhotoCustomizerSheet(
+            car = car,
+            sheetState = photoSheetState,
+            onGenerateAiImage = { color, trim, env ->
+                onGenerateAiImage?.invoke(car, color, trim, env)
+                    ?: Result.failure(IllegalStateException("AI generation not available"))
+            },
+            onSaveImageBytes = { bytes ->
+                onSaveCustomImage?.invoke(car, bytes)
+            },
+            onPickImageUri = { uri ->
+                onSaveImageFromUri?.invoke(car, uri)
+            },
+            onResetToStock = {
+                onResetVehicleImage?.invoke(car)
+            },
+            onDismissRequest = { carForPhotoCustomizer = null }
+        )
+    }
 
     if (carForRotationInterval != null) {
         val car = carForRotationInterval!!
@@ -158,7 +194,8 @@ fun GarageTab(
                     onClick = { onCarClick(car) },
                     onToggleArchive = { onToggleArchive(car.id) },
                     onDelete = { carToDelete = car },
-                    onEditRotationInterval = { carForRotationInterval = car }
+                    onEditRotationInterval = { carForRotationInterval = car },
+                    onOpenPhotoPicker = { carForPhotoCustomizer = car }
                 )
             }
             item {
@@ -174,7 +211,8 @@ fun VehicleCard(
     onClick: () -> Unit,
     onToggleArchive: () -> Unit,
     onDelete: () -> Unit,
-    onEditRotationInterval: (() -> Unit)? = null
+    onEditRotationInterval: (() -> Unit)? = null,
+    onOpenPhotoPicker: (() -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -199,9 +237,10 @@ fun VehicleCard(
                     .height(180.dp)
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             ) {
-                if (!car.imageUrl.isNullOrBlank()) {
+                val imageModel = car.localImagePath ?: car.imageUrl
+                if (!imageModel.isNullOrBlank()) {
                     AsyncImage(
-                        model = car.imageUrl,
+                        model = imageModel,
                         contentDescription = car.displayName,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -265,13 +304,13 @@ fun VehicleCard(
                     Box {
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.88f),
                             contentColor = MaterialTheme.colorScheme.onSurface,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                            tonalElevation = 4.dp,
-                            shadowElevation = 2.dp
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            tonalElevation = 6.dp,
+                            shadowElevation = 3.dp
                         ) {
-                            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
+                            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(34.dp)) {
                                 Icon(
                                     imageVector = Icons.Filled.MoreVert,
                                     contentDescription = "Options",
@@ -280,42 +319,147 @@ fun VehicleCard(
                                 )
                             }
                         }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false }
+
+                        MaterialTheme(
+                            shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(22.dp))
                         ) {
-                            if (onEditRotationInterval != null) {
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false },
+                                modifier = Modifier
+                                    .width(230.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    .border(
+                                        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                                        shape = RoundedCornerShape(22.dp)
+                                    ),
+                                shape = RoundedCornerShape(22.dp),
+                                tonalElevation = 6.dp,
+                                shadowElevation = 10.dp
+                            ) {
+                                // 1. Featured Action: Vehicle Photo Customization
+                                if (onOpenPhotoPicker != null) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(
+                                                    text = "Vehicle Photo",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                                Text(
+                                                    text = "Generate with AI or upload",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        },
+                                        leadingIcon = {
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = MaterialTheme.colorScheme.primaryContainer,
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.AutoAwesome,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                        onClick = {
+                                            menuExpanded = false
+                                            onOpenPhotoPicker()
+                                        }
+                                    )
+
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                    )
+                                }
+
+                                if (onEditRotationInterval != null) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "Rotation Interval",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Filled.Sync,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                        onClick = {
+                                            menuExpanded = false
+                                            onEditRotationInterval()
+                                        }
+                                    )
+                                }
+
                                 DropdownMenuItem(
-                                    text = { Text("Tire Rotation Interval") },
-                                    leadingIcon = {
-                                        Icon(Icons.Filled.Sync, contentDescription = null)
+                                    text = {
+                                        Text(
+                                            if (car.isArchived) "Unarchive" else "Archive",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium
+                                        )
                                     },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = if (car.isArchived) Icons.Filled.Unarchive else Icons.Filled.Archive,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                                     onClick = {
                                         menuExpanded = false
-                                        onEditRotationInterval()
+                                        onToggleArchive()
+                                    }
+                                )
+
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                )
+
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "Delete Vehicle",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                    onClick = {
+                                        menuExpanded = false
+                                        onDelete()
                                     }
                                 )
                             }
-                            DropdownMenuItem(
-                                text = { Text(if (car.isArchived) "Unarchive" else "Archive") },
-                                leadingIcon = {
-                                    Icon(if (car.isArchived) Icons.Filled.Unarchive else Icons.Filled.Archive, contentDescription = null)
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    onToggleArchive()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                                leadingIcon = {
-                                    Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    onDelete()
-                                }
-                            )
                         }
                     }
                 }
