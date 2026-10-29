@@ -5,8 +5,12 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -54,6 +59,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -482,198 +489,114 @@ fun SettingsTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Garage Name Card
+        // GENERAL Section
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp)),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text("Garage Name", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(garageName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            SettingsSectionHeader(title = "GENERAL")
+            Spacer(modifier = Modifier.height(6.dp))
+            SettingsGroupCard {
+                SettingsRowItem(
+                    icon = Icons.Filled.DirectionsCar,
+                    iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    title = "Garage Name",
+                    subtitle = garageName,
+                    onClick = { showGarageNameDialog = true },
+                    trailing = {
+                        IconButton(onClick = { showGarageNameDialog = true }) {
+                            Icon(Icons.Filled.Edit, contentDescription = "Edit Garage Name")
+                        }
                     }
-                    IconButton(onClick = { showGarageNameDialog = true }) {
-                        Icon(Icons.Filled.Edit, contentDescription = "Edit Garage Name")
-                    }
-                }
+                )
             }
         }
 
-        // Google Drive Sync Card
+        // CLOUD & BACKUP Section
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp)),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (currentUser != null) Icons.Filled.CloudDone else Icons.Filled.CloudOff,
-                            contentDescription = null,
-                            tint = if (currentUser != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("Google Drive Sync", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    if (currentUser != null) {
-                        Text("Connected: ${currentUser?.email}", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    googleDriveService.signOut()
+            SettingsSectionHeader(title = "CLOUD & BACKUP")
+            Spacer(modifier = Modifier.height(6.dp))
+            SettingsGroupCard {
+                val isConnected = currentUser != null
+                SettingsRowItem(
+                    icon = if (isConnected) Icons.Filled.CloudDone else Icons.Filled.CloudOff,
+                    iconContainerColor = if (isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    iconTint = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    title = "Google Drive Sync",
+                    subtitle = if (isConnected) "Connected: ${currentUser?.email}" else "Auto-scan & import receipts and documents",
+                    trailing = {
+                        if (isConnected) {
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        googleDriveService.signOut()
+                                    }
                                 }
+                            ) {
+                                Text("Disconnect")
                             }
-                        ) {
-                            Text("Disconnect")
-                        }
-                    } else {
-                        Text(
-                            "Connect Google Drive to automatically scan and import maintenance receipt documents and photos.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = {
-                                signInLauncher.launch(googleDriveService.getSignInIntent())
+                        } else {
+                            Button(
+                                onClick = {
+                                    signInLauncher.launch(googleDriveService.getSignInIntent())
+                                }
+                            ) {
+                                Text("Sign In")
                             }
-                        ) {
-                            Text("Sign In with Google")
                         }
                     }
-                }
+                )
             }
         }
 
-        // Gemini AI Card
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp)),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Receipt AI Parsing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val status = if (!geminiKey.isNullOrBlank()) "Active (Gemini 2.5 Flash)" else "Smart regex fallback (No API key)"
-                        Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    IconButton(onClick = { showGeminiKeyDialog = true }) {
-                        Icon(Icons.Filled.Key, contentDescription = "Configure Key")
-                    }
-                }
-            }
-        }
-
-        // Auto.dev Card
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp)),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.DirectionsCar, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Vehicle Specs API", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val status = if (!autoDevKey.isNullOrBlank()) "Custom API Key" else "Default auto.dev API Key"
-                        Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    IconButton(onClick = { showAutoDevKeyDialog = true }) {
-                        Icon(Icons.Filled.Key, contentDescription = "Configure Key")
-                    }
-                }
-            }
-        }
-
-        // Odometer Telemetry & Wake Guard Card
+        // VEHICLE TELEMETRY Section
         item {
             val gmCar = cars.firstOrNull { OdometerSyncService.resolveProviderForCar(it) == OdometerSyncService.PROVIDER_SMARTCAR }
             val teslaCar = cars.firstOrNull { OdometerSyncService.resolveProviderForCar(it) == OdometerSyncService.PROVIDER_TESLA }
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp)),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
+            SettingsSectionHeader(title = "VEHICLE TELEMETRY")
+            Spacer(modifier = Modifier.height(6.dp))
+            SettingsGroupCard {
                 Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    // Header row with Icon
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Odometer Sync", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Speed,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "Odometer Sync & Policies",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Battery-safe vehicle polling controls",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     // Wake Protection Mode
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Wake Guard", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Wake Guard",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             WakeProtectionPolicy.entries.forEach { policy ->
                                 FilterChip(
@@ -689,7 +612,11 @@ fun SettingsTab(
 
                     // Poll Cooldown
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Min Cooldown", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Min Cooldown",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf(24 to "24h", 72 to "72h", 168 to "7d").forEach { (hours, label) ->
                                 FilterChip(
@@ -703,7 +630,7 @@ fun SettingsTab(
                         }
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
                     // Smartcar (Blazer EV) Row
                     val gmSyncTimeText = OdometerSyncService.formatRelativeTime(gmCar?.lastOdometerSyncTime)
@@ -713,7 +640,11 @@ fun SettingsTab(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Smartcar (Blazer EV)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Smartcar (Blazer EV)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
                             val gmSub = when {
                                 !smartcarConnected && gmSyncTimeText == null -> "Not linked"
                                 gmSyncTimeText != null && gmCar != null && OdometerSyncService.isCooldownActive(gmCar.lastOdometerSyncTime, cooldownHours) ->
@@ -722,7 +653,11 @@ fun SettingsTab(
                                     "Synced $gmSyncTimeText"
                                 else -> "Connected • Not yet synced"
                             }
-                            Text(gmSub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                gmSub,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if ((!smartcarConnected || gmSyncTimeText == null) && odometerSyncService != null) {
@@ -747,11 +682,10 @@ fun SettingsTab(
                                     Text("Poll")
                                 }
                             }
-                            IconButton(onClick = { showSmartcarDialog = true }) {
-                                Icon(Icons.Filled.Key, contentDescription = "Configure Smartcar")
-                            }
                         }
                     }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
                     // Tesla Fleet (Model 3) Row
                     Row(
@@ -760,7 +694,11 @@ fun SettingsTab(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Tesla Fleet (Model 3)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Tesla Fleet (Model 3)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
                             val teslaSyncTimeText = OdometerSyncService.formatRelativeTime(teslaCar?.lastOdometerSyncTime)
                             val teslaSub = when {
                                 !teslaConnected -> "Not linked"
@@ -771,7 +709,11 @@ fun SettingsTab(
                                     "Synced $teslaSyncTimeText"
                                 else -> "Connected • Not yet synced"
                             }
-                            Text(teslaSub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                teslaSub,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (!teslaConnected && odometerSyncService != null) {
@@ -814,41 +756,117 @@ fun SettingsTab(
                                     Text("Wake")
                                 }
                             }
-                            IconButton(onClick = { showTeslaDialog = true }) {
-                                Icon(Icons.Filled.Key, contentDescription = "Configure Tesla")
-                            }
                         }
                     }
                 }
             }
         }
 
-        // About Card
+        // API KEYS & INTEGRATIONS Section
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp)),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text("Garage Journal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("Version 1.0.0 (Native Jetpack Compose)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+            SettingsSectionHeader(title = "API KEYS & INTEGRATIONS")
+            Spacer(modifier = Modifier.height(6.dp))
+            SettingsGroupCard {
+                // Gemini AI (Receipt Parsing)
+                val geminiStatus = if (!geminiKey.isNullOrBlank()) {
+                    "Active (Gemini 2.5 Flash)"
+                } else {
+                    "Smart regex fallback (No custom API key)"
                 }
+                SettingsRowItem(
+                    icon = Icons.Filled.AutoAwesome,
+                    iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = "Receipt AI Parsing",
+                    subtitle = geminiStatus,
+                    onClick = { showGeminiKeyDialog = true },
+                    trailing = {
+                        IconButton(onClick = { showGeminiKeyDialog = true }) {
+                            Icon(Icons.Filled.Key, contentDescription = "Configure Gemini Key")
+                        }
+                    }
+                )
+
+                SettingsItemDivider()
+
+                // Auto.dev (Vehicle Specs & Photos)
+                val autoDevStatus = if (!autoDevKey.isNullOrBlank()) {
+                    "Custom auto.dev API key configured"
+                } else {
+                    "Default bundled auto.dev API key"
+                }
+                SettingsRowItem(
+                    icon = Icons.Filled.DirectionsCar,
+                    iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    title = "Vehicle Specs API",
+                    subtitle = autoDevStatus,
+                    onClick = { showAutoDevKeyDialog = true },
+                    trailing = {
+                        IconButton(onClick = { showAutoDevKeyDialog = true }) {
+                            Icon(Icons.Filled.Key, contentDescription = "Configure Auto.dev Key")
+                        }
+                    }
+                )
+
+                SettingsItemDivider()
+
+                // Smartcar Developer Credentials
+                val smartcarStatus = if (smartcarConnected) {
+                    "Linked & configured (Tap to edit credentials)"
+                } else {
+                    "Client ID & Client Secret (Tap to configure)"
+                }
+                SettingsRowItem(
+                    icon = Icons.Filled.Key,
+                    iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    title = "Smartcar API (GM / Blazer EV)",
+                    subtitle = smartcarStatus,
+                    onClick = { showSmartcarDialog = true },
+                    trailing = {
+                        IconButton(onClick = { showSmartcarDialog = true }) {
+                            Icon(Icons.Filled.Key, contentDescription = "Configure Smartcar Credentials")
+                        }
+                    }
+                )
+
+                SettingsItemDivider()
+
+                // Tesla Fleet Developer Credentials
+                val teslaStatus = if (teslaConnected) {
+                    "Linked & configured (Tap to edit credentials)"
+                } else {
+                    "Client ID & Client Secret (Tap to configure)"
+                }
+                SettingsRowItem(
+                    icon = Icons.Filled.Key,
+                    iconContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = "Tesla Fleet API (Model 3)",
+                    subtitle = teslaStatus,
+                    onClick = { showTeslaDialog = true },
+                    trailing = {
+                        IconButton(onClick = { showTeslaDialog = true }) {
+                            Icon(Icons.Filled.Key, contentDescription = "Configure Tesla Credentials")
+                        }
+                    }
+                )
+            }
+        }
+
+        // ABOUT Section
+        item {
+            SettingsSectionHeader(title = "ABOUT")
+            Spacer(modifier = Modifier.height(6.dp))
+            SettingsGroupCard {
+                SettingsRowItem(
+                    icon = Icons.Filled.Info,
+                    iconContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = "Garage Journal",
+                    subtitle = "Version 1.0.0 • Native Jetpack Compose"
+                )
             }
         }
 
@@ -856,4 +874,111 @@ fun SettingsTab(
             Spacer(modifier = Modifier.height(80.dp))
         }
     }
+}
+
+@Composable
+private fun SettingsSectionHeader(title: String, modifier: Modifier = Modifier) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = modifier.padding(start = 12.dp, top = 4.dp)
+    )
+}
+
+@Composable
+private fun SettingsGroupCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun SettingsRowItem(
+    icon: ImageVector,
+    iconContainerColor: Color,
+    iconTint: Color,
+    title: String,
+    subtitle: String,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val clickableModifier = if (onClick != null) {
+        Modifier.clickable(onClick = onClick)
+    } else {
+        Modifier
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(clickableModifier)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(iconContainerColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (trailing != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            trailing()
+        }
+    }
+}
+
+@Composable
+private fun SettingsItemDivider(modifier: Modifier = Modifier) {
+    HorizontalDivider(
+        modifier = modifier.padding(start = 70.dp, end = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    )
 }

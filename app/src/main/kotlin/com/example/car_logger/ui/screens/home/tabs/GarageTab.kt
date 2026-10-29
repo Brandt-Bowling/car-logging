@@ -66,6 +66,8 @@ import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.screens.dialogs.TireRotationIntervalDialog
 import com.example.car_logger.ui.screens.dialogs.VehiclePhotoCustomizerSheet
 import com.example.car_logger.ui.theme.AmberUrgent
+import com.example.car_logger.ui.theme.ExpressiveMotionTokens
+import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -195,7 +197,12 @@ fun GarageTab(
                     onToggleArchive = { onToggleArchive(car.id) },
                     onDelete = { carToDelete = car },
                     onEditRotationInterval = { carForRotationInterval = car },
-                    onOpenPhotoPicker = { carForPhotoCustomizer = car }
+                    onOpenPhotoPicker = { carForPhotoCustomizer = car },
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = ExpressiveMotionTokens.ItemFadeSpring,
+                        fadeOutSpec = ExpressiveMotionTokens.ItemFadeSpring,
+                        placementSpec = ExpressiveMotionTokens.ItemPlacementSpring
+                    )
                 )
             }
             item {
@@ -212,15 +219,16 @@ fun VehicleCard(
     onToggleArchive: () -> Unit,
     onDelete: () -> Unit,
     onEditRotationInterval: (() -> Unit)? = null,
-    onOpenPhotoPicker: (() -> Unit)? = null
+    onOpenPhotoPicker: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
+            .expressiveBounceClick(pressedScale = 0.98f, onClick = onClick)
             .alpha(if (car.isArchived) 0.65f else 1f),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(

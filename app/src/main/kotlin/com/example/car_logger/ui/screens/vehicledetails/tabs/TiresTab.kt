@@ -46,6 +46,7 @@ import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Tire
 import com.example.car_logger.ui.components.TreadWearGauge
 import com.example.car_logger.ui.screens.dialogs.TireRotationIntervalDialog
+import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.util.Locale
@@ -356,7 +357,9 @@ fun TiresTab(
             ) {
                 FilledTonalButton(
                     onClick = { showRotationDialog = true },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .expressiveBounceClick(pressedScale = 0.96f)
                 ) {
                     Icon(Icons.Filled.Autorenew, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
@@ -365,7 +368,9 @@ fun TiresTab(
 
                 OutlinedButton(
                     onClick = { showNewTireDialog = true },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .expressiveBounceClick(pressedScale = 0.96f)
                 ) {
                     Icon(Icons.Filled.TireRepair, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
