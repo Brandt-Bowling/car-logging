@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -59,8 +60,21 @@ class PreferencesManager(private val context: Context) {
         val KEY_TESLA_REFRESH_TOKEN = stringPreferencesKey("tesla_refresh_token")
         val KEY_TESLA_TOKEN_EXPIRY = longPreferencesKey("tesla_token_expiry")
 
+        val KEY_GAS_PRICE = floatPreferencesKey("comparison_gas_price")
+        val KEY_BASELINE_MPG = floatPreferencesKey("comparison_baseline_mpg")
+
         const val DEFAULT_GARAGE_NAME = "My Garage"
         const val DEFAULT_COOLDOWN_HOURS = 72
+        const val DEFAULT_GAS_PRICE = 3.65f
+        const val DEFAULT_BASELINE_MPG = 28.0f
+    }
+
+    val gasPriceFlow: Flow<Float> = context.dataStore.data.map { prefs ->
+        prefs[KEY_GAS_PRICE] ?: DEFAULT_GAS_PRICE
+    }
+
+    val baselineMpgFlow: Flow<Float> = context.dataStore.data.map { prefs ->
+        prefs[KEY_BASELINE_MPG] ?: DEFAULT_BASELINE_MPG
     }
 
     val garageNameFlow: Flow<String> = context.dataStore.data.map { prefs ->
@@ -349,6 +363,18 @@ class PreferencesManager(private val context: Context) {
             prefs.remove(KEY_TESLA_ACCESS_TOKEN)
             prefs.remove(KEY_TESLA_REFRESH_TOKEN)
             prefs.remove(KEY_TESLA_TOKEN_EXPIRY)
+        }
+    }
+
+    suspend fun setGasPrice(price: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_GAS_PRICE] = price
+        }
+    }
+
+    suspend fun setBaselineMpg(mpg: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_BASELINE_MPG] = mpg
         }
     }
 }

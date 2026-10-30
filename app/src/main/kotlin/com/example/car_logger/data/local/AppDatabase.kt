@@ -9,10 +9,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.car_logger.data.local.dao.CarDao
 import com.example.car_logger.data.local.dao.GloveboxDao
 import com.example.car_logger.data.local.dao.MaintenanceRecordDao
+import com.example.car_logger.data.local.dao.OdometerLogDao
 import com.example.car_logger.data.local.dao.TireDao
 import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.GloveboxEntity
 import com.example.car_logger.data.local.entity.MaintenanceRecordEntity
+import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.local.entity.TireEntity
 
 @Database(
@@ -20,9 +22,10 @@ import com.example.car_logger.data.local.entity.TireEntity
         CarEntity::class,
         MaintenanceRecordEntity::class,
         TireEntity::class,
-        GloveboxEntity::class
+        GloveboxEntity::class,
+        OdometerLogEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -30,6 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun maintenanceRecordDao(): MaintenanceRecordDao
     abstract fun tireDao(): TireDao
     abstract fun gloveboxDao(): GloveboxDao
+    abstract fun odometerLogDao(): OdometerLogDao
 
     companion object {
         private fun ensureAllCarColumns(db: SupportSQLiteDatabase) {
@@ -61,6 +65,21 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS odometer_logs (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        carId TEXT NOT NULL,
+                        odometer INTEGER NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        source TEXT NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_odometer_logs_carId_timestamp ON odometer_logs (carId, timestamp)")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -71,7 +90,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "car_logger_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

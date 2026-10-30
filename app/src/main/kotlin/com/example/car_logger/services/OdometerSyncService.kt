@@ -7,7 +7,10 @@ import com.example.car_logger.BuildConfig
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.WakeProtectionPolicy
 import com.example.car_logger.data.local.dao.CarDao
+import com.example.car_logger.data.local.dao.OdometerLogDao
+import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.model.Car
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,11 +45,35 @@ sealed class OdometerSyncResult {
 class OdometerSyncService(
     private val preferencesManager: PreferencesManager,
     private val carDao: CarDao,
+    private val odometerLogDao: OdometerLogDao? = null,
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 ) {
+    private suspend fun recordOdometerReading(carId: String, odometer: Int, provider: String, syncTime: Long) {
+        carDao.updateOdometerFromTelemetry(
+            carId = carId,
+            odometer = odometer,
+            provider = provider,
+            status = "Synced",
+            syncTime = syncTime
+        )
+        try {
+            val latest = odometerLogDao?.getLatestLogForCar(carId)
+            if (latest == null || latest.odometer < odometer) {
+                odometerLogDao?.insertLog(
+                    OdometerLogEntity(
+                        id = UUID.randomUUID().toString(),
+                        carId = carId,
+                        odometer = odometer,
+                        timestamp = syncTime,
+                        source = provider
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+    }
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
@@ -693,11 +720,10 @@ class OdometerSyncService(
 
                 val finalOdo = maxOf(newOdo, car.odometer ?: 0)
                 val now = System.currentTimeMillis()
-                carDao.updateOdometerFromTelemetry(
+                recordOdometerReading(
                     carId = car.id,
                     odometer = finalOdo,
                     provider = PROVIDER_TESLA,
-                    status = "Synced",
                     syncTime = now
                 )
                 _lastSyncMessage.value = "${car.model}: $finalOdo mi"
@@ -836,11 +862,10 @@ class OdometerSyncService(
 
                 val finalOdo = maxOf(newOdo, car.odometer ?: 0)
                 val now = System.currentTimeMillis()
-                carDao.updateOdometerFromTelemetry(
+                recordOdometerReading(
                     carId = car.id,
                     odometer = finalOdo,
                     provider = PROVIDER_SMARTCAR,
-                    status = "Synced",
                     syncTime = now
                 )
                 _lastSyncMessage.value = "${car.model}: $finalOdo mi"
@@ -938,11 +963,10 @@ class OdometerSyncService(
 
             val finalOdo = maxOf(newOdo, car.odometer ?: 0)
             val now = System.currentTimeMillis()
-            carDao.updateOdometerFromTelemetry(
+            recordOdometerReading(
                 carId = car.id,
                 odometer = finalOdo,
                 provider = PROVIDER_SMARTCAR,
-                status = "Synced",
                 syncTime = now
             )
             _lastSyncMessage.value = "${car.model}: $finalOdo mi"

@@ -4,11 +4,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -34,7 +34,7 @@ enum class GarageNavigationTab(
 ) {
     GARAGE("Garage", Icons.Filled.DirectionsCar, Icons.Outlined.DirectionsCar),
     ACTIVITY("Activity", Icons.AutoMirrored.Filled.ReceiptLong, Icons.AutoMirrored.Outlined.ReceiptLong),
-    SCHEDULE("Schedule", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
+    INSIGHTS("Insights", Icons.Filled.Insights, Icons.Outlined.Insights),
     SETTINGS("Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
@@ -42,7 +42,7 @@ enum class GarageNavigationTab(
 fun GarageNavigationBar(
     currentTab: GarageNavigationTab,
     onTabSelected: (GarageNavigationTab) -> Unit,
-    hasUrgentService: Boolean,
+    hasUrgentService: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     NavigationBar(
@@ -64,25 +64,11 @@ fun GarageNavigationBar(
                 onClick = { onTabSelected(tab) },
                 icon = {
                     val iconModifier = Modifier.scale(iconScale)
-                    if (tab == GarageNavigationTab.SCHEDULE && hasUrgentService) {
-                        BadgedBox(
-                            badge = {
-                                Badge(containerColor = AmberUrgent)
-                            }
-                        ) {
-                            Icon(
-                                imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                contentDescription = tab.title,
-                                modifier = iconModifier
-                            )
-                        }
-                    } else {
-                        Icon(
-                            imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                            contentDescription = tab.title,
-                            modifier = iconModifier
-                        )
-                    }
+                    Icon(
+                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                        contentDescription = tab.title,
+                        modifier = iconModifier
+                    )
                 },
                 label = {
                     Text(
