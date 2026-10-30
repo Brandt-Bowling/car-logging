@@ -37,8 +37,9 @@ class VehicleDetailsViewModel(
     private val recordDao = database.maintenanceRecordDao()
     private val tireDao = database.tireDao()
     private val gloveboxDao = database.gloveboxDao()
+    private val odometerLogDao = database.odometerLogDao()
     private val preferencesManager = PreferencesManager(application)
-    val odometerSyncService = OdometerSyncService(preferencesManager, carDao)
+    val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao)
     val isSyncingOdometer: StateFlow<Boolean> = odometerSyncService.isSyncing
     val cooldownHoursFlow: StateFlow<Int> = preferencesManager.syncCooldownHoursFlow.stateIn(
         viewModelScope,

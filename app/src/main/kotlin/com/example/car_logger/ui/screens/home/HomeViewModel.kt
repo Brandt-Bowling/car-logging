@@ -4,6 +4,9 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.car_logger.data.insights.InsightsCalculationEngine
+import com.example.car_logger.data.insights.InsightsTimeGranularity
+import com.example.car_logger.data.insights.InsightsUiState
 import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.entity.CarEntity
@@ -40,9 +43,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getInstance(application)
     private val carDao = database.carDao()
     private val recordDao = database.maintenanceRecordDao()
+    val odometerLogDao = database.odometerLogDao()
     val preferencesManager = PreferencesManager(application)
     val googleDriveService = GoogleDriveService(application)
-    val odometerSyncService = OdometerSyncService(preferencesManager, carDao)
+    val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao)
     val vehicleImageRepository = VehicleImageRepository(application, carDao)
     val geminiAiService = GeminiAiService(preferencesManager)
     private var initialTelemetryChecked = false
@@ -122,6 +126,49 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         SharingStarted.WhileSubscribed(5000),
         false
     )
+
+    val insightsVehicleFilter = MutableStateFlow<String?>(null)
+    val insightsGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
+
+    val insightsUiState: StateFlow<InsightsUiState> = combine(
+        cars,
+        odometerLogDao.getAllLogs(),
+        combine(insightsGranularity, insightsVehicleFilter, ::Pair),
+        combine(preferencesManager.gasPriceFlow, preferencesManager.baselineMpgFlow, ::Pair)
+    ) { carList, logs, (gran, selectedCar), (gasPrice, mpg) ->
+        InsightsCalculationEngine.computeUiState(
+            cars = carList,
+            allLogs = logs,
+            granularity = gran,
+            selectedCarId = selectedCar,
+            gasPrice = gasPrice,
+            baselineMpg = mpg
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        InsightsUiState()
+    )
+
+    fun setInsightsVehicleFilter(carId: String?) {
+        insightsVehicleFilter.value = carId
+    }
+
+    fun setInsightsGranularity(granularity: InsightsTimeGranularity) {
+        insightsGranularity.value = granularity
+    }
+
+    fun updateComparisonGasPrice(price: Float) {
+        viewModelScope.launch {
+            preferencesManager.setGasPrice(price)
+        }
+    }
+
+    fun updateComparisonBaselineMpg(mpg: Float) {
+        viewModelScope.launch {
+            preferencesManager.setBaselineMpg(mpg)
+        }
+    }
 
     fun setTab(tab: GarageNavigationTab) {
         currentTab.value = tab

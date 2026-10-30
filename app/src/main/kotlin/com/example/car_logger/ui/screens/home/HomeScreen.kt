@@ -60,7 +60,7 @@ import com.example.car_logger.ui.components.GarageNavigationTab
 import com.example.car_logger.ui.components.SpeedDialFab
 import com.example.car_logger.ui.screens.home.tabs.ActivityTab
 import com.example.car_logger.ui.screens.home.tabs.GarageTab
-import com.example.car_logger.ui.screens.home.tabs.ScheduleTab
+import com.example.car_logger.ui.screens.home.tabs.InsightsTab
 import com.example.car_logger.ui.screens.home.tabs.SettingsTab
 import com.example.car_logger.ui.theme.ExpressiveMotionTokens
 import com.example.car_logger.ui.theme.ExpressiveThemeTokens
@@ -84,6 +84,7 @@ fun HomeScreen(
     val allRecords by viewModel.allRecords.collectAsState()
     val scheduledServices by viewModel.scheduledServices.collectAsState()
     val hasUrgentService by viewModel.hasUrgentService.collectAsState()
+    val insightsUiState by viewModel.insightsUiState.collectAsState()
 
     var showRenameDialog by remember { mutableStateOf(false) }
     var showArchivedOnly by remember { mutableStateOf(false) }
@@ -280,9 +281,14 @@ fun HomeScreen(
                                 onAttachmentClick = onOpenAttachmentViewer
                             )
                         }
-                        GarageNavigationTab.SCHEDULE -> {
-                            ScheduleTab(
-                                scheduledServices = scheduledServices
+                        GarageNavigationTab.INSIGHTS -> {
+                            InsightsTab(
+                                state = insightsUiState,
+                                cars = cars,
+                                onSelectVehicle = { viewModel.setInsightsVehicleFilter(it) },
+                                onSelectGranularity = { viewModel.setInsightsGranularity(it) },
+                                onUpdateGasPrice = { viewModel.updateComparisonGasPrice(it) },
+                                onUpdateBaselineMpg = { viewModel.updateComparisonBaselineMpg(it) }
                             )
                         }
                         GarageNavigationTab.SETTINGS -> {
