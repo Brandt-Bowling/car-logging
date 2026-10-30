@@ -24,9 +24,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.TireRepair
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
@@ -50,8 +49,7 @@ enum class VehicleSubView(
     val title: String,
     val icon: ImageVector
 ) {
-    MAINTENANCE("Maintenance", Icons.Filled.Build),
-    TIRES("Tires", Icons.Filled.TireRepair),
+    VEHICLE("Vehicle", Icons.Filled.DirectionsCar),
     GLOVEBOX("Glovebox", Icons.Filled.Folder)
 }
 
