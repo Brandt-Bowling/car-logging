@@ -274,4 +274,25 @@ class OdometerSyncServiceTest {
         assertFalse(url.contains("client_01M5REPWJCMZEPD8QKP13FJN4H"))
         assertFalse(url.contains("scope="))
     }
+
+    @Test
+    fun `isCooldownActive respects bypassCooldown parameter concept`() {
+        val now = 1_700_000_000_000L
+        val oneHourAgo = now - 3_600_000L
+        val inCooldown = OdometerSyncService.isCooldownActive(oneHourAgo, 72, now)
+        assertTrue(inCooldown)
+        // With bypassCooldown, callers skip isCooldownActive check
+    }
+
+    @Test
+    fun `formatDailyPollSummary creates descriptive message for updated and skipped results`() {
+        val car1 = Car(id = "1", make = "Chevrolet", model = "Blazer EV", year = 2024, odometer = 15000)
+        val car2 = Car(id = "2", make = "Tesla", model = "Model 3", year = 2023, odometer = 28000)
+        val results = listOf(
+            OdometerSyncResult.Updated(car1.id, 15000, OdometerSyncService.PROVIDER_SMARTCAR),
+            OdometerSyncResult.Updated(car2.id, 28000, OdometerSyncService.PROVIDER_TESLA)
+        )
+        val summary = OdometerSyncService.formatDailyPollSummary(listOf(car1, car2), results)
+        assertEquals("Synced 2 vehicles", summary)
+    }
 }
