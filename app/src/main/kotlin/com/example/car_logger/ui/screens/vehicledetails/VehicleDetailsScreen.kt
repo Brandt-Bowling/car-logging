@@ -7,17 +7,23 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.UploadFile
@@ -46,12 +52,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.model.MaintenanceRecord
@@ -107,6 +115,9 @@ fun VehicleDetailsScreen(
     var showIntervalDialog by remember { mutableStateOf(false) }
     var showRotationDialog by remember { mutableStateOf(false) }
     var showNewTireDialog by remember { mutableStateOf(false) }
+    var showEditVehicleNameDialog by remember { mutableStateOf(false) }
+    var showEditVinDialog by remember { mutableStateOf(false) }
+    var showEditLicensePlateDialog by remember { mutableStateOf(false) }
 
     var isToolbarExpanded by rememberSaveable { mutableStateOf(true) }
 
@@ -343,6 +354,157 @@ fun VehicleDetailsScreen(
         )
     }
 
+    // Edit Vehicle Name / Details Dialog
+    if (showEditVehicleNameDialog) {
+        var yearText by remember { mutableStateOf(carItem.year.toString()) }
+        var makeText by remember { mutableStateOf(carItem.make) }
+        var modelText by remember { mutableStateOf(carItem.model) }
+        var trimText by remember { mutableStateOf(carItem.trim ?: "") }
+        var yearError by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showEditVehicleNameDialog = false },
+            title = { Text("Edit Vehicle Details") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = yearText,
+                        onValueChange = {
+                            yearText = it
+                            yearError = it.toIntOrNull() == null || it.toInt() !in 1900..2100
+                        },
+                        label = { Text("Year") },
+                        isError = yearError,
+                        supportingText = if (yearError) { { Text("Enter a valid 4-digit year") } } else null,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = makeText,
+                        onValueChange = { makeText = it },
+                        label = { Text("Make (e.g. Tesla)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = modelText,
+                        onValueChange = { modelText = it },
+                        label = { Text("Model (e.g. Model 3)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = trimText,
+                        onValueChange = { trimText = it },
+                        label = { Text("Trim (optional, e.g. Long Range)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val parsedYear = yearText.toIntOrNull()
+                        if (parsedYear != null && parsedYear in 1900..2100 && makeText.isNotBlank() && modelText.isNotBlank()) {
+                            viewModel.updateCar(
+                                carItem.copy(
+                                    year = parsedYear,
+                                    make = makeText.trim(),
+                                    model = modelText.trim(),
+                                    trim = trimText.trim().ifBlank { null }
+                                )
+                            )
+                            showEditVehicleNameDialog = false
+                            Toast.makeText(context, "Updated vehicle details", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditVehicleNameDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Edit VIN Dialog
+    if (showEditVinDialog) {
+        var vinText by remember { mutableStateOf(carItem.vin ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { showEditVinDialog = false },
+            title = { Text("Edit Vehicle VIN") },
+            text = {
+                OutlinedTextField(
+                    value = vinText,
+                    onValueChange = { vinText = it.uppercase() },
+                    label = { Text("17-Character VIN") },
+                    placeholder = { Text("Enter VIN") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleanVin = vinText.trim().uppercase().ifBlank { null }
+                        viewModel.updateCar(carItem.copy(vin = cleanVin))
+                        showEditVinDialog = false
+                        Toast.makeText(context, "Saved VIN", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditVinDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Edit License Plate Dialog
+    if (showEditLicensePlateDialog) {
+        var plateText by remember { mutableStateOf(carItem.licensePlate ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { showEditLicensePlateDialog = false },
+            title = { Text("Edit License Plate") },
+            text = {
+                OutlinedTextField(
+                    value = plateText,
+                    onValueChange = { plateText = it.uppercase() },
+                    label = { Text("License Plate Number") },
+                    placeholder = { Text("e.g. 7XYZ89") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleanPlate = plateText.trim().uppercase().ifBlank { null }
+                        viewModel.updateCar(carItem.copy(licensePlate = cleanPlate))
+                        showEditLicensePlateDialog = false
+                        Toast.makeText(context, "Saved license plate", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditLicensePlateDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = ExpressiveThemeTokens.shellColor,
@@ -350,11 +512,29 @@ fun VehicleDetailsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "${carItem.year} ${carItem.make} ${carItem.model}",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showEditVehicleNameDialog = true }
+                            .padding(vertical = 4.dp, horizontal = 2.dp)
+                    ) {
+                        Text(
+                            text = "${carItem.year} ${carItem.make} ${carItem.model}",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = "Edit Vehicle Name",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
@@ -453,6 +633,8 @@ fun VehicleDetailsScreen(
                                 onSearchQueryChange = { viewModel.setSearchQuery(it) },
                                 onSelectYear = { viewModel.setSelectedYearFilter(it) },
                                 onOpenPhotoCustomizer = { showPhotoCustomizerSheet = true },
+                                onEditVinClick = { showEditVinDialog = true },
+                                onEditLicensePlateClick = { showEditLicensePlateDialog = true },
                                 onLogRotationClick = { showRotationDialog = true },
                                 onEditIntervalClick = { showIntervalDialog = true },
                                 onInstallNewTireClick = { showNewTireDialog = true },

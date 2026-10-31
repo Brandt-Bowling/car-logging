@@ -62,6 +62,8 @@ fun VehicleOverviewTab(
     onSearchQueryChange: (String) -> Unit,
     onSelectYear: (Int?) -> Unit,
     onOpenPhotoCustomizer: () -> Unit,
+    onEditVinClick: () -> Unit,
+    onEditLicensePlateClick: () -> Unit,
     onLogRotationClick: () -> Unit,
     onEditIntervalClick: () -> Unit,
     onInstallNewTireClick: () -> Unit,
@@ -83,7 +85,9 @@ fun VehicleOverviewTab(
         item {
             VehicleHeroCard(
                 car = car,
-                onOpenPhotoCustomizer = onOpenPhotoCustomizer
+                onOpenPhotoCustomizer = onOpenPhotoCustomizer,
+                onEditVinClick = onEditVinClick,
+                onEditLicensePlateClick = onEditLicensePlateClick
             )
         }
 
