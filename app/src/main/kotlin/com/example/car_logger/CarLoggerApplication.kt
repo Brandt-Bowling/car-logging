@@ -30,7 +30,7 @@ class CarLoggerApplication : Application() {
         applicationScope.launch {
             try {
                 FlutterDataMigrator.migrateIfNeeded(this@CarLoggerApplication, database, preferencesManager)
-                FlutterDataMigrator.seedInitialOdometerLogs(database)
+                FlutterDataMigrator.cleanupCorruptedOdometerLogs(database)
             } catch (e: Exception) {
                 Log.e("CarLoggerApplication", "Migration error: ${e.message}", e)
             }

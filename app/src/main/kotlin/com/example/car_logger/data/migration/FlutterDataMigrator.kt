@@ -393,61 +393,9 @@ object FlutterDataMigrator {
         Log.i(TAG, "Seeded default initial vehicles (Chevy Sonic & Tesla Model 3).")
     }
 
-    suspend fun seedInitialOdometerLogs(database: AppDatabase) {
+    suspend fun cleanupCorruptedOdometerLogs(database: AppDatabase) {
         val odometerLogDao = database.odometerLogDao()
-        if (odometerLogDao.getLogCount() > 0) return
-
-        val carDao = database.carDao()
-        val recordDao = database.maintenanceRecordDao()
-
-        val cars = carDao.getAllCarsList()
-        val records = recordDao.getAllRecordsList()
-
-        val newLogs = mutableListOf<OdometerLogEntity>()
-
-        for (rec in records) {
-            if (rec.odometer > 0 && rec.date.isNotBlank()) {
-                val ts = try {
-                    java.time.LocalDate.parse(rec.date.take(10))
-                        .atStartOfDay(java.time.ZoneId.systemDefault())
-                        .toInstant()
-                        .toEpochMilli()
-                } catch (_: Exception) {
-                    System.currentTimeMillis()
-                }
-                newLogs.add(
-                    OdometerLogEntity(
-                        id = "rec_${rec.id}",
-                        carId = rec.carId,
-                        odometer = rec.odometer,
-                        timestamp = ts,
-                        source = "MAINTENANCE"
-                    )
-                )
-            }
-        }
-
-        for (car in cars) {
-            val odo = car.odometer ?: continue
-            val carLogs = newLogs.filter { it.carId == car.id }
-            val maxRecorded = carLogs.maxOfOrNull { it.odometer } ?: 0
-            if (odo > maxRecorded) {
-                val syncTime = car.lastOdometerSyncTime ?: System.currentTimeMillis()
-                newLogs.add(
-                    OdometerLogEntity(
-                        id = "car_odo_${car.id}",
-                        carId = car.id,
-                        odometer = odo,
-                        timestamp = syncTime,
-                        source = car.telemetryProvider ?: "INITIAL"
-                    )
-                )
-            }
-        }
-
-        if (newLogs.isNotEmpty()) {
-            odometerLogDao.insertLogs(newLogs)
-            Log.i(TAG, "Seeded ${newLogs.size} initial odometer logs.")
-        }
+        odometerLogDao.deleteNonTelemetryLogs()
+        Log.i(TAG, "Cleaned up non-telemetry odometer logs.")
     }
 }

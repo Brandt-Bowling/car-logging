@@ -66,52 +66,18 @@ fun GasComparisonCard(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = AmberUrgent.copy(alpha = 0.2f),
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("⛽", style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                    Column {
-                        Text(
-                            text = "Gas Comparison",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Cost if driven in a gasoline vehicle",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Surface(
-                    shape = CircleShape,
-                    color = AmberUrgent.copy(alpha = 0.15f),
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ) {
-                    Text(
-                        text = "User Baseline",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = AmberUrgent,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
+            Column {
+                Text(
+                    text = "Gas Comparison",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Cost if driven in a gasoline vehicle",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             // Hero Tonal Highlight Container (Amber)

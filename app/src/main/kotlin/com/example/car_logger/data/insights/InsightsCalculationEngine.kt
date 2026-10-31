@@ -24,6 +24,7 @@ object InsightsCalculationEngine {
         selectedCarId: String?,
         gasPrice: Float,
         baselineMpg: Float,
+        periodOffset: Int = 0,
         nowMs: Long = System.currentTimeMillis()
     ): InsightsUiState {
         val activeCars = cars.filter { !it.isArchived }.ifEmpty { cars }
@@ -38,21 +39,42 @@ object InsightsCalculationEngine {
             )
         }
 
+        // Strictly filter to verified telemetry ping logs only (exclude maintenance and fake/seeded entries)
+        val telemetryLogs = allLogs.filter {
+            it.source != "MAINTENANCE" &&
+            it.source != "INITIAL" &&
+            !it.id.startsWith("rec_") &&
+            !it.id.startsWith("car_odo_")
+        }
+
         val car1 = activeCars.firstOrNull()
         val car2 = activeCars.getOrNull(1)
 
-        val car1Logs = if (car1 != null) allLogs.filter { it.carId == car1.id }.sortedBy { it.timestamp } else emptyList()
-        val car2Logs = if (car2 != null) allLogs.filter { it.carId == car2.id }.sortedBy { it.timestamp } else emptyList()
+        val car1Logs = if (car1 != null) telemetryLogs.filter { it.carId == car1.id }.sortedBy { it.timestamp } else emptyList()
+        val car2Logs = if (car2 != null) telemetryLogs.filter { it.carId == car2.id }.sortedBy { it.timestamp } else emptyList()
 
-        val relevantLogs = when (selectedCarId) {
-            car1?.id -> car1Logs
-            car2?.id -> car2Logs
-            else -> allLogs
+        val car1HasData = car1Logs.size >= 2
+        val car2HasData = car2Logs.size >= 2
+
+        val hasSufficientLogs = when (selectedCarId) {
+            car1?.id -> car1HasData
+            car2?.id -> car2HasData
+            else -> car1HasData || car2HasData
         }
 
-        if (relevantLogs.size < 2) {
+        if (!hasSufficientLogs) {
+            val relevantLogs = when (selectedCarId) {
+                car1?.id -> car1Logs
+                car2?.id -> car2Logs
+                else -> telemetryLogs
+            }
             val singleTs = relevantLogs.firstOrNull()?.timestamp ?: nowMs
             val singleDateStr = LocalDate.ofInstant(Instant.ofEpochMilli(singleTs), zoneId).format(shortDateFormatter)
+            val windowMsg = if (relevantLogs.isEmpty()) {
+                "No telemetry readings logged yet (waiting for first vehicle sync)"
+            } else {
+                "Initial sync logged on $singleDateStr (more readings needed to compute driving activity)"
+            }
             return InsightsUiState(
                 selectedCarId = selectedCarId,
                 granularity = granularity,
@@ -63,15 +85,28 @@ object InsightsCalculationEngine {
                 gasPrice = gasPrice,
                 baselineMpg = baselineMpg,
                 hasOdometerData = false,
-                observationWindowText = "Initial reading logged on $singleDateStr (more readings needed for activity)"
+                observationWindowText = windowMsg
             )
         }
 
-        val minTimestamp = relevantLogs.minOf { it.timestamp }
-        val maxTimestamp = relevantLogs.maxOf { it.timestamp }
+        val eligibleLogs = when (selectedCarId) {
+            car1?.id -> car1Logs
+            car2?.id -> car2Logs
+            else -> {
+                val list = mutableListOf<OdometerLogEntity>()
+                if (car1HasData) list.addAll(car1Logs)
+                if (car2HasData) list.addAll(car2Logs)
+                list
+            }
+        }
 
-        // Generate intervals based on granularity
-        val intervals = generateIntervals(granularity, minTimestamp, maxTimestamp, nowMs)
+        val minTimestamp = eligibleLogs.minOf { it.timestamp }
+        val maxTimestamp = eligibleLogs.maxOf { it.timestamp }
+
+        val now = LocalDate.ofInstant(Instant.ofEpochMilli(nowMs), zoneId)
+
+        // Generate intervals based on granularity and periodOffset
+        val intervals = generateIntervals(granularity, periodOffset, nowMs)
         if (intervals.isEmpty()) {
             return InsightsUiState(
                 selectedCarId = selectedCarId,
@@ -83,15 +118,23 @@ object InsightsCalculationEngine {
                 gasPrice = gasPrice,
                 baselineMpg = baselineMpg,
                 hasOdometerData = true,
-                observationWindowText = "Reading intervals pending"
+                observationWindowText = "No intervals in this period",
+                canGoPrevious = false,
+                canGoNext = periodOffset < 0,
+                periodOffset = periodOffset
             )
         }
+
+        val canGoNext = periodOffset < 0
+        val earliestShownStartMs = intervals.first().startMs
+        val canGoPrevious = minTimestamp < earliestShownStartMs
 
         val activityBars = intervals.map { interval ->
             val c1Miles = if (car1 != null) calculateMilesInWindow(car1Logs, interval.startMs, interval.endMs) else 0
             val c2Miles = if (car2 != null) calculateMilesInWindow(car2Logs, interval.startMs, interval.endMs) else 0
             DrivingActivityBar(
                 label = interval.label,
+                shortLabel = interval.shortLabel,
                 car1Miles = c1Miles,
                 car2Miles = c2Miles,
                 totalMiles = c1Miles + c2Miles,
@@ -114,17 +157,46 @@ object InsightsCalculationEngine {
         val car1Pct = ((totalC1Miles.toFloat() / totalFleetMiles) * 100f).roundToInt().coerceIn(0, 100)
         val car2Pct = (100 - car1Pct).coerceIn(0, 100)
 
-        val totalDays = ((intervals.last().endMs - intervals.first().startMs) / 86400000.0).coerceAtLeast(1.0)
-        val car1Daily = (totalC1Miles / totalDays).toFloat()
-        val car2Daily = (totalC2Miles / totalDays).toFloat()
+        val daysCount = when (granularity) {
+            InsightsTimeGranularity.WEEKLY -> 7.0
+            InsightsTimeGranularity.MONTHLY -> {
+                val targetYm = YearMonth.from(now).plusMonths(periodOffset.toLong())
+                targetYm.lengthOfMonth().toDouble()
+            }
+            InsightsTimeGranularity.YTD -> {
+                val targetYear = now.year + periodOffset
+                if (targetYear == now.year) now.dayOfYear.toDouble().coerceAtLeast(1.0)
+                else (if (targetYear % 4 == 0) 366.0 else 365.0)
+            }
+        }
 
-        // Observation window text
-        val windowStartDate = LocalDate.ofInstant(Instant.ofEpochMilli(intervals.first().startMs), zoneId)
-        val windowEndDate = LocalDate.ofInstant(Instant.ofEpochMilli(intervals.last().endMs), zoneId)
+        val car1Daily = (totalC1Miles / daysCount).toFloat()
+        val car2Daily = (totalC2Miles / daysCount).toFloat()
+
+        // Observation window text for Google Health header
         val windowText = when (granularity) {
-            InsightsTimeGranularity.WEEKLY -> "Tracking: ${windowStartDate.format(shortDateFormatter)} – ${windowEndDate.format(shortDateFormatter)} (${intervals.size} completed weeks)"
-            InsightsTimeGranularity.MONTHLY -> "Tracking: ${windowStartDate.format(shortDateFormatter)} – ${windowEndDate.format(shortDateFormatter)} (${intervals.size} completed months)"
-            InsightsTimeGranularity.YTD -> "Tracking: ${windowStartDate.format(shortDateFormatter)} – ${windowEndDate.format(shortDateFormatter)} (${totalDays.toInt()} verified days)"
+            InsightsTimeGranularity.WEEKLY -> {
+                val targetWeekStart = now.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                    .plusWeeks(periodOffset.toLong())
+                val targetWeekEnd = targetWeekStart.plusDays(6)
+                if (targetWeekStart.year == now.year && targetWeekEnd.year == now.year) {
+                    "${targetWeekStart.format(shortDateFormatter)} – ${targetWeekEnd.format(shortDateFormatter)}"
+                } else {
+                    "${targetWeekStart.format(shortDateFormatter)}, ${targetWeekStart.year} – ${targetWeekEnd.format(shortDateFormatter)}, ${targetWeekEnd.year}"
+                }
+            }
+            InsightsTimeGranularity.MONTHLY -> {
+                val targetYm = YearMonth.from(now).plusMonths(periodOffset.toLong())
+                if (targetYm.year == now.year) {
+                    targetYm.format(DateTimeFormatter.ofPattern("MMMM", Locale.US))
+                } else {
+                    targetYm.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.US))
+                }
+            }
+            InsightsTimeGranularity.YTD -> {
+                val targetYear = now.year + periodOffset
+                "$targetYear"
+            }
         }
 
         // Gas comparison
@@ -165,99 +237,97 @@ object InsightsCalculationEngine {
             ),
             gasPrice = gasPrice,
             baselineMpg = baselineMpg,
-            hasOdometerData = true
+            hasOdometerData = true,
+            canGoPrevious = canGoPrevious,
+            canGoNext = canGoNext,
+            periodOffset = periodOffset
         )
     }
 
     private data class DateInterval(
         val label: String,
+        val shortLabel: String,
         val startMs: Long,
         val endMs: Long
     )
 
     private fun generateIntervals(
         granularity: InsightsTimeGranularity,
-        minTimestamp: Long,
-        maxTimestamp: Long,
+        periodOffset: Int,
         nowMs: Long
     ): List<DateInterval> {
         val now = LocalDate.ofInstant(Instant.ofEpochMilli(nowMs), zoneId)
-        val minDate = LocalDate.ofInstant(Instant.ofEpochMilli(minTimestamp), zoneId)
-        val maxDate = LocalDate.ofInstant(Instant.ofEpochMilli(maxTimestamp), zoneId)
 
         return when (granularity) {
             InsightsTimeGranularity.WEEKLY -> {
-                // Generate last up to 7 completed Monday-Sunday weeks
+                // Single week (Mon-Sun) shifted by periodOffset weeks
+                val targetWeekStart = now.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                    .plusWeeks(periodOffset.toLong())
                 val intervals = mutableListOf<DateInterval>()
-                // Start with Sunday of the most recently completed week
-                var currentWeekStart = now.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
 
                 for (i in 0 until 7) {
-                    val wStart = currentWeekStart.minusWeeks(i.toLong())
-                    val wEnd = wStart.plusDays(6)
-                    val wStartMs = wStart.atStartOfDay(zoneId).toInstant().toEpochMilli()
-                    val wEndMs = wEnd.atTime(23, 59, 59).atZone(zoneId).toInstant().toEpochMilli()
+                    val day = targetWeekStart.plusDays(i.toLong())
+                    val startMs = day.atStartOfDay(zoneId).toInstant().toEpochMilli()
+                    val endMs = day.atTime(23, 59, 59, 999_000_000).atZone(zoneId).toInstant().toEpochMilli()
 
-                    // Only include week if it overlaps with verified reading window
-                    if (wEndMs >= minTimestamp && wStartMs <= maxTimestamp) {
-                        intervals.add(
-                            DateInterval(
-                                label = "W${7 - i} ${wStart.format(shortDateFormatter)}",
-                                startMs = wStartMs,
-                                endMs = wEndMs
-                            )
+                    intervals.add(
+                        DateInterval(
+                            label = day.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)),
+                            shortLabel = day.format(DateTimeFormatter.ofPattern("EEE", Locale.US)),
+                            startMs = startMs,
+                            endMs = endMs
                         )
-                    }
+                    )
                 }
-                intervals.reversed()
+                intervals
             }
             InsightsTimeGranularity.MONTHLY -> {
-                // Generate last up to 6 completed calendar months
+                // Single month shifted by periodOffset months, broken into ~7-day blocks
+                val targetYm = YearMonth.from(now).plusMonths(periodOffset.toLong())
                 val intervals = mutableListOf<DateInterval>()
-                var ym = YearMonth.from(now)
+                val daysInMonth = targetYm.lengthOfMonth()
+                val monthName = targetYm.format(shortMonthFormatter)
 
-                for (i in 0 until 6) {
-                    val targetYm = ym.minusMonths(i.toLong())
-                    val mStart = targetYm.atDay(1)
-                    val mEnd = targetYm.atEndOfMonth()
-                    val mStartMs = mStart.atStartOfDay(zoneId).toInstant().toEpochMilli()
-                    val mEndMs = mEnd.atTime(23, 59, 59).atZone(zoneId).toInstant().toEpochMilli()
+                var dayStart = 1
+                while (dayStart <= daysInMonth) {
+                    val dayEnd = minOf(dayStart + 6, daysInMonth)
+                    val wStart = targetYm.atDay(dayStart)
+                    val wEnd = targetYm.atDay(dayEnd)
+                    val startMs = wStart.atStartOfDay(zoneId).toInstant().toEpochMilli()
+                    val endMs = wEnd.atTime(23, 59, 59, 999_000_000).atZone(zoneId).toInstant().toEpochMilli()
 
-                    if (mEndMs >= minTimestamp && mStartMs <= maxTimestamp) {
-                        intervals.add(
-                            DateInterval(
-                                label = targetYm.format(shortMonthFormatter),
-                                startMs = mStartMs,
-                                endMs = mEndMs
-                            )
+                    intervals.add(
+                        DateInterval(
+                            label = "${wStart.format(shortDateFormatter)} – ${wEnd.format(shortDateFormatter)}",
+                            shortLabel = "$monthName $dayStart",
+                            startMs = startMs,
+                            endMs = endMs
                         )
-                    }
+                    )
+                    dayStart = dayEnd + 1
                 }
-                intervals.reversed()
+                intervals
             }
             InsightsTimeGranularity.YTD -> {
-                // Months in current year up to now
+                // 12 months for target year
+                val targetYear = now.year + periodOffset
                 val intervals = mutableListOf<DateInterval>()
-                val startOfYear = LocalDate.of(now.year, 1, 1)
-                var currentMonth = YearMonth.from(startOfYear)
-                val endMonth = YearMonth.from(now)
 
-                while (!currentMonth.isAfter(endMonth)) {
-                    val mStart = currentMonth.atDay(1)
-                    val mEnd = currentMonth.atEndOfMonth()
-                    val mStartMs = mStart.atStartOfDay(zoneId).toInstant().toEpochMilli()
-                    val mEndMs = mEnd.atTime(23, 59, 59).atZone(zoneId).toInstant().toEpochMilli()
+                for (m in 1..12) {
+                    val ym = YearMonth.of(targetYear, m)
+                    val mStart = ym.atDay(1)
+                    val mEnd = ym.atEndOfMonth()
+                    val startMs = mStart.atStartOfDay(zoneId).toInstant().toEpochMilli()
+                    val endMs = mEnd.atTime(23, 59, 59, 999_000_000).atZone(zoneId).toInstant().toEpochMilli()
 
-                    if (mEndMs >= minTimestamp && mStartMs <= maxTimestamp) {
-                        intervals.add(
-                            DateInterval(
-                                label = currentMonth.format(shortMonthFormatter),
-                                startMs = mStartMs,
-                                endMs = mEndMs
-                            )
+                    intervals.add(
+                        DateInterval(
+                            label = ym.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.US)),
+                            shortLabel = ym.format(shortMonthFormatter),
+                            startMs = startMs,
+                            endMs = endMs
                         )
-                    }
-                    currentMonth = currentMonth.plusMonths(1)
+                    )
                 }
                 intervals
             }

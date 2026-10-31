@@ -39,36 +39,42 @@ private val sampleCars = listOf(
 private val sampleUiState = InsightsUiState(
     selectedCarId = null,
     granularity = InsightsTimeGranularity.WEEKLY,
-    totalMiles = 2038,
+    totalMiles = 559,
     car1Id = "car_1",
     car1Name = "Model 3",
-    car1Miles = 1290,
-    car1SharePct = 63,
-    car1DailyRate = 46.1f,
+    car1Miles = 307,
+    car1SharePct = 55,
+    car1DailyRate = 43.9f,
     car2Id = "car_2",
     car2Name = "Bolt EUV",
-    car2Miles = 748,
-    car2SharePct = 37,
-    car2DailyRate = 26.7f,
-    observationWindowText = "Tracking: Oct 1 – Oct 28 (4 completed weeks)",
+    car2Miles = 252,
+    car2SharePct = 45,
+    car2DailyRate = 36.0f,
+    observationWindowText = "Oct 21 – Oct 27",
     activityBars = listOf(
-        DrivingActivityBar("Oct 1–7", 340, 180, 520, 0, 0),
-        DrivingActivityBar("Oct 8–14", 290, 210, 500, 0, 0),
-        DrivingActivityBar("Oct 15–21", 380, 160, 540, 0, 0),
-        DrivingActivityBar("Oct 22–28", 280, 198, 478, 0, 0)
+        DrivingActivityBar("Mon, Oct 21", "Mon", 42, 25, 67, 0, 0),
+        DrivingActivityBar("Tue, Oct 22", "Tue", 55, 30, 85, 0, 0),
+        DrivingActivityBar("Wed, Oct 23", "Wed", 38, 12, 50, 0, 0),
+        DrivingActivityBar("Thu, Oct 24", "Thu", 60, 40, 100, 0, 0),
+        DrivingActivityBar("Fri, Oct 25", "Fri", 72, 35, 107, 0, 0),
+        DrivingActivityBar("Sat, Oct 26", "Sat", 25, 65, 90, 0, 0),
+        DrivingActivityBar("Sun, Oct 27", "Sun", 15, 45, 60, 0, 0)
     ),
     gasComparison = GasComparisonData(
-        totalCost = 265.66,
-        totalGallons = 72.78,
-        co2Lbs = 1430,
-        car1Cost = 168.10,
-        car1Gallons = 46.07,
-        car2Cost = 97.56,
-        car2Gallons = 26.71
+        totalCost = 72.86,
+        totalGallons = 19.96,
+        co2Lbs = 392,
+        car1Cost = 40.00,
+        car1Gallons = 10.96,
+        car2Cost = 32.86,
+        car2Gallons = 9.00
     ),
     gasPrice = 3.65f,
     baselineMpg = 28.0f,
-    hasOdometerData = true
+    hasOdometerData = true,
+    canGoPrevious = true,
+    canGoNext = false,
+    periodOffset = 0
 )
 
 @Preview(name = "Insights Tab - Light", showBackground = true)
@@ -84,6 +90,8 @@ fun InsightsTabLightPreview() {
                 cars = sampleCars,
                 onSelectVehicle = {},
                 onSelectGranularity = {},
+                onPreviousPeriod = {},
+                onNextPeriod = {},
                 onUpdateGasPrice = {},
                 onUpdateBaselineMpg = {}
             )
@@ -104,6 +112,8 @@ fun InsightsTabDarkPreview() {
                 cars = sampleCars,
                 onSelectVehicle = {},
                 onSelectGranularity = {},
+                onPreviousPeriod = {},
+                onNextPeriod = {},
                 onUpdateGasPrice = {},
                 onUpdateBaselineMpg = {}
             )
@@ -122,18 +132,50 @@ fun InsightsTabSingleVehiclePreview() {
             InsightsTab(
                 state = sampleUiState.copy(
                     selectedCarId = "car_1",
-                    totalMiles = 1290,
+                    totalMiles = 307,
                     gasComparison = sampleUiState.gasComparison.copy(
-                        totalCost = 168.10,
-                        totalGallons = 46.07,
-                        co2Lbs = 905
+                        totalCost = 40.00,
+                        totalGallons = 10.96,
+                        co2Lbs = 215
                     )
                 ),
                 cars = sampleCars,
                 onSelectVehicle = {},
                 onSelectGranularity = {},
+                onPreviousPeriod = {},
+                onNextPeriod = {},
                 onUpdateGasPrice = {},
                 onUpdateBaselineMpg = {}
+            )
+        }
+    }
+}
+
+@Preview(name = "Driving Activity Card - Google Health Style", showBackground = true)
+@Composable
+fun DrivingActivityCardGoogleHealthPreview() {
+    CarLoggerTheme {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            DrivingActivityCard(
+                granularity = InsightsTimeGranularity.WEEKLY,
+                activityBars = sampleUiState.activityBars,
+                observationWindowText = "Oct 21 – Oct 27",
+                totalMiles = sampleUiState.totalMiles,
+                dailyRate = sampleUiState.car1DailyRate + sampleUiState.car2DailyRate,
+                canGoPrevious = true,
+                canGoNext = false,
+                onSelectGranularity = {},
+                onPreviousPeriod = {},
+                onNextPeriod = {},
+                onResetPeriod = {},
+                car1Name = "Model 3",
+                car2Name = "Bolt EUV",
+                selectedCarId = null,
+                car1Id = "car_1",
+                car2Id = "car_2"
             )
         }
     }
@@ -155,6 +197,8 @@ fun InsightsTabEmptyPreview() {
                 cars = sampleCars,
                 onSelectVehicle = {},
                 onSelectGranularity = {},
+                onPreviousPeriod = {},
+                onNextPeriod = {},
                 onUpdateGasPrice = {},
                 onUpdateBaselineMpg = {}
             )
