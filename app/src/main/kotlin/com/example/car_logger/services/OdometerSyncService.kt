@@ -297,6 +297,9 @@ class OdometerSyncService(
         }
 
         fun formatDailyPollSummary(cars: List<Car>, results: List<OdometerSyncResult>): String {
+            if (cars.isEmpty() && results.isEmpty()) {
+                return "No vehicles configured"
+            }
             val updatedCount = results.count { it is OdometerSyncResult.Updated }
             if (updatedCount == results.size && updatedCount > 0) {
                 return if (updatedCount == 1) "Synced 1 vehicle" else "Synced $updatedCount vehicles"
@@ -306,6 +309,7 @@ class OdometerSyncService(
                 when (res) {
                     is OdometerSyncResult.Updated -> carMap[res.carId]?.model?.let { "$it: synced" }
                     is OdometerSyncResult.SkippedAsleep -> carMap[res.carId]?.model?.let { "$it: asleep" }
+                    is OdometerSyncResult.NotConfigured -> carMap[res.carId]?.model?.let { "$it: not linked" }
                     is OdometerSyncResult.Error -> carMap[res.carId]?.model?.let { "$it: error" }
                     else -> null
                 }

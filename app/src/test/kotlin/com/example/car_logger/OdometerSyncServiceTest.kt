@@ -295,4 +295,20 @@ class OdometerSyncServiceTest {
         val summary = OdometerSyncService.formatDailyPollSummary(listOf(car1, car2), results)
         assertEquals("Synced 2 vehicles", summary)
     }
+
+    @Test
+    fun `formatDailyPollSummary handles not configured and empty vehicles properly`() {
+        val car1 = Car(id = "1", make = "Chevrolet", model = "Blazer EV", year = 2024, odometer = 15000)
+        val car2 = Car(id = "2", make = "Tesla", model = "Model 3", year = 2023, odometer = 28000)
+
+        val unconfiguredResults = listOf(
+            OdometerSyncResult.NotConfigured(car1.id),
+            OdometerSyncResult.NotConfigured(car2.id)
+        )
+        val summaryUnconfigured = OdometerSyncService.formatDailyPollSummary(listOf(car1, car2), unconfiguredResults)
+        assertEquals("Blazer EV: not linked, Model 3: not linked", summaryUnconfigured)
+
+        val emptySummary = OdometerSyncService.formatDailyPollSummary(emptyList(), emptyList())
+        assertEquals("No vehicles configured", emptySummary)
+    }
 }
