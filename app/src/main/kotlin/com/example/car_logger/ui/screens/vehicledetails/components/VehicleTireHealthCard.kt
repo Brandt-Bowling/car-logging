@@ -155,48 +155,39 @@ fun VehicleTireHealthCard(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Button(
-                        onClick = onLogRotationClick,
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.expressiveBounceClick(pressedScale = 0.94f)
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Log Rotation", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "Tire options")
                     }
-
-                    Box {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "Tire options")
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Configure Rotation Interval") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onEditIntervalClick()
-                                },
-                                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Install New Tire Set") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onInstallNewTireClick()
-                                },
-                                leadingIcon = { Icon(Icons.Filled.TireRepair, contentDescription = null) }
-                            )
-                        }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Log Tire Rotation") },
+                            onClick = {
+                                menuExpanded = false
+                                onLogRotationClick()
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Configure Rotation Interval") },
+                            onClick = {
+                                menuExpanded = false
+                                onEditIntervalClick()
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Install New Tire Set") },
+                            onClick = {
+                                menuExpanded = false
+                                onInstallNewTireClick()
+                            },
+                            leadingIcon = { Icon(Icons.Filled.TireRepair, contentDescription = null) }
+                        )
                     }
                 }
             }
@@ -267,29 +258,49 @@ fun VehicleTireHealthCard(
                         }
                     }
 
-                    Surface(
-                        shape = CircleShape,
-                        color = when {
-                            isOverdue -> MaterialTheme.colorScheme.error
-                            isUrgent -> AmberUrgent
-                            else -> MaterialTheme.colorScheme.primaryContainer
-                        }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = when {
-                                isOverdue -> "Overdue"
-                                isUrgent -> "Due Soon"
-                                else -> "Scheduled"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
+                        Surface(
+                            shape = CircleShape,
                             color = when {
-                                isOverdue -> MaterialTheme.colorScheme.onError
-                                isUrgent -> Color.Black
-                                else -> MaterialTheme.colorScheme.onPrimaryContainer
-                            },
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                                isOverdue -> MaterialTheme.colorScheme.error
+                                isUrgent -> AmberUrgent
+                                else -> MaterialTheme.colorScheme.primaryContainer
+                            }
+                        ) {
+                            Text(
+                                text = when {
+                                    isOverdue -> "Overdue"
+                                    isUrgent -> "Due Soon"
+                                    else -> "Scheduled"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = when {
+                                    isOverdue -> MaterialTheme.colorScheme.onError
+                                    isUrgent -> Color.Black
+                                    else -> MaterialTheme.colorScheme.onPrimaryContainer
+                                },
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        Button(
+                            onClick = onLogRotationClick,
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.expressiveBounceClick(pressedScale = 0.94f)
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Log", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
