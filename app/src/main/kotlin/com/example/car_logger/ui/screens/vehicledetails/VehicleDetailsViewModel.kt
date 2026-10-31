@@ -1,6 +1,7 @@
 package com.example.car_logger.ui.screens.vehicledetails
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.car_logger.data.local.AppDatabase
@@ -13,15 +14,19 @@ import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Glovebox
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.Tire
+import com.example.car_logger.data.vehicle.VehicleImageRepository
 import com.example.car_logger.services.GeminiAiService
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncResult
 import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.components.VehicleSubView
+import com.example.car_logger.ui.screens.vehicledetails.components.VehicleCostHistory
+import com.example.car_logger.ui.screens.vehicledetails.components.YearlyCostSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -40,6 +45,8 @@ class VehicleDetailsViewModel(
     private val odometerLogDao = database.odometerLogDao()
     private val preferencesManager = PreferencesManager(application)
     val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao)
+    val vehicleImageRepository = VehicleImageRepository(application, carDao)
+    val geminiAiService = GeminiAiService(preferencesManager)
     val isSyncingOdometer: StateFlow<Boolean> = odometerSyncService.isSyncing
     val cooldownHoursFlow: StateFlow<Int> = preferencesManager.syncCooldownHoursFlow.stateIn(
         viewModelScope,
@@ -47,7 +54,10 @@ class VehicleDetailsViewModel(
         PreferencesManager.DEFAULT_COOLDOWN_HOURS
     )
 
-    val currentSubView = MutableStateFlow(VehicleSubView.MAINTENANCE)
+    val currentSubView = MutableStateFlow(VehicleSubView.VEHICLE)
+
+    val searchQuery = MutableStateFlow("")
+    val selectedYearFilter = MutableStateFlow<Int?>(null)
 
     private val _isSyncingDrive = MutableStateFlow(false)
     val isSyncingDrive: StateFlow<Boolean> = _isSyncingDrive.asStateFlow()
@@ -65,6 +75,110 @@ class VehicleDetailsViewModel(
         SharingStarted.WhileSubscribed(5000),
         emptyList()
     )
+
+    val costHistory: StateFlow<VehicleCostHistory> = combine(records, car) { recordsList, carItem ->
+        val validRecords = recordsList.filter { it.cost != null && it.cost > 0.0 }
+        val lifetimeTotal = validRecords.sumOf { it.cost ?: 0.0 }
+        val recordsByYear = validRecords.groupBy { rec ->
+            rec.date.take(4).toIntOrNull() ?: 0
+        }.filterKeys { it > 0 }
+
+        val yearlySummaries = recordsByYear.map { (year, recs) ->
+            val yearTotal = recs.sumOf { it.cost ?: 0.0 }
+            val minOdo = recs.minOfOrNull { it.odometer }
+            val maxOdo = recs.maxOfOrNull { it.odometer }
+            val miles = if (maxOdo != null && minOdo != null && maxOdo > minOdo) maxOdo - minOdo else null
+            val cpm = if (miles != null && miles > 0 && yearTotal > 0) yearTotal / miles.toDouble() else null
+            YearlyCostSummary(
+                year = year,
+                totalCost = yearTotal,
+                recordCount = recs.size,
+                milesDriven = miles,
+                costPerMile = cpm
+            )
+        }.sortedByDescending { it.year }
+
+        val currentOdo = carItem?.odometer ?: validRecords.maxOfOrNull { it.odometer } ?: 0
+        val minOverallOdo = validRecords.minOfOrNull { it.odometer }
+        val lifetimeMiles = if (minOverallOdo != null && currentOdo > minOverallOdo) currentOdo - minOverallOdo else currentOdo
+        val lifetimeCpm = if (lifetimeMiles > 0 && lifetimeTotal > 0) lifetimeTotal / lifetimeMiles.toDouble() else null
+        val avgAnnual = if (yearlySummaries.isNotEmpty()) lifetimeTotal / yearlySummaries.size else 0.0
+
+        VehicleCostHistory(
+            lifetimeTotalCost = lifetimeTotal,
+            lifetimeCostPerMile = lifetimeCpm,
+            yearlyBreakdowns = yearlySummaries,
+            averageAnnualSpend = avgAnnual
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        VehicleCostHistory(0.0, null, emptyList(), 0.0)
+    )
+
+    val filteredRecords: StateFlow<List<MaintenanceRecord>> = combine(records, searchQuery, selectedYearFilter) { recs, query, year ->
+        recs.filter { rec ->
+            val matchesSearch = query.isBlank() ||
+                    rec.title.contains(query, ignoreCase = true) ||
+                    rec.description?.contains(query, ignoreCase = true) == true
+            val recYear = rec.date.take(4).toIntOrNull()
+            val matchesYear = year == null || recYear == year
+            matchesSearch && matchesYear
+        }
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        emptyList()
+    )
+
+    fun setSearchQuery(query: String) {
+        searchQuery.value = query
+    }
+
+    fun setSelectedYearFilter(year: Int?) {
+        selectedYearFilter.value = year
+    }
+
+    suspend fun generateVehicleAiImage(
+        color: String,
+        trim: String? = null,
+        environment: String? = null
+    ): Result<ByteArray> {
+        val c = car.value ?: return Result.failure(IllegalStateException("Vehicle data not loaded"))
+        val prompt = geminiAiService.buildVehiclePrompt(
+            year = c.year,
+            make = c.make,
+            model = c.model,
+            color = color,
+            trim = trim ?: c.trim,
+            environment = environment ?: "clean paved driveway"
+        )
+        return geminiAiService.generateVehicleImage(prompt)
+    }
+
+    fun saveCustomVehicleImage(bytes: ByteArray, onComplete: ((Car) -> Unit)? = null) {
+        val c = car.value ?: return
+        viewModelScope.launch {
+            val result = vehicleImageRepository.saveCustomImage(c, bytes)
+            result.onSuccess { updated -> onComplete?.invoke(updated) }
+        }
+    }
+
+    fun saveVehicleImageFromUri(uri: Uri, onComplete: ((Car) -> Unit)? = null) {
+        val c = car.value ?: return
+        viewModelScope.launch {
+            val result = vehicleImageRepository.saveImageFromUri(c, uri)
+            result.onSuccess { updated -> onComplete?.invoke(updated) }
+        }
+    }
+
+    fun resetVehicleImage(onComplete: ((Car) -> Unit)? = null) {
+        val c = car.value ?: return
+        viewModelScope.launch {
+            val result = vehicleImageRepository.resetToDefaultImage(c)
+            result.onSuccess { updated -> onComplete?.invoke(updated) }
+        }
+    }
 
     val activeTire: StateFlow<Tire?> = tireDao.getActiveTireForCar(carId).map { it?.toModel() }.stateIn(
         viewModelScope,

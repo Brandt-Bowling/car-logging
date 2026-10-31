@@ -296,6 +296,27 @@ class OdometerSyncService(
             }
         }
 
+        fun formatDailyPollSummary(cars: List<Car>, results: List<OdometerSyncResult>): String {
+            if (cars.isEmpty() && results.isEmpty()) {
+                return "No vehicles configured"
+            }
+            val updatedCount = results.count { it is OdometerSyncResult.Updated }
+            if (updatedCount == results.size && updatedCount > 0) {
+                return if (updatedCount == 1) "Synced 1 vehicle" else "Synced $updatedCount vehicles"
+            }
+            val carMap = cars.associateBy { it.id }
+            val details = results.mapNotNull { res ->
+                when (res) {
+                    is OdometerSyncResult.Updated -> carMap[res.carId]?.model?.let { "$it: synced" }
+                    is OdometerSyncResult.SkippedAsleep -> carMap[res.carId]?.model?.let { "$it: asleep" }
+                    is OdometerSyncResult.NotConfigured -> carMap[res.carId]?.model?.let { "$it: not linked" }
+                    is OdometerSyncResult.Error -> carMap[res.carId]?.model?.let { "$it: error" }
+                    else -> null
+                }
+            }
+            return if (details.isNotEmpty()) details.joinToString(", ") else "Daily sync completed"
+        }
+
         fun parseTeslaVehicleListState(jsonBody: String, targetVin: String?): Pair<String, String>? {
             return try {
                 val root = json.parseToJsonElement(jsonBody).jsonObject
@@ -588,10 +609,24 @@ class OdometerSyncService(
         results
     }
 
+    suspend fun syncDailyEndOfDay(cars: List<Car>): List<OdometerSyncResult> = withContext(Dispatchers.IO) {
+        val results = mutableListOf<OdometerSyncResult>()
+        val eligibleCars = cars.filter { !it.isArchived && resolveProviderForCar(it) != null }
+        for (car in eligibleCars) {
+            val res = syncVehicle(car = car, isManual = false, forceWake = true, bypassCooldown = true)
+            results.add(res)
+        }
+        val nowMs = System.currentTimeMillis()
+        val summary = formatDailyPollSummary(eligibleCars, results)
+        preferencesManager.recordDailyPollResult(nowMs, summary)
+        results
+    }
+
     suspend fun syncVehicle(
         car: Car,
         isManual: Boolean = false,
-        forceWake: Boolean = false
+        forceWake: Boolean = false,
+        bypassCooldown: Boolean = false
     ): OdometerSyncResult = withContext(Dispatchers.IO) {
         val provider = resolveProviderForCar(car)
             ?: return@withContext OdometerSyncResult.NotConfigured(car.id)
@@ -599,8 +634,8 @@ class OdometerSyncService(
         val cooldownHours = preferencesManager.getSyncCooldownHours()
         val nowMs = System.currentTimeMillis()
 
-        // Enforce cooldown unless the user explicitly forced wake/poll
-        if (!forceWake && isCooldownActive(car.lastOdometerSyncTime, cooldownHours, nowMs)) {
+        // Enforce cooldown unless the user explicitly forced wake/poll OR it is a scheduled daily poll
+        if (!forceWake && !bypassCooldown && isCooldownActive(car.lastOdometerSyncTime, cooldownHours, nowMs)) {
             val remaining = remainingCooldownHours(car.lastOdometerSyncTime, cooldownHours, nowMs)
             return@withContext OdometerSyncResult.SkippedCooldown(car.id, remaining)
         }

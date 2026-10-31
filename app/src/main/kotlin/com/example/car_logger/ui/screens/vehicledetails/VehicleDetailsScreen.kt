@@ -7,25 +7,28 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.TireRepair
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,18 +55,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.model.MaintenanceRecord
+import com.example.car_logger.data.model.Tire
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.components.EnvelopedBodyCanvas
 import com.example.car_logger.ui.components.VehicleFloatingToolbar
 import com.example.car_logger.ui.components.VehicleSubView
 import com.example.car_logger.ui.screens.dialogs.DriveFolderPickerSheet
+import com.example.car_logger.ui.screens.dialogs.TireRotationIntervalDialog
+import com.example.car_logger.ui.screens.dialogs.VehiclePhotoCustomizerSheet
 import com.example.car_logger.ui.screens.vehicledetails.tabs.GloveboxTab
-import com.example.car_logger.ui.screens.vehicledetails.tabs.MaintenanceTab
-import com.example.car_logger.ui.screens.vehicledetails.tabs.TiresTab
+import com.example.car_logger.ui.screens.vehicledetails.tabs.VehicleOverviewTab
 import com.example.car_logger.ui.theme.ExpressiveMotionTokens
 import com.example.car_logger.ui.theme.ExpressiveThemeTokens
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,14 +88,25 @@ fun VehicleDetailsScreen(
     val coroutineScope = rememberCoroutineScope()
     val car by viewModel.car.collectAsState()
     val records by viewModel.records.collectAsState()
+    val filteredRecords by viewModel.filteredRecords.collectAsState()
+    val costHistory by viewModel.costHistory.collectAsState()
     val activeTire by viewModel.activeTire.collectAsState()
     val glovebox by viewModel.glovebox.collectAsState()
     val currentSubView by viewModel.currentSubView.collectAsState()
     val isSyncingDrive by viewModel.isSyncingDrive.collectAsState()
     val isSyncingOdometer by viewModel.isSyncingOdometer.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val selectedYearFilter by viewModel.selectedYearFilter.collectAsState()
 
     var showFolderPickerSheet by remember { mutableStateOf(false) }
     val folderPickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var showPhotoCustomizerSheet by remember { mutableStateOf(false) }
+    val photoSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var showIntervalDialog by remember { mutableStateOf(false) }
+    var showRotationDialog by remember { mutableStateOf(false) }
+    var showNewTireDialog by remember { mutableStateOf(false) }
 
     var isToolbarExpanded by rememberSaveable { mutableStateOf(true) }
 
@@ -120,9 +138,11 @@ fun VehicleDetailsScreen(
     }
 
     val carItem = car!!
+    val currentOdo = carItem.odometer ?: 0
     val cooldownHours by viewModel.cooldownHoursFlow.collectAsState()
     var showWakeConfirmDialog by remember { mutableStateOf(false) }
 
+    // Wake Vehicle Confirmation Dialog
     if (showWakeConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showWakeConfirmDialog = false },
@@ -151,6 +171,172 @@ fun VehicleDetailsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showWakeConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Vehicle Photo Customizer Bottom Sheet (AI & Custom Photo)
+    if (showPhotoCustomizerSheet) {
+        VehiclePhotoCustomizerSheet(
+            car = carItem,
+            sheetState = photoSheetState,
+            onGenerateAiImage = { color, trim, env ->
+                viewModel.generateVehicleAiImage(color, trim, env)
+            },
+            onSaveImageBytes = { bytes ->
+                viewModel.saveCustomVehicleImage(bytes) {
+                    Toast.makeText(context, "Saved photo for ${carItem.displayName}", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onPickImageUri = { uri ->
+                viewModel.saveVehicleImageFromUri(uri) {
+                    Toast.makeText(context, "Imported photo for ${carItem.displayName}", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onResetToStock = {
+                viewModel.resetVehicleImage {
+                    Toast.makeText(context, "Reset photo to stock", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismissRequest = { showPhotoCustomizerSheet = false }
+        )
+    }
+
+    // Configure Rotation Interval Dialog
+    if (showIntervalDialog) {
+        TireRotationIntervalDialog(
+            currentInterval = carItem.effectiveTireRotationInterval,
+            onDismiss = { showIntervalDialog = false },
+            onConfirm = { newInterval ->
+                viewModel.updateCar(carItem.copy(tireRotationInterval = newInterval))
+                showIntervalDialog = false
+                Toast.makeText(context, "Updated interval to $newInterval mi", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    // Log Tire Rotation Dialog
+    if (showRotationDialog) {
+        var rotDate by remember { mutableStateOf(LocalDate.now().toString()) }
+        var rotOdo by remember { mutableStateOf(currentOdo.toString()) }
+
+        AlertDialog(
+            onDismissRequest = { showRotationDialog = false },
+            title = { Text("Log Tire Rotation") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = rotDate,
+                        onValueChange = { rotDate = it },
+                        label = { Text("Rotation Date (YYYY-MM-DD)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = rotOdo,
+                        onValueChange = { rotOdo = it },
+                        label = { Text("Odometer at Rotation") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val odoInt = rotOdo.toIntOrNull() ?: currentOdo
+                        viewModel.logTireRotation(rotDate, odoInt)
+                        showRotationDialog = false
+                        Toast.makeText(context, "Logged tire rotation at $odoInt mi", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Save Rotation")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRotationDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Install New Tire Set Dialog
+    if (showNewTireDialog) {
+        var mfg by remember { mutableStateOf("") }
+        var model by remember { mutableStateOf("") }
+        var installDate by remember { mutableStateOf(LocalDate.now().toString()) }
+        var installOdo by remember { mutableStateOf(currentOdo.toString()) }
+        var treadLife by remember { mutableStateOf("60000") }
+
+        AlertDialog(
+            onDismissRequest = { showNewTireDialog = false },
+            title = { Text("Install New Tire Set") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = mfg,
+                        onValueChange = { mfg = it },
+                        label = { Text("Manufacturer (e.g. Michelin)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = model,
+                        onValueChange = { model = it },
+                        label = { Text("Model (e.g. Defender)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = installDate,
+                        onValueChange = { installDate = it },
+                        label = { Text("Install Date (YYYY-MM-DD)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = installOdo,
+                        onValueChange = { installOdo = it },
+                        label = { Text("Odometer Installed") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = treadLife,
+                        onValueChange = { treadLife = it },
+                        label = { Text("Estimated Tread Life (miles)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (mfg.isNotBlank() && model.isNotBlank()) {
+                            val newTire = Tire(
+                                id = UUID.randomUUID().toString(),
+                                carId = carItem.id,
+                                manufacturer = mfg.trim(),
+                                model = model.trim(),
+                                dateInstalled = installDate.trim(),
+                                odometerInstalled = installOdo.toIntOrNull() ?: currentOdo,
+                                estimatedTreadLifeMiles = treadLife.toIntOrNull() ?: 60000
+                            )
+                            viewModel.installNewTireSet(newTire)
+                            showNewTireDialog = false
+                            Toast.makeText(context, "Installed ${newTire.manufacturer} ${newTire.model}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("Install Set")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewTireDialog = false }) {
                     Text("Cancel")
                 }
             }
@@ -255,23 +441,24 @@ fun VehicleDetailsScreen(
                     modifier = Modifier.fillMaxSize()
                 ) { subView ->
                     when (subView) {
-                        VehicleSubView.MAINTENANCE -> {
-                            MaintenanceTab(
+                        VehicleSubView.VEHICLE -> {
+                            VehicleOverviewTab(
                                 car = carItem,
                                 records = records,
+                                filteredRecords = filteredRecords,
+                                costHistory = costHistory,
+                                activeTire = activeTire,
+                                searchQuery = searchQuery,
+                                selectedYear = selectedYearFilter,
+                                onSearchQueryChange = { viewModel.setSearchQuery(it) },
+                                onSelectYear = { viewModel.setSelectedYearFilter(it) },
+                                onOpenPhotoCustomizer = { showPhotoCustomizerSheet = true },
+                                onLogRotationClick = { showRotationDialog = true },
+                                onEditIntervalClick = { showIntervalDialog = true },
+                                onInstallNewTireClick = { showNewTireDialog = true },
                                 onRecordClick = onOpenRecordDialog,
                                 onAttachmentClick = onOpenAttachmentViewer,
-                                onDeleteRecord = { viewModel.deleteRecord(it) },
-                                onUpdateCar = { viewModel.updateCar(it) }
-                            )
-                        }
-                        VehicleSubView.TIRES -> {
-                            TiresTab(
-                                car = carItem,
-                                activeTire = activeTire,
-                                onLogRotation = { date, odo -> viewModel.logTireRotation(date, odo) },
-                                onInstallNewTire = { viewModel.installNewTireSet(it) },
-                                onUpdateCar = { viewModel.updateCar(it) }
+                                onDeleteRecord = { viewModel.deleteRecord(it) }
                             )
                         }
                         VehicleSubView.GLOVEBOX -> {
@@ -317,10 +504,9 @@ fun VehicleDetailsScreen(
                 )
             }
 
-            // M3 Expressive Floating Toolbar with Attached FAB (No bottom nav bar!)
+            // M3 Expressive Floating Toolbar with Attached FAB
             val fabIcon = when (currentSubView) {
-                VehicleSubView.MAINTENANCE -> Icons.Filled.Add
-                VehicleSubView.TIRES -> Icons.Filled.TireRepair
+                VehicleSubView.VEHICLE -> Icons.Filled.Add
                 VehicleSubView.GLOVEBOX -> Icons.Filled.UploadFile
             }
 
@@ -329,18 +515,15 @@ fun VehicleDetailsScreen(
                 onSubViewSelected = { viewModel.setSubView(it) },
                 onFabClick = {
                     when (currentSubView) {
-                        VehicleSubView.MAINTENANCE -> onOpenAddRecordDialog(carItem.id)
-                        VehicleSubView.TIRES -> onOpenAddRecordDialog(carItem.id) // Or new tire action
+                        VehicleSubView.VEHICLE -> onOpenAddRecordDialog(carItem.id)
                         VehicleSubView.GLOVEBOX -> {
-                            // Subview glovebox actions handled in tab or trigger doc picker
                             viewModel.setSubView(VehicleSubView.GLOVEBOX)
                         }
                     }
                 },
                 fabIcon = fabIcon,
                 fabContentDescription = when (currentSubView) {
-                    VehicleSubView.MAINTENANCE -> "Add Maintenance"
-                    VehicleSubView.TIRES -> "Tire Action"
+                    VehicleSubView.VEHICLE -> "Add Maintenance"
                     VehicleSubView.GLOVEBOX -> "Upload Document"
                 },
                 expanded = isToolbarExpanded,
