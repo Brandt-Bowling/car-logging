@@ -155,6 +155,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
 
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
+    testImplementation(libs.androidx.work.testing)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
