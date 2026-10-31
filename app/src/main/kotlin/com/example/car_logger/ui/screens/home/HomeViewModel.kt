@@ -129,20 +129,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val insightsVehicleFilter = MutableStateFlow<String?>(null)
     val insightsGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
+    val insightsPeriodOffset = MutableStateFlow(0)
 
     val insightsUiState: StateFlow<InsightsUiState> = combine(
         cars,
         odometerLogDao.getAllLogs(),
-        combine(insightsGranularity, insightsVehicleFilter, ::Pair),
+        combine(insightsGranularity, insightsVehicleFilter, insightsPeriodOffset) { gran, car, offset ->
+            Triple(gran, car, offset)
+        },
         combine(preferencesManager.gasPriceFlow, preferencesManager.baselineMpgFlow, ::Pair)
-    ) { carList, logs, (gran, selectedCar), (gasPrice, mpg) ->
+    ) { carList, logs, (gran, selectedCar, offset), (gasPrice, mpg) ->
         InsightsCalculationEngine.computeUiState(
             cars = carList,
             allLogs = logs,
             granularity = gran,
             selectedCarId = selectedCar,
             gasPrice = gasPrice,
-            baselineMpg = mpg
+            baselineMpg = mpg,
+            periodOffset = offset
         )
     }.stateIn(
         viewModelScope,
@@ -156,6 +160,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setInsightsGranularity(granularity: InsightsTimeGranularity) {
         insightsGranularity.value = granularity
+        insightsPeriodOffset.value = 0
+    }
+
+    fun navigateInsightsPreviousPeriod() {
+        insightsPeriodOffset.value -= 1
+    }
+
+    fun navigateInsightsNextPeriod() {
+        if (insightsPeriodOffset.value < 0) {
+            insightsPeriodOffset.value += 1
+        }
+    }
+
+    fun resetInsightsPeriod() {
+        insightsPeriodOffset.value = 0
     }
 
     fun updateComparisonGasPrice(price: Float) {

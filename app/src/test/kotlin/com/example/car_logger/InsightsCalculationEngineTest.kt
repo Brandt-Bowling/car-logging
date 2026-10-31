@@ -77,8 +77,8 @@ class InsightsCalculationEngineTest {
     }
 
     @Test
-    fun computeUiState_twoLogs_calculatesMilesAndGasComparison() {
-        // Oct 1 2026 to Oct 29 2026 (28 days = exactly 4 full weeks)
+    fun computeUiState_monthlyView_calculatesMilesAndGasComparison() {
+        // Oct 1 2026 to Oct 29 2026 (28 days in October 2026)
         val oct1Ms = LocalDate.of(2026, 10, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
         val oct29Ms = LocalDate.of(2026, 10, 29).atStartOfDay(zoneId).toInstant().toEpochMilli()
 
@@ -93,7 +93,7 @@ class InsightsCalculationEngineTest {
         val state = InsightsCalculationEngine.computeUiState(
             cars = listOf(car1, car2),
             allLogs = listOf(car1Log1, car1Log2, car2Log1, car2Log2),
-            granularity = InsightsTimeGranularity.WEEKLY,
+            granularity = InsightsTimeGranularity.MONTHLY,
             selectedCarId = null,
             gasPrice = 3.50f,
             baselineMpg = 25.0f,
@@ -115,8 +115,58 @@ class InsightsCalculationEngineTest {
         // CO2: 80 * 19.64 = 1571.2 lbs -> 1571 lbs
         assertEquals(1571, state.gasComparison.co2Lbs)
 
-        // Activity bars: 5 overlapping calendar weeks
+        // Activity bars: October has 5 weekly segments (1-7, 8-14, 15-21, 22-28, 29-31)
         assertEquals(5, state.activityBars.size)
+        assertEquals("October", state.observationWindowText)
+    }
+
+    @Test
+    fun computeUiState_weeklyView_generatesSevenDailyBars() {
+        val oct1Ms = LocalDate.of(2026, 10, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val oct29Ms = LocalDate.of(2026, 10, 29).atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        val log1 = OdometerLogEntity("p1", "car_1", 20000, oct1Ms, "TESLA_FLEET")
+        val log2 = OdometerLogEntity("p2", "car_1", 20500, oct29Ms, "TESLA_FLEET")
+
+        val state = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = oct29Ms
+        )
+
+        // Week view displays exactly 7 daily bars (Monday through Sunday)
+        assertEquals(7, state.activityBars.size)
+        val expectedDays = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        state.activityBars.forEachIndexed { i, bar ->
+            assertEquals(expectedDays[i], bar.shortLabel)
+        }
+    }
+
+    @Test
+    fun computeUiState_ytdView_generatesTwelveMonthlyBars() {
+        val oct1Ms = LocalDate.of(2026, 10, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val oct29Ms = LocalDate.of(2026, 10, 29).atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        val log1 = OdometerLogEntity("p1", "car_1", 20000, oct1Ms, "TESLA_FLEET")
+        val log2 = OdometerLogEntity("p2", "car_1", 20500, oct29Ms, "TESLA_FLEET")
+
+        val state = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.YTD,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = oct29Ms
+        )
+
+        // Year view displays 12 monthly bars
+        assertEquals(12, state.activityBars.size)
+        assertEquals("2026", state.observationWindowText)
     }
 
     @Test
@@ -132,7 +182,7 @@ class InsightsCalculationEngineTest {
         val stateCar1 = InsightsCalculationEngine.computeUiState(
             cars = listOf(car1, car2),
             allLogs = listOf(car1Log1, car1Log2, car2Log1, car2Log2),
-            granularity = InsightsTimeGranularity.WEEKLY,
+            granularity = InsightsTimeGranularity.MONTHLY,
             selectedCarId = "car_1",
             gasPrice = 4.00f,
             baselineMpg = 30.0f,
@@ -144,5 +194,87 @@ class InsightsCalculationEngineTest {
         // 1200 / 30 = 40 gallons; 40 * $4 = $160
         assertEquals(40.0, stateCar1.gasComparison.totalGallons, 0.01)
         assertEquals(160.0, stateCar1.gasComparison.totalCost, 0.01)
+    }
+
+    @Test
+    fun computeUiState_ignoresMaintenanceAndInitialLogs() {
+        // Old maintenance record in January at 0 miles
+        val jan1Ms = LocalDate.of(2026, 1, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val oct15Ms = LocalDate.of(2026, 10, 15).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val oct20Ms = LocalDate.of(2026, 10, 20).atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        val maintLog = OdometerLogEntity("rec_1", "car_1", 0, jan1Ms, "MAINTENANCE")
+        val initialFakeLog = OdometerLogEntity("car_odo_car_1", "car_1", 25980, oct15Ms, "INITIAL")
+        val realPing1 = OdometerLogEntity("ping_1", "car_1", 25980, oct15Ms, "TESLA_FLEET")
+        val realPing2 = OdometerLogEntity("ping_2", "car_1", 25999, oct20Ms, "TESLA_FLEET")
+
+        val state = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(maintLog, initialFakeLog, realPing1, realPing2),
+            granularity = InsightsTimeGranularity.YTD,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = oct20Ms
+        )
+
+        assertTrue(state.hasOdometerData)
+        // Should only count the 19 miles between the two telemetry pings, not 25999 miles from Jan!
+        assertEquals(19, state.totalMiles)
+        assertEquals(19, state.car1Miles)
+    }
+
+    @Test
+    fun computeUiState_periodNavigation_canGoPreviousAndNext() {
+        // Data from Oct 1 to Oct 29, 2026
+        val oct1Ms = LocalDate.of(2026, 10, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val oct29Ms = LocalDate.of(2026, 10, 29).atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        val log1 = OdometerLogEntity("p1", "car_1", 20000, oct1Ms, "TESLA_FLEET")
+        val log2 = OdometerLogEntity("p2", "car_1", 20500, oct29Ms, "TESLA_FLEET")
+
+        // Current week (periodOffset = 0)
+        val stateCurrent = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            periodOffset = 0,
+            nowMs = oct29Ms
+        )
+
+        assertFalse("At current period, cannot go next", stateCurrent.canGoNext)
+        assertTrue("Has data earlier in October, can go previous", stateCurrent.canGoPrevious)
+
+        // Previous week (periodOffset = -1)
+        val statePrev = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            periodOffset = -1,
+            nowMs = oct29Ms
+        )
+
+        assertTrue("In previous period, can go next back to current", statePrev.canGoNext)
+
+        // Navigating far into the past (e.g. 10 weeks ago, before Oct 1)
+        val stateFarPast = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            periodOffset = -10,
+            nowMs = oct29Ms
+        )
+
+        assertFalse("Cannot go previous beyond earliest telemetry data", stateFarPast.canGoPrevious)
+        assertTrue("Can navigate forward towards current data", stateFarPast.canGoNext)
     }
 }

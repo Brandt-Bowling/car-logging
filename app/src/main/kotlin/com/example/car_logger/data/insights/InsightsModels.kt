@@ -1,13 +1,14 @@
 package com.example.car_logger.data.insights
 
 enum class InsightsTimeGranularity(val label: String) {
-    WEEKLY("Weekly"),
-    MONTHLY("Monthly"),
-    YTD("YTD")
+    WEEKLY("Week"),
+    MONTHLY("Month"),
+    YTD("Year")
 }
 
 data class DrivingActivityBar(
     val label: String,
+    val shortLabel: String = label,
     val car1Miles: Int,
     val car2Miles: Int,
     val totalMiles: Int,
@@ -44,5 +45,8 @@ data class InsightsUiState(
     val gasComparison: GasComparisonData = GasComparisonData(0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0),
     val gasPrice: Float = 3.65f,
     val baselineMpg: Float = 28.0f,
-    val hasOdometerData: Boolean = false
+    val hasOdometerData: Boolean = false,
+    val canGoPrevious: Boolean = false,
+    val canGoNext: Boolean = false,
+    val periodOffset: Int = 0
 )

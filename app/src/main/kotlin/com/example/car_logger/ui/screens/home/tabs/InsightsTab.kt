@@ -20,9 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.DirectionsCar
-import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -63,6 +61,9 @@ fun InsightsTab(
     cars: List<Car>,
     onSelectVehicle: (String?) -> Unit,
     onSelectGranularity: (InsightsTimeGranularity) -> Unit,
+    onPreviousPeriod: () -> Unit = {},
+    onNextPeriod: () -> Unit = {},
+    onResetPeriod: () -> Unit = {},
     onUpdateGasPrice: (Float) -> Unit,
     onUpdateBaselineMpg: (Float) -> Unit,
     modifier: Modifier = Modifier
@@ -82,7 +83,7 @@ fun InsightsTab(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Insights,
+                    imageVector = Icons.Outlined.BarChart,
                     contentDescription = null,
                     modifier = Modifier.size(56.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -111,7 +112,7 @@ fun InsightsTab(
         // Vehicle Selection Controls
         if (activeCars.size > 1) {
             item {
-                val vehicleOptions = listOf("Both Cars" to null) + activeCars.map {
+                val vehicleOptions = listOf("All Cars" to null) + activeCars.map {
                     (it.model.ifBlank { it.displayName }) to it.id
                 }
 
@@ -170,64 +171,6 @@ fun InsightsTab(
             }
         }
 
-        // Granularity Selection Controls
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                InsightsTimeGranularity.values().forEach { gran ->
-                    val isSelected = state.granularity == gran
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { onSelectGranularity(gran) },
-                        label = {
-                            Text(
-                                text = gran.label,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        modifier = Modifier.expressiveBounceClick()
-                    )
-                }
-            }
-        }
-
-        // Observation Window Badge
-        if (state.observationWindowText.isNotBlank()) {
-            item {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = state.observationWindowText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
         if (state.hasOdometerData) {
             // Card 1: Fleet Share & Overall Miles
             item {
@@ -248,11 +191,27 @@ fun InsightsTab(
                 )
             }
 
-            // Card 2: Driving Activity Bar Chart
+            // Card 2: Driving Activity Bar Chart (Google Health Steps view layout)
             item {
+                val activeDailyRate = when (state.selectedCarId) {
+                    state.car1Id -> state.car1DailyRate
+                    state.car2Id -> state.car2DailyRate
+                    else -> state.car1DailyRate + state.car2DailyRate
+                }
+
                 DrivingActivityCard(
                     granularity = state.granularity,
                     activityBars = state.activityBars,
+                    observationWindowText = state.observationWindowText,
+                    totalMiles = state.totalMiles,
+                    dailyRate = activeDailyRate,
+                    canGoPrevious = state.canGoPrevious,
+                    canGoNext = state.canGoNext,
+                    canReset = state.canGoNext,
+                    onSelectGranularity = onSelectGranularity,
+                    onPreviousPeriod = onPreviousPeriod,
+                    onNextPeriod = onNextPeriod,
+                    onResetPeriod = onResetPeriod,
                     car1Name = state.car1Name,
                     car2Name = state.car2Name,
                     selectedCarId = state.selectedCarId,
@@ -313,7 +272,7 @@ fun InsightsTab(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Driving insights and gas comparison charts are calculated using verified odometer telemetry over time. As your vehicle syncs or you log maintenance records with mileage, weekly, monthly, and YTD charts will populate automatically.",
+                            text = "Driving insights and gas comparison charts are calculated using verified odometer telemetry over time. As your vehicle syncs, weekly, monthly, and YTD charts will populate automatically.",
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
