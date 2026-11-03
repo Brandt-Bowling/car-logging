@@ -319,6 +319,20 @@ class VehicleDetailsViewModel(
                 )
                 tireDao.insertTire(TireEntity.fromModel(newTire))
             }
+
+            val rotationRecord = MaintenanceRecordEntity(
+                id = UUID.randomUUID().toString(),
+                carId = carId,
+                title = "Tire Rotation",
+                date = date,
+                odometer = odometer
+            )
+            recordDao.insertRecord(rotationRecord)
+
+            val currentCarOdo = carDao.getCarById(carId)?.odometer
+            if (odometer > 0 && (currentCarOdo == null || odometer > currentCarOdo)) {
+                carDao.updateOdometer(carId, odometer)
+            }
         }
     }
 
