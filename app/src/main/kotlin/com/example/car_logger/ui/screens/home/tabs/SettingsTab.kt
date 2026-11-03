@@ -1,5 +1,6 @@
 package com.example.car_logger.ui.screens.home.tabs
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -1069,7 +1070,11 @@ private fun DashboardLinkButton(
     val context = LocalContext.current
     OutlinedButton(
         onClick = {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            try {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, "No web browser found to open link", Toast.LENGTH_SHORT).show()
+            }
         },
         modifier = modifier.fillMaxWidth()
     ) {
