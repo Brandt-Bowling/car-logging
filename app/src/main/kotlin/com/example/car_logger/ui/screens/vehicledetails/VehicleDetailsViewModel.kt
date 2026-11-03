@@ -14,6 +14,7 @@ import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Glovebox
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.Tire
+import com.example.car_logger.data.model.TireRotationCalculator
 import com.example.car_logger.data.vehicle.VehicleImageRepository
 import com.example.car_logger.services.GeminiAiService
 import com.example.car_logger.services.GoogleDriveService
@@ -306,18 +307,26 @@ class VehicleDetailsViewModel(
                 )
                 tireDao.updateTire(TireEntity.fromModel(updated))
             } else {
-                val newTire = Tire(
-                    id = UUID.randomUUID().toString(),
+                val newTire = TireRotationCalculator.createDefaultTireForRotation(
                     carId = carId,
-                    manufacturer = "OEM / All Season",
-                    model = "Standard Tires",
-                    dateInstalled = date,
-                    odometerInstalled = car.value?.odometer ?: 0,
-                    estimatedTreadLifeMiles = 50000,
-                    lastRotationDate = date,
-                    lastRotationOdometer = odometer
+                    date = date,
+                    rotationOdometer = odometer
                 )
                 tireDao.insertTire(TireEntity.fromModel(newTire))
+            }
+
+            val rotationRecord = MaintenanceRecordEntity(
+                id = UUID.randomUUID().toString(),
+                carId = carId,
+                title = "Tire Rotation",
+                date = date,
+                odometer = odometer
+            )
+            recordDao.insertRecord(rotationRecord)
+
+            val currentCarOdo = carDao.getCarById(carId)?.odometer
+            if (odometer > 0 && (currentCarOdo == null || odometer > currentCarOdo)) {
+                carDao.updateOdometer(carId, odometer)
             }
         }
     }

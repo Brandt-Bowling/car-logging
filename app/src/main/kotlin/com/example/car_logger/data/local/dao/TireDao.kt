@@ -17,6 +17,9 @@ interface TireDao {
     @Query("SELECT * FROM tires WHERE carId = :carId ORDER BY dateInstalled DESC")
     fun getAllTiresForCar(carId: String): Flow<List<TireEntity>>
 
+    @Query("SELECT * FROM tires ORDER BY dateInstalled DESC")
+    fun getAllTires(): Flow<List<TireEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTire(tire: TireEntity)
 

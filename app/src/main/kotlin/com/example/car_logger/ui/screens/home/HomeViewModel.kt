@@ -13,6 +13,7 @@ import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.MaintenanceRecordEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.MaintenanceRecord
+import com.example.car_logger.data.model.TireRotationCalculator
 import com.example.car_logger.data.vehicle.VehicleImageRepository
 import com.example.car_logger.services.GeminiAiService
 import com.example.car_logger.services.GoogleDriveService
@@ -43,6 +44,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getInstance(application)
     private val carDao = database.carDao()
     private val recordDao = database.maintenanceRecordDao()
+    private val tireDao = database.tireDao()
     val odometerLogDao = database.odometerLogDao()
     val preferencesManager = PreferencesManager(application)
     val googleDriveService = GoogleDriveService(application)
@@ -87,30 +89,53 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         emptyList()
     )
 
-    val scheduledServices: StateFlow<List<ScheduledServiceItem>> = combine(cars, allRecords) { carList, records ->
+    val scheduledServices: StateFlow<List<ScheduledServiceItem>> = combine(
+        cars,
+        allRecords,
+        tireDao.getAllTires()
+    ) { carList, records, tireEntities ->
+        val activeTiresByCar = tireEntities
+            .groupBy { it.carId }
+            .mapValues { (_, list) -> list.firstOrNull()?.toModel() }
         val items = mutableListOf<ScheduledServiceItem>()
         for (car in carList) {
             if (car.isArchived || car.odometer == null) continue
             val carRecords = records.filter { it.carId == car.id }
-            val latestOdo = if (carRecords.isNotEmpty()) {
-                carRecords.maxOf { it.odometer }
-            } else {
-                car.odometer
-            }
 
-            val interval = if (car.isEv) car.effectiveTireRotationInterval else 5000
-            val nextOdo = latestOdo + interval
-            val remaining = nextOdo - car.odometer
-
-            items.add(
-                ScheduledServiceItem(
+            if (car.isEv) {
+                val status = TireRotationCalculator.calculateRotationStatus(
                     car = car,
-                    title = if (car.isEv) "Tire Rotation & Cabin Filter Inspection" else "Oil & Filter Change",
-                    dueOdometer = nextOdo,
-                    remainingMiles = remaining,
-                    isUrgent = remaining <= 500
+                    activeTire = activeTiresByCar[car.id],
+                    records = carRecords
                 )
-            )
+                items.add(
+                    ScheduledServiceItem(
+                        car = car,
+                        title = "Tire Rotation & Cabin Filter Inspection",
+                        dueOdometer = status.nextRotationOdometer,
+                        remainingMiles = status.remainingMilesToRotation,
+                        isUrgent = status.remainingMilesToRotation <= 500
+                    )
+                )
+            } else {
+                val latestOdo = if (carRecords.isNotEmpty()) {
+                    carRecords.maxOf { it.odometer }
+                } else {
+                    car.odometer
+                }
+                val interval = 5000
+                val nextOdo = latestOdo + interval
+                val remaining = nextOdo - car.odometer
+                items.add(
+                    ScheduledServiceItem(
+                        car = car,
+                        title = "Oil & Filter Change",
+                        dueOdometer = nextOdo,
+                        remainingMiles = remaining,
+                        isUrgent = remaining <= 500
+                    )
+                )
+            }
         }
         items.sortedBy { it.remainingMiles }
     }.stateIn(
