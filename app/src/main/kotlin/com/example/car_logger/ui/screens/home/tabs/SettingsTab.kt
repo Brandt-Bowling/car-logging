@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
@@ -193,6 +194,11 @@ fun SettingsTab(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    DashboardLinkButton(
+                        label = "Get API Key (Google AI Studio)",
+                        url = DeveloperDashboardUrls.GEMINI
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = tempKey,
@@ -235,6 +241,11 @@ fun SettingsTab(
                         "Enter your custom auto.dev API key for automotive VIN decoding and vehicle photos. If blank, the bundled key is used.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    DashboardLinkButton(
+                        label = "Get API Key (Auto.dev Dashboard)",
+                        url = DeveloperDashboardUrls.AUTO_DEV
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
@@ -1039,4 +1050,27 @@ private fun SettingsItemDivider(modifier: Modifier = Modifier) {
         modifier = modifier.padding(start = 70.dp, end = 16.dp),
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
     )
+}
+
+@Composable
+private fun DashboardLinkButton(
+    label: String,
+    url: String,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    OutlinedButton(
+        onClick = {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        },
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(label)
+    }
 }
