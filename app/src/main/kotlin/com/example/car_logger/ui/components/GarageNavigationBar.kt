@@ -4,11 +4,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.DirectionsCar
-import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -34,7 +34,7 @@ enum class GarageNavigationTab(
 ) {
     GARAGE("Garage", Icons.Filled.DirectionsCar, Icons.Outlined.DirectionsCar),
     ACTIVITY("Activity", Icons.AutoMirrored.Filled.ReceiptLong, Icons.AutoMirrored.Outlined.ReceiptLong),
-    INSIGHTS("Insights", Icons.Filled.Insights, Icons.Outlined.Insights),
+    INSIGHTS("Insights", Icons.Filled.BarChart, Icons.Outlined.BarChart),
     SETTINGS("Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 

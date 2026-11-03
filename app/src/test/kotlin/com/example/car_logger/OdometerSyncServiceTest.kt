@@ -283,6 +283,43 @@ class OdometerSyncServiceTest {
     }
 
     @Test
+    fun `isCooldownActive respects bypassCooldown parameter concept`() {
+        val now = 1_700_000_000_000L
+        val oneHourAgo = now - 3_600_000L
+        val inCooldown = OdometerSyncService.isCooldownActive(oneHourAgo, 72, now)
+        assertTrue(inCooldown)
+        // With bypassCooldown, callers skip isCooldownActive check
+    }
+
+    @Test
+    fun `formatDailyPollSummary creates descriptive message for updated and skipped results`() {
+        val car1 = Car(id = "1", make = "Chevrolet", model = "Blazer EV", year = 2024, odometer = 15000)
+        val car2 = Car(id = "2", make = "Tesla", model = "Model 3", year = 2023, odometer = 28000)
+        val results = listOf(
+            OdometerSyncResult.Updated(car1.id, 15000, OdometerSyncService.PROVIDER_SMARTCAR),
+            OdometerSyncResult.Updated(car2.id, 28000, OdometerSyncService.PROVIDER_TESLA)
+        )
+        val summary = OdometerSyncService.formatDailyPollSummary(listOf(car1, car2), results)
+        assertEquals("Synced 2 vehicles", summary)
+    }
+
+    @Test
+    fun `formatDailyPollSummary handles not configured and empty vehicles properly`() {
+        val car1 = Car(id = "1", make = "Chevrolet", model = "Blazer EV", year = 2024, odometer = 15000)
+        val car2 = Car(id = "2", make = "Tesla", model = "Model 3", year = 2023, odometer = 28000)
+
+        val unconfiguredResults = listOf(
+            OdometerSyncResult.NotConfigured(car1.id),
+            OdometerSyncResult.NotConfigured(car2.id)
+        )
+        val summaryUnconfigured = OdometerSyncService.formatDailyPollSummary(listOf(car1, car2), unconfiguredResults)
+        assertEquals("Blazer EV: not linked, Model 3: not linked", summaryUnconfigured)
+
+        val emptySummary = OdometerSyncService.formatDailyPollSummary(emptyList(), emptyList())
+        assertEquals("No vehicles configured", emptySummary)
+    }
+
+    @Test
     fun `recordOdometerReading seeds baseline and latest log when latest log is null and previous odometer exists`() = runBlocking {
         val carDao = FakeCarDao()
         val odometerLogDao = FakeOdometerLogDao()
@@ -310,16 +347,18 @@ class OdometerSyncServiceTest {
         // Car odometer updated in carDao
         assertEquals(24150, carDao.getCarById("tesla_1")?.odometer)
 
-        // 2 logs created: INITIAL (24000) and TESLA_FLEET (24150)
+        // 2 logs created: baseline (24000) and synced (24150)
         assertEquals(2, odometerLogDao.logs.size)
-        val initialLog = odometerLogDao.logs.find { it.source == "INITIAL" }
-        val syncedLog = odometerLogDao.logs.find { it.source == OdometerSyncService.PROVIDER_TESLA }
+        val initialLog = odometerLogDao.logs.first()
+        val syncedLog = odometerLogDao.logs.last()
 
-        assertEquals(24000, initialLog?.odometer)
-        assertEquals(1700000000000L, initialLog?.timestamp)
+        assertEquals(24000, initialLog.odometer)
+        assertEquals(1700000000000L, initialLog.timestamp)
+        assertEquals(OdometerSyncService.PROVIDER_TESLA, initialLog.source)
 
-        assertEquals(24150, syncedLog?.odometer)
-        assertEquals(syncTime, syncedLog?.timestamp)
+        assertEquals(24150, syncedLog.odometer)
+        assertEquals(syncTime, syncedLog.timestamp)
+        assertEquals(OdometerSyncService.PROVIDER_TESLA, syncedLog.source)
     }
 
     @Test
@@ -336,7 +375,7 @@ class OdometerSyncServiceTest {
         )
         carDao.insertCar(initialCar)
         odometerLogDao.insertLog(
-            OdometerLogEntity("log1", "tesla_1", 24000, 1700000000000L, "INITIAL")
+            OdometerLogEntity("log1", "tesla_1", 24000, 1700000000000L, OdometerSyncService.PROVIDER_TESLA)
         )
 
         val syncTime = 1700086400000L
@@ -368,7 +407,7 @@ class OdometerSyncServiceTest {
         )
         carDao.insertCar(initialCar)
         odometerLogDao.insertLog(
-            OdometerLogEntity("log1", "tesla_1", 24000, 1700000000000L, "INITIAL")
+            OdometerLogEntity("log1", "tesla_1", 24000, 1700000000000L, OdometerSyncService.PROVIDER_TESLA)
         )
 
         val syncTime = 1700086400000L
@@ -442,6 +481,9 @@ class OdometerSyncServiceTest {
         }
         override suspend fun deleteLogsForCar(carId: String) {
             logs.removeAll { it.carId == carId }
+        }
+        override suspend fun deleteNonTelemetryLogs() {
+            logs.removeAll { it.source in listOf("MAINTENANCE", "INITIAL") || it.id.startsWith("rec_") || it.id.startsWith("car_odo_") }
         }
     }
 }

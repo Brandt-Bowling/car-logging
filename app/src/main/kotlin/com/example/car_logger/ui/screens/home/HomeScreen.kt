@@ -287,6 +287,9 @@ fun HomeScreen(
                                 cars = cars,
                                 onSelectVehicle = { viewModel.setInsightsVehicleFilter(it) },
                                 onSelectGranularity = { viewModel.setInsightsGranularity(it) },
+                                onPreviousPeriod = { viewModel.navigateInsightsPreviousPeriod() },
+                                onNextPeriod = { viewModel.navigateInsightsNextPeriod() },
+                                onResetPeriod = { viewModel.resetInsightsPeriod() },
                                 onUpdateGasPrice = { viewModel.updateComparisonGasPrice(it) },
                                 onUpdateBaselineMpg = { viewModel.updateComparisonBaselineMpg(it) }
                             )

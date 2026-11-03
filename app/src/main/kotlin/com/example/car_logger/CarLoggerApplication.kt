@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.migration.FlutterDataMigrator
+import com.example.car_logger.services.DailyPollScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,9 +31,17 @@ class CarLoggerApplication : Application() {
         applicationScope.launch {
             try {
                 FlutterDataMigrator.migrateIfNeeded(this@CarLoggerApplication, database, preferencesManager)
-                FlutterDataMigrator.seedInitialOdometerLogs(database)
+                FlutterDataMigrator.cleanupCorruptedOdometerLogs(database)
             } catch (e: Exception) {
                 Log.e("CarLoggerApplication", "Migration error: ${e.message}", e)
+            }
+
+            try {
+                if (preferencesManager.getDailyPollEnabled()) {
+                    DailyPollScheduler.schedule(this@CarLoggerApplication)
+                }
+            } catch (e: Exception) {
+                Log.e("CarLoggerApplication", "Scheduler init error: ${e.message}", e)
             }
         }
     }

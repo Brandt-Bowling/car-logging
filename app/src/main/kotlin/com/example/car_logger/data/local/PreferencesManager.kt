@@ -44,6 +44,9 @@ class PreferencesManager(private val context: Context) {
         // Telemetry & Wake Protection
         val KEY_WAKE_POLICY = stringPreferencesKey("telemetry_wake_policy")
         val KEY_SYNC_COOLDOWN_HOURS = intPreferencesKey("telemetry_cooldown_hours")
+        val KEY_DAILY_POLL_ENABLED = booleanPreferencesKey("telemetry_daily_poll_enabled")
+        val KEY_LAST_DAILY_POLL_TIME = longPreferencesKey("telemetry_last_daily_poll_time")
+        val KEY_LAST_DAILY_POLL_STATUS = stringPreferencesKey("telemetry_last_daily_poll_status")
 
         val KEY_SMARTCAR_APPLICATION_ID = stringPreferencesKey("smartcar_application_id")
         val KEY_SMARTCAR_CLIENT_ID = stringPreferencesKey("smartcar_client_id")
@@ -216,6 +219,18 @@ class PreferencesManager(private val context: Context) {
         prefs[KEY_SYNC_COOLDOWN_HOURS] ?: DEFAULT_COOLDOWN_HOURS
     }
 
+    val dailyPollEnabledFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_DAILY_POLL_ENABLED] ?: true
+    }
+
+    val lastDailyPollTimeFlow: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LAST_DAILY_POLL_TIME] ?: 0L
+    }
+
+    val lastDailyPollStatusFlow: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LAST_DAILY_POLL_STATUS]
+    }
+
     val smartcarClientIdFlow: Flow<String?> = context.dataStore.data.map { it[KEY_SMARTCAR_CLIENT_ID] }
     val smartcarConnectedFlow: Flow<Boolean> = context.dataStore.data.map {
         !it[KEY_SMARTCAR_VEHICLE_ID].isNullOrBlank() ||
@@ -240,6 +255,21 @@ class PreferencesManager(private val context: Context) {
     suspend fun setSyncCooldownHours(hours: Int) {
         context.dataStore.edit { prefs ->
             prefs[KEY_SYNC_COOLDOWN_HOURS] = hours
+        }
+    }
+
+    suspend fun getDailyPollEnabled(): Boolean = dailyPollEnabledFlow.first()
+
+    suspend fun setDailyPollEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_DAILY_POLL_ENABLED] = enabled
+        }
+    }
+
+    suspend fun recordDailyPollResult(timestampMs: Long, status: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_LAST_DAILY_POLL_TIME] = timestampMs
+            prefs[KEY_LAST_DAILY_POLL_STATUS] = status
         }
     }
 

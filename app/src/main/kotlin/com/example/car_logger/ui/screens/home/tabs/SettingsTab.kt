@@ -45,6 +45,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -62,6 +63,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -70,6 +73,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.WakeProtectionPolicy
 import com.example.car_logger.data.model.Car
+import com.example.car_logger.services.DailyPollScheduler
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncService
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -94,6 +98,9 @@ fun SettingsTab(
     val cooldownHours by preferencesManager.syncCooldownHoursFlow.collectAsState(initial = PreferencesManager.DEFAULT_COOLDOWN_HOURS)
     val smartcarConnected by preferencesManager.smartcarConnectedFlow.collectAsState(initial = false)
     val teslaConnected by preferencesManager.teslaConnectedFlow.collectAsState(initial = false)
+    val dailyPollEnabled by preferencesManager.dailyPollEnabledFlow.collectAsState(initial = true)
+    val lastDailyPollTime by preferencesManager.lastDailyPollTimeFlow.collectAsState(initial = 0L)
+    val lastDailyPollStatus by preferencesManager.lastDailyPollStatusFlow.collectAsState(initial = null)
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner, odometerSyncService, cars) {
@@ -628,6 +635,57 @@ fun SettingsTab(
                                 )
                             }
                         }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
+                    // Nightly End-of-Day Polling
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Nightly Mileage Snapshot",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Poll at 11:00 PM while plugged in overnight",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (dailyPollEnabled) {
+                                val lastRunText = if (lastDailyPollTime > 0L) {
+                                    val formattedTime = OdometerSyncService.formatRelativeTime(lastDailyPollTime)
+                                    val statusText = lastDailyPollStatus?.let { " • $it" } ?: ""
+                                    "Last run $formattedTime$statusText"
+                                } else {
+                                    "Scheduled for 11:00 PM tonight"
+                                }
+                                Text(
+                                    text = lastRunText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = dailyPollEnabled,
+                            modifier = Modifier.semantics { contentDescription = "Nightly Mileage Snapshot" },
+                            onCheckedChange = { isChecked ->
+                                coroutineScope.launch {
+                                    preferencesManager.setDailyPollEnabled(isChecked)
+                                    if (isChecked) {
+                                        DailyPollScheduler.schedule(context)
+                                    } else {
+                                        DailyPollScheduler.cancel(context)
+                                    }
+                                }
+                            }
+                        )
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))

@@ -42,3 +42,6 @@ google-services.json
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
+
+# Superpowers scratch and brainstorm
+.superpowers/
