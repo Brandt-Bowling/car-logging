@@ -1,5 +1,6 @@
 package com.example.car_logger.ui.screens.home.tabs
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -24,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
@@ -193,6 +195,11 @@ fun SettingsTab(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    DashboardLinkButton(
+                        label = "Get API Key (Google AI Studio)",
+                        url = DeveloperDashboardUrls.GEMINI
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = tempKey,
@@ -235,6 +242,11 @@ fun SettingsTab(
                         "Enter your custom auto.dev API key for automotive VIN decoding and vehicle photos. If blank, the bundled key is used.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    DashboardLinkButton(
+                        label = "Get API Key (Auto.dev Dashboard)",
+                        url = DeveloperDashboardUrls.AUTO_DEV
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
@@ -286,6 +298,10 @@ fun SettingsTab(
             title = { Text("Smartcar (GM / Blazer EV)") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DashboardLinkButton(
+                        label = "Open Smartcar Dashboard",
+                        url = DeveloperDashboardUrls.SMARTCAR
+                    )
                     OutlinedTextField(
                         value = clientId,
                         onValueChange = { clientId = it },
@@ -379,6 +395,10 @@ fun SettingsTab(
             title = { Text("Tesla Fleet API") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DashboardLinkButton(
+                        label = "Open Tesla Developer Portal",
+                        url = DeveloperDashboardUrls.TESLA
+                    )
                     OutlinedTextField(
                         value = clientId,
                         onValueChange = { clientId = it },
@@ -1039,4 +1059,31 @@ private fun SettingsItemDivider(modifier: Modifier = Modifier) {
         modifier = modifier.padding(start = 70.dp, end = 16.dp),
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
     )
+}
+
+@Composable
+private fun DashboardLinkButton(
+    label: String,
+    url: String,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    OutlinedButton(
+        onClick = {
+            try {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, "No web browser found to open link", Toast.LENGTH_SHORT).show()
+            }
+        },
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(label)
+    }
 }
