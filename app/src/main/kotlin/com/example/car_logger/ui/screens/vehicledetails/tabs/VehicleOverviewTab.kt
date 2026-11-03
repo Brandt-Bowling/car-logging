@@ -96,6 +96,7 @@ fun VehicleOverviewTab(
             VehicleTireHealthCard(
                 car = car,
                 activeTire = activeTire,
+                records = records,
                 onLogRotationClick = onLogRotationClick,
                 onEditIntervalClick = onEditIntervalClick,
                 onInstallNewTireClick = onInstallNewTireClick
