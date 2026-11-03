@@ -41,6 +41,23 @@ data class TireRotationStatus(
 )
 
 object TireRotationCalculator {
+    fun createDefaultTireForRotation(
+        carId: String,
+        date: String,
+        rotationOdometer: Int,
+        id: String = java.util.UUID.randomUUID().toString()
+    ): Tire = Tire(
+        id = id,
+        carId = carId,
+        manufacturer = "OEM / All Season",
+        model = "Standard Tires",
+        dateInstalled = date,
+        odometerInstalled = 0,
+        estimatedTreadLifeMiles = 50000,
+        lastRotationDate = date,
+        lastRotationOdometer = rotationOdometer
+    )
+
     fun isTireRotationRecord(record: MaintenanceRecord): Boolean {
         val combined = "${record.title} ${record.description.orEmpty()}".lowercase()
         return combined.contains("tire rotation") ||

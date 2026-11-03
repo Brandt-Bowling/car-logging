@@ -201,4 +201,68 @@ class TireModelTest {
         assertEquals(0, status.milesSinceBaseline)
         assertEquals(0f, status.rotationProgress, 0.001f)
     }
+
+    @Test
+    fun testPreInstallRotationLogAloneFallsBackToOdometerInstalled() {
+        val car = Car(
+            id = "c1",
+            make = "Rivian",
+            model = "R1T",
+            year = 2024,
+            odometer = 43000,
+            isEv = true,
+            tireRotationInterval = 7500
+        )
+        val tire = Tire(
+            id = "t1",
+            carId = "c1",
+            manufacturer = "Pirelli",
+            model = "Scorpion",
+            dateInstalled = "2025-01-01",
+            odometerInstalled = 40000,
+            estimatedTreadLifeMiles = 50000,
+            lastRotationOdometer = null
+        )
+        val records = listOf(
+            MaintenanceRecord(
+                id = "r_old",
+                carId = "c1",
+                title = "Tire Rotation",
+                date = "2024-08-01",
+                odometer = 25000
+            )
+        )
+
+        val status = TireRotationCalculator.calculateRotationStatus(car, tire, records)
+        assertEquals(null, status.lastRotationOdometer)
+        assertEquals(40000, status.baselineOdometer)
+        assertEquals(47500, status.nextRotationOdometer)
+        assertEquals(4500, status.remainingMilesToRotation)
+    }
+
+    @Test
+    fun testDefaultTireCreatedForHistoricalRotationPreservesRotationBaseline() {
+        val car = Car(
+            id = "c1",
+            make = "Tesla",
+            model = "Model Y",
+            year = 2024,
+            odometer = 28000,
+            isEv = true,
+            tireRotationInterval = 7500
+        )
+        val synthesizedTire = TireRotationCalculator.createDefaultTireForRotation(
+            carId = car.id,
+            date = "2026-09-01",
+            rotationOdometer = 25000
+        )
+        val status = TireRotationCalculator.calculateRotationStatus(
+            car = car,
+            activeTire = synthesizedTire,
+            records = emptyList()
+        )
+        assertEquals(25000, status.lastRotationOdometer)
+        assertEquals(32500, status.nextRotationOdometer)
+        assertEquals(4500, status.remainingMilesToRotation)
+    }
 }
