@@ -297,6 +297,10 @@ fun SettingsTab(
             title = { Text("Smartcar (GM / Blazer EV)") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DashboardLinkButton(
+                        label = "Open Smartcar Dashboard",
+                        url = DeveloperDashboardUrls.SMARTCAR
+                    )
                     OutlinedTextField(
                         value = clientId,
                         onValueChange = { clientId = it },
@@ -390,6 +394,10 @@ fun SettingsTab(
             title = { Text("Tesla Fleet API") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DashboardLinkButton(
+                        label = "Open Tesla Developer Portal",
+                        url = DeveloperDashboardUrls.TESLA
+                    )
                     OutlinedTextField(
                         value = clientId,
                         onValueChange = { clientId = it },
