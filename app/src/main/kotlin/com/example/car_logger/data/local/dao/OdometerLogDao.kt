@@ -13,8 +13,14 @@ interface OdometerLogDao {
     @Query("SELECT * FROM odometer_logs ORDER BY timestamp ASC")
     fun getAllLogs(): Flow<List<OdometerLogEntity>>
 
+    @Query("SELECT * FROM odometer_logs ORDER BY timestamp ASC")
+    suspend fun getAllLogsList(): List<OdometerLogEntity>
+
     @Query("SELECT * FROM odometer_logs WHERE carId = :carId ORDER BY timestamp ASC")
     fun getLogsForCar(carId: String): Flow<List<OdometerLogEntity>>
+
+    @Query("SELECT * FROM odometer_logs WHERE carId = :carId ORDER BY timestamp ASC")
+    suspend fun getLogsForCarList(carId: String): List<OdometerLogEntity>
 
     @Query("SELECT * FROM odometer_logs WHERE carId = :carId ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLatestLogForCar(carId: String): OdometerLogEntity?

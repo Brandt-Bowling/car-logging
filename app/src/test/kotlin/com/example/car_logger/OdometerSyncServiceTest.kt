@@ -1,8 +1,15 @@
 package com.example.car_logger
 
+import com.example.car_logger.data.local.dao.CarDao
+import com.example.car_logger.data.local.dao.OdometerLogDao
+import com.example.car_logger.data.local.entity.CarEntity
+import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.services.OdometerSyncResult
 import com.example.car_logger.services.OdometerSyncService
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -273,5 +280,168 @@ class OdometerSyncServiceTest {
         assertTrue(url.contains("application_id=c6e28e0b-2199-47e6-b367-51cb96965b30"))
         assertFalse(url.contains("client_01M5REPWJCMZEPD8QKP13FJN4H"))
         assertFalse(url.contains("scope="))
+    }
+
+    @Test
+    fun `recordOdometerReading seeds baseline and latest log when latest log is null and previous odometer exists`() = runBlocking {
+        val carDao = FakeCarDao()
+        val odometerLogDao = FakeOdometerLogDao()
+
+        val initialCar = CarEntity(
+            id = "tesla_1",
+            make = "Tesla",
+            model = "Model 3",
+            year = 2023,
+            odometer = 24000,
+            lastOdometerSyncTime = 1700000000000L
+        )
+        carDao.insertCar(initialCar)
+
+        val syncTime = 1700086400000L
+        OdometerSyncService.recordOdometerReading(
+            carDao = carDao,
+            odometerLogDao = odometerLogDao,
+            carId = "tesla_1",
+            odometer = 24150,
+            provider = OdometerSyncService.PROVIDER_TESLA,
+            syncTime = syncTime
+        )
+
+        // Car odometer updated in carDao
+        assertEquals(24150, carDao.getCarById("tesla_1")?.odometer)
+
+        // 2 logs created: INITIAL (24000) and TESLA_FLEET (24150)
+        assertEquals(2, odometerLogDao.logs.size)
+        val initialLog = odometerLogDao.logs.find { it.source == "INITIAL" }
+        val syncedLog = odometerLogDao.logs.find { it.source == OdometerSyncService.PROVIDER_TESLA }
+
+        assertEquals(24000, initialLog?.odometer)
+        assertEquals(1700000000000L, initialLog?.timestamp)
+
+        assertEquals(24150, syncedLog?.odometer)
+        assertEquals(syncTime, syncedLog?.timestamp)
+    }
+
+    @Test
+    fun `recordOdometerReading inserts new log when latest log exists and odometer increased`() = runBlocking {
+        val carDao = FakeCarDao()
+        val odometerLogDao = FakeOdometerLogDao()
+
+        val initialCar = CarEntity(
+            id = "tesla_1",
+            make = "Tesla",
+            model = "Model 3",
+            year = 2023,
+            odometer = 24000
+        )
+        carDao.insertCar(initialCar)
+        odometerLogDao.insertLog(
+            OdometerLogEntity("log1", "tesla_1", 24000, 1700000000000L, "INITIAL")
+        )
+
+        val syncTime = 1700086400000L
+        OdometerSyncService.recordOdometerReading(
+            carDao = carDao,
+            odometerLogDao = odometerLogDao,
+            carId = "tesla_1",
+            odometer = 24200,
+            provider = OdometerSyncService.PROVIDER_TESLA,
+            syncTime = syncTime
+        )
+
+        assertEquals(24200, carDao.getCarById("tesla_1")?.odometer)
+        assertEquals(2, odometerLogDao.logs.size)
+        assertEquals(24200, odometerLogDao.logs.last().odometer)
+    }
+
+    @Test
+    fun `recordOdometerReading skips log when latest log exists and odometer has not increased`() = runBlocking {
+        val carDao = FakeCarDao()
+        val odometerLogDao = FakeOdometerLogDao()
+
+        val initialCar = CarEntity(
+            id = "tesla_1",
+            make = "Tesla",
+            model = "Model 3",
+            year = 2023,
+            odometer = 24000
+        )
+        carDao.insertCar(initialCar)
+        odometerLogDao.insertLog(
+            OdometerLogEntity("log1", "tesla_1", 24000, 1700000000000L, "INITIAL")
+        )
+
+        val syncTime = 1700086400000L
+        OdometerSyncService.recordOdometerReading(
+            carDao = carDao,
+            odometerLogDao = odometerLogDao,
+            carId = "tesla_1",
+            odometer = 24000,
+            provider = OdometerSyncService.PROVIDER_TESLA,
+            syncTime = syncTime
+        )
+
+        // Should not insert a duplicate log for same reading
+        assertEquals(1, odometerLogDao.logs.size)
+    }
+
+    private class FakeCarDao : CarDao {
+        val cars = mutableMapOf<String, CarEntity>()
+
+        override fun getAllCars(): Flow<List<CarEntity>> = emptyFlow()
+        override suspend fun getAllCarsList(): List<CarEntity> = cars.values.toList()
+        override suspend fun getCarById(carId: String): CarEntity? = cars[carId]
+        override fun observeCarById(carId: String): Flow<CarEntity?> = emptyFlow()
+        override suspend fun insertCar(car: CarEntity) { cars[car.id] = car }
+        override suspend fun insertCars(cars: List<CarEntity>) { cars.forEach { this.cars[it.id] = it } }
+        override suspend fun updateCar(car: CarEntity) { cars[car.id] = car }
+        override suspend fun toggleArchive(carId: String) {}
+        override suspend fun updateOdometer(carId: String, odometer: Int) {
+            cars[carId]?.let { cars[carId] = it.copy(odometer = odometer) }
+        }
+        override suspend fun updateOdometerFromTelemetry(
+            carId: String,
+            odometer: Int,
+            provider: String,
+            status: String,
+            syncTime: Long
+        ) {
+            cars[carId]?.let {
+                cars[carId] = it.copy(
+                    odometer = odometer,
+                    telemetryProvider = provider,
+                    telemetryStatus = status,
+                    lastOdometerSyncTime = syncTime
+                )
+            }
+        }
+        override suspend fun updateTelemetryStatus(carId: String, provider: String, status: String) {}
+        override suspend fun updateDriveFolder(carId: String, folderId: String?, folderName: String?) {}
+        override suspend fun deleteCar(car: CarEntity) { cars.remove(car.id) }
+        override suspend fun deleteCarById(carId: String) { cars.remove(carId) }
+        override suspend fun getCarCount(): Int = cars.size
+    }
+
+    private class FakeOdometerLogDao : OdometerLogDao {
+        val logs = mutableListOf<OdometerLogEntity>()
+
+        override fun getAllLogs(): Flow<List<OdometerLogEntity>> = emptyFlow()
+        override suspend fun getAllLogsList(): List<OdometerLogEntity> = logs.sortedBy { it.timestamp }
+        override fun getLogsForCar(carId: String): Flow<List<OdometerLogEntity>> = emptyFlow()
+        override suspend fun getLogsForCarList(carId: String): List<OdometerLogEntity> =
+            logs.filter { it.carId == carId }.sortedBy { it.timestamp }
+        override suspend fun getLatestLogForCar(carId: String): OdometerLogEntity? =
+            logs.filter { it.carId == carId }.maxByOrNull { it.timestamp }
+        override suspend fun getLogCount(): Int = logs.size
+        override suspend fun insertLog(log: OdometerLogEntity) {
+            logs.removeAll { it.id == log.id }
+            logs.add(log)
+        }
+        override suspend fun insertLogs(logs: List<OdometerLogEntity>) {
+            logs.forEach { insertLog(it) }
+        }
+        override suspend fun deleteLogsForCar(carId: String) {
+            logs.removeAll { it.carId == carId }
+        }
     }
 }

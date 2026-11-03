@@ -111,7 +111,8 @@ fun InsightsTab(
         // Vehicle Selection Controls
         if (activeCars.size > 1) {
             item {
-                val vehicleOptions = listOf("Both Cars" to null) + activeCars.map {
+                val fleetLabel = if (activeCars.size > 2) "Fleet" else "Both Cars"
+                val vehicleOptions = listOf(fleetLabel to null) + activeCars.map {
                     (it.model.ifBlank { it.displayName }) to it.id
                 }
 

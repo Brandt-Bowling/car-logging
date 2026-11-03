@@ -387,6 +387,24 @@ object FlutterDataMigrator {
                 odometer = 28000,
                 cost = 165.0,
                 description = "Installed new AGM 12V battery with 3-year warranty."
+            ),
+            MaintenanceRecordEntity(
+                id = "mock_tesla_1",
+                carId = "2",
+                title = "Tire Rotation & Balance",
+                date = "2023-10-12",
+                odometer = 26500,
+                cost = 60.0,
+                description = "Rotated tires front to rear, checked tread depths and brake pads."
+            ),
+            MaintenanceRecordEntity(
+                id = "mock_tesla_2",
+                carId = "2",
+                title = "Cabin Air Filter & Wiper Blades",
+                date = "2024-02-20",
+                odometer = 30800,
+                cost = 85.0,
+                description = "Replaced HEPA cabin air filters and installed new OEM wiper blades."
             )
         )
         recordDao.insertRecords(defaultRecords)
@@ -395,18 +413,19 @@ object FlutterDataMigrator {
 
     suspend fun seedInitialOdometerLogs(database: AppDatabase) {
         val odometerLogDao = database.odometerLogDao()
-        if (odometerLogDao.getLogCount() > 0) return
-
         val carDao = database.carDao()
         val recordDao = database.maintenanceRecordDao()
 
         val cars = carDao.getAllCarsList()
         val records = recordDao.getAllRecordsList()
+        val existingLogs = odometerLogDao.getAllLogsList()
+        val existingIds = existingLogs.map { it.id }.toSet()
 
         val newLogs = mutableListOf<OdometerLogEntity>()
 
         for (rec in records) {
-            if (rec.odometer > 0 && rec.date.isNotBlank()) {
+            val recLogId = "rec_${rec.id}"
+            if (recLogId !in existingIds && rec.odometer > 0 && rec.date.isNotBlank()) {
                 val ts = try {
                     java.time.LocalDate.parse(rec.date.take(10))
                         .atStartOfDay(java.time.ZoneId.systemDefault())
@@ -417,7 +436,7 @@ object FlutterDataMigrator {
                 }
                 newLogs.add(
                     OdometerLogEntity(
-                        id = "rec_${rec.id}",
+                        id = recLogId,
                         carId = rec.carId,
                         odometer = rec.odometer,
                         timestamp = ts,
@@ -427,21 +446,59 @@ object FlutterDataMigrator {
             }
         }
 
+        val allCandidateLogs = existingLogs + newLogs
+
         for (car in cars) {
             val odo = car.odometer ?: continue
-            val carLogs = newLogs.filter { it.carId == car.id }
+            val carLogs = allCandidateLogs.filter { it.carId == car.id }
             val maxRecorded = carLogs.maxOfOrNull { it.odometer } ?: 0
-            if (odo > maxRecorded) {
+
+            // If the car has NO prior logs or records, record an initial baseline
+            if (carLogs.isEmpty()) {
                 val syncTime = car.lastOdometerSyncTime ?: System.currentTimeMillis()
-                newLogs.add(
-                    OdometerLogEntity(
-                        id = "car_odo_${car.id}",
-                        carId = car.id,
-                        odometer = odo,
-                        timestamp = syncTime,
-                        source = car.telemetryProvider ?: "INITIAL"
+                val logId = "car_odo_${car.id}"
+                if (logId !in existingIds) {
+                    newLogs.add(
+                        OdometerLogEntity(
+                            id = logId,
+                            carId = car.id,
+                            odometer = odo,
+                            timestamp = syncTime,
+                            source = car.telemetryProvider ?: "INITIAL"
+                        )
                     )
-                )
+                }
+            } else if (odo > maxRecorded) {
+                val syncTime = car.lastOdometerSyncTime ?: System.currentTimeMillis()
+                val logId = "car_odo_${car.id}_$odo"
+                if (logId !in existingIds) {
+                    newLogs.add(
+                        OdometerLogEntity(
+                            id = logId,
+                            carId = car.id,
+                            odometer = odo,
+                            timestamp = syncTime,
+                            source = car.telemetryProvider ?: "INITIAL"
+                        )
+                    )
+                }
+            }
+
+            // Backfill default Model 3 baseline (32,000) if car 2 has telemetry updates but no baseline
+            if (car.id == "2" && odo > 32000 && carLogs.none { it.odometer <= 32000 }) {
+                val syncTime = car.lastOdometerSyncTime ?: System.currentTimeMillis()
+                val baselineId = "baseline_2"
+                if (baselineId !in existingIds) {
+                    newLogs.add(
+                        OdometerLogEntity(
+                            id = baselineId,
+                            carId = car.id,
+                            odometer = 32000,
+                            timestamp = syncTime - (7 * 86_400_000L),
+                            source = "INITIAL"
+                        )
+                    )
+                }
             }
         }
 
