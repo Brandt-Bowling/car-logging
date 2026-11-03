@@ -47,8 +47,29 @@ object InsightsCalculationEngine {
             !it.id.startsWith("car_odo_")
         }
 
-        val car1 = activeCars.firstOrNull()
-        val car2 = activeCars.getOrNull(1)
+        val sortedCars = if (selectedCarId != null) {
+            val selected = activeCars.find { it.id == selectedCarId }
+            val remainder = activeCars.filter { it.id != selectedCarId }
+            listOfNotNull(selected) + remainder
+        } else if (activeCars.size <= 2) {
+            activeCars
+        } else {
+            // More than 2 cars in fleet: prioritize cars with active telemetry and recent odometer activity
+            activeCars.sortedWith(
+                compareByDescending<Car> { !it.telemetryProvider.isNullOrBlank() }
+                    .thenByDescending { car ->
+                        telemetryLogs.filter { it.carId == car.id }.maxOfOrNull { it.timestamp }
+                            ?: car.lastOdometerSyncTime
+                            ?: 0L
+                    }
+                    .thenByDescending { car ->
+                        telemetryLogs.count { it.carId == car.id }
+                    }
+            )
+        }
+
+        val car1 = sortedCars.firstOrNull()
+        val car2 = if (selectedCarId != null) null else sortedCars.getOrNull(1)
 
         val car1Logs = if (car1 != null) telemetryLogs.filter { it.carId == car1.id }.sortedBy { it.timestamp } else emptyList()
         val car2Logs = if (car2 != null) telemetryLogs.filter { it.carId == car2.id }.sortedBy { it.timestamp } else emptyList()
@@ -79,9 +100,9 @@ object InsightsCalculationEngine {
                 selectedCarId = selectedCarId,
                 granularity = granularity,
                 car1Id = car1?.id,
-                car1Name = car1?.displayName ?: "",
+                car1Name = car1?.model?.ifBlank { car1.displayName } ?: "",
                 car2Id = car2?.id,
-                car2Name = car2?.displayName ?: "",
+                car2Name = car2?.model?.ifBlank { car2.displayName } ?: "",
                 gasPrice = gasPrice,
                 baselineMpg = baselineMpg,
                 hasOdometerData = false,
@@ -112,9 +133,9 @@ object InsightsCalculationEngine {
                 selectedCarId = selectedCarId,
                 granularity = granularity,
                 car1Id = car1?.id,
-                car1Name = car1?.displayName ?: "",
+                car1Name = car1?.model?.ifBlank { car1.displayName } ?: "",
                 car2Id = car2?.id,
-                car2Name = car2?.displayName ?: "",
+                car2Name = car2?.model?.ifBlank { car2.displayName } ?: "",
                 gasPrice = gasPrice,
                 baselineMpg = baselineMpg,
                 hasOdometerData = true,
@@ -154,8 +175,12 @@ object InsightsCalculationEngine {
         }
 
         val totalFleetMiles = (totalC1Miles + totalC2Miles).coerceAtLeast(1)
-        val car1Pct = ((totalC1Miles.toFloat() / totalFleetMiles) * 100f).roundToInt().coerceIn(0, 100)
-        val car2Pct = (100 - car1Pct).coerceIn(0, 100)
+        val car1Pct = when {
+            car2 == null -> 100
+            (totalC1Miles + totalC2Miles) == 0 -> 50
+            else -> ((totalC1Miles.toFloat() / totalFleetMiles) * 100f).roundToInt().coerceIn(0, 100)
+        }
+        val car2Pct = if (car2 == null) 0 else (100 - car1Pct).coerceIn(0, 100)
 
         val daysCount = when (granularity) {
             InsightsTimeGranularity.WEEKLY -> 7.0
@@ -215,12 +240,12 @@ object InsightsCalculationEngine {
             granularity = granularity,
             totalMiles = filteredTotalMiles,
             car1Id = car1?.id,
-            car1Name = car1?.model ?: "Vehicle 1",
+            car1Name = car1?.model?.ifBlank { car1.displayName } ?: "Vehicle 1",
             car1Miles = totalC1Miles,
             car1SharePct = car1Pct,
             car1DailyRate = car1Daily,
             car2Id = car2?.id,
-            car2Name = car2?.model ?: "Vehicle 2",
+            car2Name = car2?.model?.ifBlank { car2.displayName } ?: "Vehicle 2",
             car2Miles = totalC2Miles,
             car2SharePct = car2Pct,
             car2DailyRate = car2Daily,

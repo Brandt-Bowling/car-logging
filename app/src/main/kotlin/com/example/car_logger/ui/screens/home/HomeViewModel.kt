@@ -11,6 +11,7 @@ import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.MaintenanceRecordEntity
+import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.TireRotationCalculator
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 data class ScheduledServiceItem(
     val car: Car,
@@ -254,6 +256,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun addCar(car: Car) {
         viewModelScope.launch {
             carDao.insertCar(CarEntity.fromModel(car))
+            val odo = car.odometer
+            if (odo != null && odo > 0) {
+                odometerLogDao.insertLog(
+                    OdometerLogEntity(
+                        id = UUID.randomUUID().toString(),
+                        carId = car.id,
+                        odometer = odo,
+                        timestamp = System.currentTimeMillis(),
+                        source = "INITIAL"
+                    )
+                )
+            }
         }
     }
 
@@ -264,6 +278,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val car = carDao.getCarById(record.carId)
             if (car != null && (car.odometer == null || record.odometer > car.odometer)) {
                 carDao.updateOdometer(record.carId, record.odometer)
+            }
+            if (record.odometer > 0) {
+                val ts = try {
+                    java.time.LocalDate.parse(record.date.take(10))
+                        .atStartOfDay(java.time.ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli()
+                } catch (_: Exception) {
+                    System.currentTimeMillis()
+                }
+                odometerLogDao.insertLog(
+                    OdometerLogEntity(
+                        id = "rec_${record.id}",
+                        carId = record.carId,
+                        odometer = record.odometer,
+                        timestamp = ts,
+                        source = "MAINTENANCE"
+                    )
+                )
             }
         }
     }
