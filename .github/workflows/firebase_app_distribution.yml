@@ -46,7 +46,7 @@ jobs:
           SMARTCAR_CLIENT_SECRET: ${{ secrets.SMARTCAR_CLIENT_SECRET }}
           TESLA_CLIENT_ID: ${{ secrets.TESLA_CLIENT_ID }}
           TESLA_CLIENT_SECRET: ${{ secrets.TESLA_CLIENT_SECRET }}
-        run: ./gradlew testDebugUnitTest assembleRelease -PbuildNumber=$(git rev-list --count HEAD)
+        run: ./gradlew testReleaseUnitTest assembleRelease -PbuildNumber=$(git rev-list --count HEAD)
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools

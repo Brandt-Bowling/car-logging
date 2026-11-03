@@ -90,7 +90,7 @@ object InsightsCalculationEngine {
                 else -> telemetryLogs
             }
             val singleTs = relevantLogs.firstOrNull()?.timestamp ?: nowMs
-            val singleDateStr = LocalDate.ofInstant(Instant.ofEpochMilli(singleTs), zoneId).format(shortDateFormatter)
+            val singleDateStr = Instant.ofEpochMilli(singleTs).atZone(zoneId).toLocalDate().format(shortDateFormatter)
             val windowMsg = if (relevantLogs.isEmpty()) {
                 "No telemetry readings logged yet (waiting for first vehicle sync)"
             } else {
@@ -124,7 +124,7 @@ object InsightsCalculationEngine {
         val minTimestamp = eligibleLogs.minOf { it.timestamp }
         val maxTimestamp = eligibleLogs.maxOf { it.timestamp }
 
-        val now = LocalDate.ofInstant(Instant.ofEpochMilli(nowMs), zoneId)
+        val now = Instant.ofEpochMilli(nowMs).atZone(zoneId).toLocalDate()
 
         // Generate intervals based on granularity and periodOffset
         val intervals = generateIntervals(granularity, periodOffset, nowMs)
@@ -281,7 +281,7 @@ object InsightsCalculationEngine {
         periodOffset: Int,
         nowMs: Long
     ): List<DateInterval> {
-        val now = LocalDate.ofInstant(Instant.ofEpochMilli(nowMs), zoneId)
+        val now = Instant.ofEpochMilli(nowMs).atZone(zoneId).toLocalDate()
 
         return when (granularity) {
             InsightsTimeGranularity.WEEKLY -> {
