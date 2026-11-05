@@ -16,6 +16,8 @@ object InsightsCalculationEngine {
     private val zoneId = ZoneId.systemDefault()
     private val shortMonthFormatter = DateTimeFormatter.ofPattern("MMM", Locale.US)
     private val shortDateFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.US)
+    private const val NIGHTLY_SNAPSHOT_HOUR_CUTOFF = 22 // 10:00 PM
+    private const val MORNING_RECOVERY_HOUR_CUTOFF = 12 // 12:00 PM (Noon)
 
     fun computeUiState(
         cars: List<Car>,
@@ -334,6 +336,47 @@ object InsightsCalculationEngine {
         }
     }
 
+    private fun normalizeSegmentBounds(rawT1: Long, rawT2: Long): Pair<Long, Long> {
+        val zdt1 = Instant.ofEpochMilli(rawT1).atZone(zoneId)
+        val zdt2 = Instant.ofEpochMilli(rawT2).atZone(zoneId)
+        val date1 = zdt1.toLocalDate()
+        val date2 = zdt2.toLocalDate()
+
+        if (!date1.isBefore(date2)) {
+            return Pair(rawT1, rawT2)
+        }
+
+        var effectiveT1 = rawT1
+        var effectiveT2 = rawT2
+
+        // 1. If the starting reading was captured at or after the nightly snapshot window (10:00 PM+),
+        // that day's driving is already closed—advance the start of the subsequent interval to midnight
+        // of the next day so late-night hours (10 PM–midnight) don't bleed tomorrow's miles into today.
+        if (zdt1.hour >= NIGHTLY_SNAPSHOT_HOUR_CUTOFF) {
+            val nextDayStartMs = date1.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+            if (nextDayStartMs < effectiveT2) {
+                effectiveT1 = nextDayStartMs
+            }
+        }
+
+        // 2. If the ending reading was captured in the morning (before 12:00 PM) AND the previous
+        // night did not have a nightly snapshot (rawT1 was before yesterday at 10:00 PM),
+        // treat this morning sync as a catch-up snapshot for driving that finished by the end of yesterday.
+        val prevNightCutoffMs = date2.minusDays(1)
+            .atTime(NIGHTLY_SNAPSHOT_HOUR_CUTOFF, 0)
+            .atZone(zoneId)
+            .toInstant()
+            .toEpochMilli()
+        if (zdt2.hour < MORNING_RECOVERY_HOUR_CUTOFF && rawT1 < prevNightCutoffMs) {
+            val prevDayEndMs = date2.atStartOfDay(zoneId).toInstant().toEpochMilli() - 1L
+            if (prevDayEndMs > effectiveT1) {
+                effectiveT2 = prevDayEndMs
+            }
+        }
+
+        return Pair(effectiveT1, effectiveT2)
+    }
+
     private fun calculateMilesInWindow(
         logs: List<OdometerLogEntity>,
         windowStartMs: Long,
@@ -346,11 +389,14 @@ object InsightsCalculationEngine {
             val l1 = logs[i]
             val l2 = logs[i + 1]
 
-            val t1 = l1.timestamp
-            val t2 = l2.timestamp
+            val rawT1 = l1.timestamp
+            val rawT2 = l2.timestamp
             val deltaOdo = (l2.odometer - l1.odometer).coerceAtLeast(0)
 
-            if (deltaOdo <= 0 || t2 <= t1) continue
+            if (deltaOdo <= 0 || rawT2 <= rawT1) continue
+
+            val (t1, t2) = normalizeSegmentBounds(rawT1, rawT2)
+            if (t2 <= t1) continue
 
             val segmentDuration = (t2 - t1).toDouble()
             val overlapStart = maxOf(t1, windowStartMs)

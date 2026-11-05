@@ -10,6 +10,9 @@ import com.example.car_logger.data.local.dao.CarDao
 import com.example.car_logger.data.local.dao.OdometerLogDao
 import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.model.Car
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -61,7 +64,7 @@ class OdometerSyncService(
         )
         try {
             val latest = odometerLogDao?.getLatestLogForCar(carId)
-            if (latest == null || latest.odometer < odometer) {
+            if (shouldRecordOdometerLog(latest, odometer, syncTime)) {
                 odometerLogDao?.insertLog(
                     OdometerLogEntity(
                         id = UUID.randomUUID().toString(),
@@ -348,6 +351,53 @@ class OdometerSyncService(
             } catch (_: Exception) {
                 null
             }
+        }
+
+        fun parseTeslaWakeState(jsonBody: String): String? {
+            return try {
+                val root = json.parseToJsonElement(jsonBody).jsonObject
+                val response = root["response"]?.jsonObject ?: root
+                response["state"]?.jsonPrimitive?.content?.lowercase()
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        suspend fun waitForTeslaWakeUp(
+            maxAttempts: Int = 6,
+            delayMs: Long = 5_000L,
+            pollWakeState: suspend () -> String?
+        ): Boolean {
+            for (attempt in 1..maxAttempts) {
+                val currentState = try {
+                    pollWakeState()
+                } catch (_: Exception) {
+                    null
+                }
+                if (currentState == "online") {
+                    return true
+                }
+                if (delayMs > 0L) {
+                    delay(delayMs)
+                }
+            }
+            return false
+        }
+
+        fun shouldRecordOdometerLog(
+            latestLog: OdometerLogEntity?,
+            newOdometer: Int,
+            syncTimeMs: Long,
+            zoneId: ZoneId = ZoneId.systemDefault()
+        ): Boolean {
+            if (latestLog == null) return true
+            if (newOdometer > latestLog.odometer) return true
+            if (newOdometer < latestLog.odometer) return false
+            if (syncTimeMs <= latestLog.timestamp) return false
+
+            val prevDate = LocalDate.ofInstant(Instant.ofEpochMilli(latestLog.timestamp), zoneId)
+            val newDate = LocalDate.ofInstant(Instant.ofEpochMilli(syncTimeMs), zoneId)
+            return newDate != prevDate || (syncTimeMs - latestLog.timestamp) >= 3_600_000L
         }
 
         fun resolveProviderForCar(car: Car): String? {
@@ -723,50 +773,66 @@ class OdometerSyncService(
                 return OdometerSyncResult.SkippedAsleep(car.id)
             }
 
-            // Explicit user Force Wake
-            val wakeReq = Request.Builder()
-                .url("$TESLA_API_BASE/api/1/vehicles/$vin/wake_up")
-                .addHeader("Authorization", "Bearer $token")
-                .post("{}".toRequestBody("application/json".toMediaType()))
-                .build()
-            try {
-                client.newCall(wakeReq).execute().close()
-                delay(4000)
-            } catch (_: Exception) {}
-        }
-
-        // Step 3: Fetch vehicle_state.odometer
-        val dataReq = Request.Builder()
-            .url("$TESLA_API_BASE/api/1/vehicles/$vin/vehicle_data?endpoints=vehicle_state")
-            .addHeader("Authorization", "Bearer $token")
-            .build()
-
-        return try {
-            client.newCall(dataReq).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    if (resp.code == 408) {
-                        carDao.updateTelemetryStatus(car.id, PROVIDER_TESLA, "Asleep")
-                        return OdometerSyncResult.SkippedAsleep(car.id)
-                    }
-                    return OdometerSyncResult.Error(car.id, "Tesla data (${resp.code})")
+            // Explicit or Nightly Force Wake: poll wake_up up to 6 times (30s) until vehicle reports online
+            waitForTeslaWakeUp(maxAttempts = 6, delayMs = 5_000L) {
+                val wakeReq = Request.Builder()
+                    .url("$TESLA_API_BASE/api/1/vehicles/$vin/wake_up")
+                    .addHeader("Authorization", "Bearer $token")
+                    .post("{}".toRequestBody("application/json".toMediaType()))
+                    .build()
+                client.newCall(wakeReq).execute().use { resp ->
+                    parseTeslaWakeState(resp.body?.string().orEmpty())
                 }
-                val newOdo = parseTeslaOdometerMiles(resp.body?.string().orEmpty())
-                    ?: return OdometerSyncResult.Error(car.id, "Invalid odometer payload")
-
-                val finalOdo = maxOf(newOdo, car.odometer ?: 0)
-                val now = System.currentTimeMillis()
-                recordOdometerReading(
-                    carId = car.id,
-                    odometer = finalOdo,
-                    provider = PROVIDER_TESLA,
-                    syncTime = now
-                )
-                _lastSyncMessage.value = "${car.model}: $finalOdo mi"
-                OdometerSyncResult.Updated(car.id, finalOdo, PROVIDER_TESLA)
             }
-        } catch (e: Exception) {
-            OdometerSyncResult.Error(car.id, "Failed to read Tesla odometer")
         }
+
+        // Step 3: Fetch vehicle_state.odometer (retry 408 timeouts when forceWake is true)
+        val maxDataAttempts = if (forceWake) 3 else 1
+        for (attempt in 1..maxDataAttempts) {
+            val dataReq = Request.Builder()
+                .url("$TESLA_API_BASE/api/1/vehicles/$vin/vehicle_data?endpoints=vehicle_state")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+
+            try {
+                val result = client.newCall(dataReq).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        if (resp.code == 408) {
+                            if (attempt < maxDataAttempts) {
+                                null // Signal retry after delay
+                            } else {
+                                carDao.updateTelemetryStatus(car.id, PROVIDER_TESLA, "Asleep")
+                                OdometerSyncResult.SkippedAsleep(car.id)
+                            }
+                        } else {
+                            OdometerSyncResult.Error(car.id, "Tesla data (${resp.code})")
+                        }
+                    } else {
+                        val newOdo = parseTeslaOdometerMiles(resp.body?.string().orEmpty())
+                            ?: return OdometerSyncResult.Error(car.id, "Invalid odometer payload")
+
+                        val finalOdo = maxOf(newOdo, car.odometer ?: 0)
+                        val now = System.currentTimeMillis()
+                        recordOdometerReading(
+                            carId = car.id,
+                            odometer = finalOdo,
+                            provider = PROVIDER_TESLA,
+                            syncTime = now
+                        )
+                        _lastSyncMessage.value = "${car.model}: $finalOdo mi"
+                        OdometerSyncResult.Updated(car.id, finalOdo, PROVIDER_TESLA)
+                    }
+                }
+                if (result != null) {
+                    return result
+                }
+                delay(5_000L)
+            } catch (e: Exception) {
+                return OdometerSyncResult.Error(car.id, "Failed to read Tesla odometer")
+            }
+        }
+        carDao.updateTelemetryStatus(car.id, PROVIDER_TESLA, "Asleep")
+        return OdometerSyncResult.SkippedAsleep(car.id)
     }
 
     private suspend fun getValidSmartcarAccessToken(forceRefresh: Boolean = false): String? {
