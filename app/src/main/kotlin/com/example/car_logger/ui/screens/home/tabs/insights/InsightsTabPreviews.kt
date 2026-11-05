@@ -40,6 +40,7 @@ private val sampleUiState = InsightsUiState(
     selectedCarId = null,
     granularity = InsightsTimeGranularity.WEEKLY,
     totalMiles = 559,
+    fleetTotalMiles = 559,
     car1Id = "car_1",
     car1Name = "Model 3",
     car1Miles = 307,

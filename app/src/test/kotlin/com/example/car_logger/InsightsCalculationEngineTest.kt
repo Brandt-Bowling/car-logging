@@ -395,6 +395,89 @@ class InsightsCalculationEngineTest {
     }
 
     @Test
+    fun computeUiState_dailyRatePacing_usesElapsedDaysInCurrentPeriod() {
+        // Wednesday, Oct 28 2026 (Day of week = 3, Wednesday)
+        val wednesdayOct28Ms = LocalDate.of(2026, 10, 28).atTime(12, 0).atZone(zoneId).toInstant().toEpochMilli()
+        val mondayOct26Ms = LocalDate.of(2026, 10, 26).atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        // Car 1 drove 90 miles from Monday to Wednesday
+        val log1 = OdometerLogEntity("1", "car_1", 20000, mondayOct26Ms, "sync")
+        val log2 = OdometerLogEntity("2", "car_1", 20090, wednesdayOct28Ms, "sync")
+
+        // 1. Current week (periodOffset = 0)
+        val stateCurrentWeek = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            periodOffset = 0,
+            nowMs = wednesdayOct28Ms
+        )
+
+        // Wednesday is day 3 of the week -> 90 / 3 = 30.0 mi/day (NOT 90 / 7 = 12.86 mi/day)
+        assertEquals(90, stateCurrentWeek.totalMiles)
+        assertEquals(30.0f, stateCurrentWeek.car1DailyRate, 0.05f)
+
+        // 2. Previous completed week (periodOffset = -1)
+        val statePrevWeek = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            periodOffset = -1,
+            nowMs = wednesdayOct28Ms
+        )
+        // Past week divides by full 7 days -> 0 / 7 = 0.0
+        assertEquals(0f, statePrevWeek.car1DailyRate, 0.01f)
+
+        // 3. Current month (periodOffset = 0) on Oct 28
+        val stateCurrentMonth = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.MONTHLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            periodOffset = 0,
+            nowMs = wednesdayOct28Ms
+        )
+        // 28 days elapsed in October -> 90 / 28 = 3.21 mi/day (NOT 90 / 31 = 2.90 mi/day)
+        val expectedMonthRate = (90.0 / 28.0).toFloat()
+        assertEquals(expectedMonthRate, stateCurrentMonth.car1DailyRate, 0.05f)
+    }
+
+    @Test
+    fun computeUiState_gasComparison_exactCentAlignment() {
+        val oct1Ms = LocalDate.of(2026, 10, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val oct29Ms = LocalDate.of(2026, 10, 29).atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        // 35 miles for Car 1, 35 miles for Car 2
+        val car1Log1 = OdometerLogEntity("1", "car_1", 20000, oct1Ms, "sync")
+        val car1Log2 = OdometerLogEntity("2", "car_1", 20035, oct29Ms, "sync")
+        val car2Log1 = OdometerLogEntity("3", "car_2", 15000, oct1Ms, "sync")
+        val car2Log2 = OdometerLogEntity("4", "car_2", 15035, oct29Ms, "sync")
+
+        val state = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1, car2),
+            allLogs = listOf(car1Log1, car1Log2, car2Log1, car2Log2),
+            granularity = InsightsTimeGranularity.MONTHLY,
+            selectedCarId = null,
+            gasPrice = 3.65f,
+            baselineMpg = 28.0f,
+            nowMs = oct29Ms
+        )
+
+        // Breakdown sub-costs must sum to total cost exactly to the cent
+        val sumSubCosts = Math.round((state.gasComparison.car1Cost + state.gasComparison.car2Cost) * 100.0) / 100.0
+        val totalCost = Math.round(state.gasComparison.totalCost * 100.0) / 100.0
+        assertEquals(sumSubCosts, totalCost, 0.0001)
+    }
+
+    @Test
     fun computeUiState_missedNightlyPollWithMorningManualSync_attributesMilesToYesterdayNotToday() {
         // Week of Mon Nov 2, 2026:
         // Mon Nov 2 at 11:00 PM: 20,000 mi
