@@ -476,4 +476,122 @@ class InsightsCalculationEngineTest {
         val totalCost = Math.round(state.gasComparison.totalCost * 100.0) / 100.0
         assertEquals(sumSubCosts, totalCost, 0.0001)
     }
+
+    @Test
+    fun computeUiState_missedNightlyPollWithMorningManualSync_attributesMilesToYesterdayNotToday() {
+        // Week of Mon Nov 2, 2026:
+        // Mon Nov 2 at 11:00 PM: 20,000 mi
+        // Tue Nov 3 at 11:00 PM: missed (car asleep)
+        // Wed Nov 4 at 8:30 AM: manual sync reads 20,040 mi (40 mi driven on Tuesday)
+        val mon11Pm = LocalDate.of(2026, 11, 2).atTime(23, 0).atZone(zoneId).toInstant().toEpochMilli()
+        val wed830Am = LocalDate.of(2026, 11, 4).atTime(8, 30).atZone(zoneId).toInstant().toEpochMilli()
+
+        val logMon = OdometerLogEntity("p1", "car_1", 20000, mon11Pm, "TESLA_FLEET")
+        val logWedMorning = OdometerLogEntity("p2", "car_1", 20040, wed830Am, "TESLA_FLEET")
+
+        val stateMorning = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(logMon, logWedMorning),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = wed830Am
+        )
+
+        // Bars: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+        assertEquals("Monday should have 0 miles", 0, stateMorning.activityBars[0].car1Miles)
+        assertEquals("Tuesday should get all 40 miles", 40, stateMorning.activityBars[1].car1Miles)
+        assertEquals("Wednesday (today) should have 0 miles before driving today", 0, stateMorning.activityBars[2].car1Miles)
+
+        // Now user drives 15 miles on Wednesday and syncs Wednesday at 11:00 PM
+        val wed11Pm = LocalDate.of(2026, 11, 4).atTime(23, 0).atZone(zoneId).toInstant().toEpochMilli()
+        val logWedNight = OdometerLogEntity("p3", "car_1", 20055, wed11Pm, "TESLA_FLEET")
+
+        val stateEvening = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(logMon, logWedMorning, logWedNight),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = wed11Pm
+        )
+
+        assertEquals(0, stateEvening.activityBars[0].car1Miles)
+        assertEquals(40, stateEvening.activityBars[1].car1Miles)
+        assertEquals(15, stateEvening.activityBars[2].car1Miles)
+    }
+
+    @Test
+    fun computeUiState_afternoonSyncYesterdayThenMorningSyncToday_attributesMilesToYesterday() {
+        // Tue Nov 3 at 5:00 PM: 20,000 mi
+        // Wed Nov 4 at 8:30 AM: manual sync reads 20,030 mi
+        val tue5Pm = LocalDate.of(2026, 11, 3).atTime(17, 0).atZone(zoneId).toInstant().toEpochMilli()
+        val wed830Am = LocalDate.of(2026, 11, 4).atTime(8, 30).atZone(zoneId).toInstant().toEpochMilli()
+
+        val log1 = OdometerLogEntity("p1", "car_1", 20000, tue5Pm, "TESLA_FLEET")
+        val log2 = OdometerLogEntity("p2", "car_1", 20030, wed830Am, "TESLA_FLEET")
+
+        val state = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = wed830Am
+        )
+
+        assertEquals("Tuesday should get all 30 miles", 30, state.activityBars[1].car1Miles)
+        assertEquals("Wednesday morning sync should not attribute yesterday's miles to today", 0, state.activityBars[2].car1Miles)
+    }
+
+    @Test
+    fun computeUiState_nightlySyncAt11Pm_doesNotBleedMilesIntoPreviousDay() {
+        // Mon Nov 2 at 10:50 PM (within WorkManager flex window): 20,000 mi
+        // Tue Nov 3 at 11:00 PM: 20,048 mi
+        val mon1050Pm = LocalDate.of(2026, 11, 2).atTime(22, 50).atZone(zoneId).toInstant().toEpochMilli()
+        val tue11Pm = LocalDate.of(2026, 11, 3).atTime(23, 0).atZone(zoneId).toInstant().toEpochMilli()
+
+        val log1 = OdometerLogEntity("p1", "car_1", 20000, mon1050Pm, "TESLA_FLEET")
+        val log2 = OdometerLogEntity("p2", "car_1", 20048, tue11Pm, "TESLA_FLEET")
+
+        val state = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = tue11Pm
+        )
+
+        assertEquals("Monday should not get miles from Monday 10:50 PM - midnight", 0, state.activityBars[0].car1Miles)
+        assertEquals("Tuesday should get all 48 miles", 48, state.activityBars[1].car1Miles)
+    }
+
+    @Test
+    fun computeUiState_morningDriveAfterSuccessfulNightlySync_attributesMilesToToday() {
+        // Tue Nov 3 at 11:00 PM: 20,000 mi (nightly poll succeeded)
+        // Wed Nov 4 at 8:30 AM: 20,018 mi (user drove early Wednesday morning and synced)
+        val tue11Pm = LocalDate.of(2026, 11, 3).atTime(23, 0).atZone(zoneId).toInstant().toEpochMilli()
+        val wed830Am = LocalDate.of(2026, 11, 4).atTime(8, 30).atZone(zoneId).toInstant().toEpochMilli()
+
+        val log1 = OdometerLogEntity("p1", "car_1", 20000, tue11Pm, "TESLA_FLEET")
+        val log2 = OdometerLogEntity("p2", "car_1", 20018, wed830Am, "TESLA_FLEET")
+
+        val state = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1),
+            allLogs = listOf(log1, log2),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "car_1",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = wed830Am
+        )
+
+        assertEquals("Tuesday already had its 11 PM snapshot, so 0 miles on Tuesday", 0, state.activityBars[1].car1Miles)
+        assertEquals("Wednesday gets all 18 miles driven after Tuesday 11 PM", 18, state.activityBars[2].car1Miles)
+    }
 }

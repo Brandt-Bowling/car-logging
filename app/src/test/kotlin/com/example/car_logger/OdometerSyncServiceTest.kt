@@ -7,6 +7,8 @@ import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.services.OdometerSyncResult
 import com.example.car_logger.services.OdometerSyncService
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
@@ -320,6 +322,64 @@ class OdometerSyncServiceTest {
     }
 
     @Test
+    fun `shouldRecordOdometerLog records stationary zero-delta syncs on new day or after 1 hour`() {
+        val zoneId = ZoneId.of("America/New_York")
+        val mon11Pm = LocalDate.of(2026, 11, 2).atTime(23, 0).atZone(zoneId).toInstant().toEpochMilli()
+        val mon1105Pm = LocalDate.of(2026, 11, 2).atTime(23, 5).atZone(zoneId).toInstant().toEpochMilli()
+        val tue11Pm = LocalDate.of(2026, 11, 3).atTime(23, 0).atZone(zoneId).toInstant().toEpochMilli()
+
+        val latest = OdometerLogEntity(
+            id = "log_1",
+            carId = "car_1",
+            odometer = 20000,
+            timestamp = mon11Pm,
+            source = OdometerSyncService.PROVIDER_TESLA
+        )
+
+        // First ever log
+        assertTrue(OdometerSyncService.shouldRecordOdometerLog(null, 20000, mon11Pm, zoneId))
+
+        // Higher odometer always recorded
+        assertTrue(OdometerSyncService.shouldRecordOdometerLog(latest, 20001, mon1105Pm, zoneId))
+
+        // Lower odometer never recorded
+        assertFalse(OdometerSyncService.shouldRecordOdometerLog(latest, 19999, tue11Pm, zoneId))
+
+        // Same odometer 5 minutes later on same day -> skip duplicate spam
+        assertFalse(OdometerSyncService.shouldRecordOdometerLog(latest, 20000, mon1105Pm, zoneId))
+
+        // Same odometer next day (stationary day) -> MUST record to anchor timeline!
+        assertTrue(OdometerSyncService.shouldRecordOdometerLog(latest, 20000, tue11Pm, zoneId))
+    }
+
+    @Test
+    fun `parseTeslaWakeState extracts state from wake_up response`() {
+        val asleepPayload = """{"response": {"id": 123, "vin": "5YJ3E1EA1PF000001", "state": "asleep"}}"""
+        val onlinePayload = """{"response": {"id": 123, "vin": "5YJ3E1EA1PF000001", "state": "online"}}"""
+
+        assertEquals("asleep", OdometerSyncService.parseTeslaWakeState(asleepPayload))
+        assertEquals("online", OdometerSyncService.parseTeslaWakeState(onlinePayload))
+    }
+
+    @Test
+    fun `waitForTeslaWakeUp polls until vehicle transitions from asleep to online`() = runBlocking {
+        val states = listOf("asleep", "asleep", "waking", "online", "online")
+        var callCount = 0
+
+        val becameOnline = OdometerSyncService.waitForTeslaWakeUp(
+            maxAttempts = 6,
+            delayMs = 0L
+        ) {
+            val state = states[callCount]
+            callCount++
+            state
+        }
+
+        assertTrue(becameOnline)
+        assertEquals("Should stop polling as soon as online is returned", 4, callCount)
+    }
+
+    @Test
     fun `recordOdometerReading seeds baseline and latest log when latest log is null and previous odometer exists`() = runBlocking {
         val carDao = FakeCarDao()
         val odometerLogDao = FakeOdometerLogDao()
@@ -394,7 +454,7 @@ class OdometerSyncServiceTest {
     }
 
     @Test
-    fun `recordOdometerReading skips log when latest log exists and odometer has not increased`() = runBlocking {
+    fun `recordOdometerReading skips duplicate log within same hour when odometer has not increased but records next-day anchor`() = runBlocking {
         val carDao = FakeCarDao()
         val odometerLogDao = FakeOdometerLogDao()
 
@@ -410,18 +470,29 @@ class OdometerSyncServiceTest {
             OdometerLogEntity("log1", "tesla_1", 24000, 1700000000000L, OdometerSyncService.PROVIDER_TESLA)
         )
 
-        val syncTime = 1700086400000L
+        // Same reading 5 minutes later -> skipped
+        val fiveMinLater = 1700000000000L + 300_000L
         OdometerSyncService.recordOdometerReading(
             carDao = carDao,
             odometerLogDao = odometerLogDao,
             carId = "tesla_1",
             odometer = 24000,
             provider = OdometerSyncService.PROVIDER_TESLA,
-            syncTime = syncTime
+            syncTime = fiveMinLater
         )
-
-        // Should not insert a duplicate log for same reading
         assertEquals(1, odometerLogDao.logs.size)
+
+        // Same reading 24 hours later -> recorded as stationary timeline anchor
+        val nextDay = 1700086400000L
+        OdometerSyncService.recordOdometerReading(
+            carDao = carDao,
+            odometerLogDao = odometerLogDao,
+            carId = "tesla_1",
+            odometer = 24000,
+            provider = OdometerSyncService.PROVIDER_TESLA,
+            syncTime = nextDay
+        )
+        assertEquals(2, odometerLogDao.logs.size)
     }
 
     private class FakeCarDao : CarDao {
