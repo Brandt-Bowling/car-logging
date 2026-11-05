@@ -433,8 +433,8 @@ class OdometerSyncService(
             if (newOdometer < latestLog.odometer) return false
             if (syncTimeMs <= latestLog.timestamp) return false
 
-            val prevDate = LocalDate.ofInstant(Instant.ofEpochMilli(latestLog.timestamp), zoneId)
-            val newDate = LocalDate.ofInstant(Instant.ofEpochMilli(syncTimeMs), zoneId)
+            val prevDate = Instant.ofEpochMilli(latestLog.timestamp).atZone(zoneId).toLocalDate()
+            val newDate = Instant.ofEpochMilli(syncTimeMs).atZone(zoneId).toLocalDate()
             return newDate != prevDate || (syncTimeMs - latestLog.timestamp) >= 3_600_000L
         }
 
