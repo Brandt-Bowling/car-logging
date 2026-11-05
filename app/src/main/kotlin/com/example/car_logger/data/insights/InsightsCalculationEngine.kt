@@ -174,13 +174,13 @@ object InsightsCalculationEngine {
             else -> totalC1Miles + totalC2Miles
         }
 
-        val totalFleetMiles = totalC1Miles + totalC2Miles
+        val totalFleetMiles = (totalC1Miles + totalC2Miles).coerceAtLeast(1)
         val car1Pct = when {
-            car2 == null -> if (totalFleetMiles > 0) 100 else 0
-            totalFleetMiles == 0 -> 0
-            else -> ((totalC1Miles.toFloat() / totalFleetMiles.toFloat()) * 100f).roundToInt().coerceIn(0, 100)
+            car2 == null -> 100
+            (totalC1Miles + totalC2Miles) == 0 -> 50
+            else -> ((totalC1Miles.toFloat() / totalFleetMiles) * 100f).roundToInt().coerceIn(0, 100)
         }
-        val car2Pct = if (car2 == null || totalFleetMiles == 0) 0 else (100 - car1Pct).coerceIn(0, 100)
+        val car2Pct = if (car2 == null) 0 else (100 - car1Pct).coerceIn(0, 100)
 
         val daysCount = when (granularity) {
             InsightsTimeGranularity.WEEKLY -> {

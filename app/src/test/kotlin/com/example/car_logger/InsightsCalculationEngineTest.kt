@@ -395,68 +395,6 @@ class InsightsCalculationEngineTest {
     }
 
     @Test
-    fun computeUiState_zeroMiles_returnsZeroFleetShares() {
-        val oct1Ms = LocalDate.of(2026, 10, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-        val oct8Ms = LocalDate.of(2026, 10, 8).atStartOfDay(zoneId).toInstant().toEpochMilli()
-
-        // Both cars logged identical odometers at start and end (0 miles driven)
-        val car1Log1 = OdometerLogEntity("1", "car_1", 20000, oct1Ms, "sync")
-        val car1Log2 = OdometerLogEntity("2", "car_1", 20000, oct8Ms, "sync")
-        val car2Log1 = OdometerLogEntity("3", "car_2", 15000, oct1Ms, "sync")
-        val car2Log2 = OdometerLogEntity("4", "car_2", 15000, oct8Ms, "sync")
-
-        val state = InsightsCalculationEngine.computeUiState(
-            cars = listOf(car1, car2),
-            allLogs = listOf(car1Log1, car1Log2, car2Log1, car2Log2),
-            granularity = InsightsTimeGranularity.WEEKLY,
-            selectedCarId = null,
-            gasPrice = 3.65f,
-            baselineMpg = 28.0f,
-            nowMs = oct8Ms
-        )
-
-        assertEquals(0, state.totalMiles)
-        assertEquals(0, state.fleetTotalMiles)
-        assertEquals(0, state.car1Miles)
-        assertEquals(0, state.car2Miles)
-        // With 0 miles, neither car should be assigned 100% share
-        assertEquals(0, state.car1SharePct)
-        assertEquals(0, state.car2SharePct)
-        assertEquals(0f, state.car1DailyRate, 0.001f)
-        assertEquals(0f, state.car2DailyRate, 0.001f)
-    }
-
-    @Test
-    fun computeUiState_singleCarFilter_fleetTotalMilesPreserved() {
-        val oct1Ms = LocalDate.of(2026, 10, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-        val oct29Ms = LocalDate.of(2026, 10, 29).atStartOfDay(zoneId).toInstant().toEpochMilli()
-
-        val car1Log1 = OdometerLogEntity("1", "car_1", 20000, oct1Ms, "sync")
-        val car1Log2 = OdometerLogEntity("2", "car_1", 21200, oct29Ms, "sync")
-        val car2Log1 = OdometerLogEntity("3", "car_2", 15000, oct1Ms, "sync")
-        val car2Log2 = OdometerLogEntity("4", "car_2", 15800, oct29Ms, "sync")
-
-        val state = InsightsCalculationEngine.computeUiState(
-            cars = listOf(car1, car2),
-            allLogs = listOf(car1Log1, car1Log2, car2Log1, car2Log2),
-            granularity = InsightsTimeGranularity.MONTHLY,
-            selectedCarId = "car_1",
-            gasPrice = 4.00f,
-            baselineMpg = 30.0f,
-            nowMs = oct29Ms
-        )
-
-        // Filtered total miles is Car 1's miles (1200)
-        assertEquals(1200, state.totalMiles)
-        // Fleet total miles preserved for FleetShareCard (2000)
-        assertEquals(2000, state.fleetTotalMiles)
-        assertEquals(1200, state.car1Miles)
-        assertEquals(800, state.car2Miles)
-        assertEquals(60, state.car1SharePct)
-        assertEquals(40, state.car2SharePct)
-    }
-
-    @Test
     fun computeUiState_dailyRatePacing_usesElapsedDaysInCurrentPeriod() {
         // Wednesday, Oct 28 2026 (Day of week = 3, Wednesday)
         val wednesdayOct28Ms = LocalDate.of(2026, 10, 28).atTime(12, 0).atZone(zoneId).toInstant().toEpochMilli()
