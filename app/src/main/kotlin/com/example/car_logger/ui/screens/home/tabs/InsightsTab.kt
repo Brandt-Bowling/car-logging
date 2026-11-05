@@ -175,7 +175,7 @@ fun InsightsTab(
             // Card 1: Fleet Share & Overall Miles
             item {
                 FleetShareCard(
-                    totalMiles = state.totalMiles,
+                    totalMiles = state.fleetTotalMiles,
                     car1Id = state.car1Id,
                     car1Name = state.car1Name,
                     car1Miles = state.car1Miles,

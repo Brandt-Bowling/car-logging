@@ -79,9 +79,9 @@ object InsightsCalculationEngine {
                 selectedCarId = selectedCarId,
                 granularity = granularity,
                 car1Id = car1?.id,
-                car1Name = car1?.displayName ?: "",
+                car1Name = car1?.model?.ifBlank { car1.displayName } ?: "Vehicle 1",
                 car2Id = car2?.id,
-                car2Name = car2?.displayName ?: "",
+                car2Name = car2?.model?.ifBlank { car2.displayName } ?: "Vehicle 2",
                 gasPrice = gasPrice,
                 baselineMpg = baselineMpg,
                 hasOdometerData = false,
@@ -153,20 +153,37 @@ object InsightsCalculationEngine {
             else -> totalC1Miles + totalC2Miles
         }
 
-        val totalFleetMiles = (totalC1Miles + totalC2Miles).coerceAtLeast(1)
-        val car1Pct = ((totalC1Miles.toFloat() / totalFleetMiles) * 100f).roundToInt().coerceIn(0, 100)
-        val car2Pct = (100 - car1Pct).coerceIn(0, 100)
+        val totalFleetMiles = totalC1Miles + totalC2Miles
+        val car1Pct = if (totalFleetMiles > 0) {
+            ((totalC1Miles.toFloat() / totalFleetMiles.toFloat()) * 100f).roundToInt().coerceIn(0, 100)
+        } else 0
+        val car2Pct = if (totalFleetMiles > 0) {
+            (100 - car1Pct).coerceIn(0, 100)
+        } else 0
 
         val daysCount = when (granularity) {
-            InsightsTimeGranularity.WEEKLY -> 7.0
+            InsightsTimeGranularity.WEEKLY -> {
+                if (periodOffset == 0) {
+                    now.dayOfWeek.value.toDouble().coerceAtLeast(1.0)
+                } else {
+                    7.0
+                }
+            }
             InsightsTimeGranularity.MONTHLY -> {
                 val targetYm = YearMonth.from(now).plusMonths(periodOffset.toLong())
-                targetYm.lengthOfMonth().toDouble()
+                if (periodOffset == 0) {
+                    now.dayOfMonth.toDouble().coerceAtLeast(1.0)
+                } else {
+                    targetYm.lengthOfMonth().toDouble()
+                }
             }
             InsightsTimeGranularity.YTD -> {
                 val targetYear = now.year + periodOffset
-                if (targetYear == now.year) now.dayOfYear.toDouble().coerceAtLeast(1.0)
-                else (if (targetYear % 4 == 0) 366.0 else 365.0)
+                if (periodOffset == 0) {
+                    now.dayOfYear.toDouble().coerceAtLeast(1.0)
+                } else {
+                    java.time.Year.of(targetYear).length().toDouble()
+                }
             }
         }
 
@@ -201,26 +218,38 @@ object InsightsCalculationEngine {
 
         // Gas comparison
         val effectiveMpg = baselineMpg.coerceAtLeast(1.0f)
-        val totalGallons = filteredTotalMiles / effectiveMpg.toDouble()
-        val totalGasCost = totalGallons * gasPrice.toDouble()
-        val co2Lbs = (totalGallons * 19.64).roundToInt()
-
         val c1Gal = totalC1Miles / effectiveMpg.toDouble()
         val c1Cost = c1Gal * gasPrice.toDouble()
         val c2Gal = totalC2Miles / effectiveMpg.toDouble()
         val c2Cost = c2Gal * gasPrice.toDouble()
 
+        val rC1Cost = (c1Cost * 100.0).roundToInt() / 100.0
+        val rC2Cost = (c2Cost * 100.0).roundToInt() / 100.0
+
+        val totalGallons = when (selectedCarId) {
+            car1?.id -> c1Gal
+            car2?.id -> c2Gal
+            else -> c1Gal + c2Gal
+        }
+        val totalGasCost = when (selectedCarId) {
+            car1?.id -> rC1Cost
+            car2?.id -> rC2Cost
+            else -> rC1Cost + rC2Cost
+        }
+        val co2Lbs = (totalGallons * 19.64).roundToInt()
+
         return InsightsUiState(
             selectedCarId = selectedCarId,
             granularity = granularity,
             totalMiles = filteredTotalMiles,
+            fleetTotalMiles = totalFleetMiles,
             car1Id = car1?.id,
-            car1Name = car1?.model ?: "Vehicle 1",
+            car1Name = car1?.model?.ifBlank { car1.displayName } ?: "Vehicle 1",
             car1Miles = totalC1Miles,
             car1SharePct = car1Pct,
             car1DailyRate = car1Daily,
             car2Id = car2?.id,
-            car2Name = car2?.model ?: "Vehicle 2",
+            car2Name = car2?.model?.ifBlank { car2.displayName } ?: "Vehicle 2",
             car2Miles = totalC2Miles,
             car2SharePct = car2Pct,
             car2DailyRate = car2Daily,
@@ -230,9 +259,9 @@ object InsightsCalculationEngine {
                 totalCost = totalGasCost,
                 totalGallons = totalGallons,
                 co2Lbs = co2Lbs,
-                car1Cost = c1Cost,
+                car1Cost = rC1Cost,
                 car1Gallons = c1Gal,
-                car2Cost = c2Cost,
+                car2Cost = rC2Cost,
                 car2Gallons = c2Gal
             ),
             gasPrice = gasPrice,

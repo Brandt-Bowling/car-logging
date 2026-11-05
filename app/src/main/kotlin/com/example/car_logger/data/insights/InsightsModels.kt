@@ -30,6 +30,7 @@ data class InsightsUiState(
     val selectedCarId: String? = null, // null for both cars
     val granularity: InsightsTimeGranularity = InsightsTimeGranularity.WEEKLY,
     val totalMiles: Int = 0,
+    val fleetTotalMiles: Int = 0,
     val car1Id: String? = null,
     val car1Name: String = "",
     val car1Miles: Int = 0,
