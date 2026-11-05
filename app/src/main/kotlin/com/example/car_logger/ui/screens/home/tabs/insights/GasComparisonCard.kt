@@ -202,8 +202,13 @@ fun GasComparisonCard(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 11.sp
                                 )
+                                val mpgText = if (baselineMpg == baselineMpg.toInt().toFloat()) {
+                                    "${baselineMpg.toInt()} MPG"
+                                } else {
+                                    "${String.format(Locale.US, "%.1f", baselineMpg)} MPG"
+                                }
                                 Text(
-                                    text = "${baselineMpg.toInt()} MPG",
+                                    text = mpgText,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold
                                 )

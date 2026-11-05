@@ -230,7 +230,7 @@ fun DrivingActivityCard(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
                             Text(
-                                text = car1Name.split(" ").firstOrNull() ?: "Car 1",
+                                text = car1Name.ifBlank { "Car 1" },
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -239,7 +239,7 @@ fun DrivingActivityCard(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.tertiary))
                             Text(
-                                text = car2Name.split(" ").firstOrNull() ?: "Car 2",
+                                text = car2Name.ifBlank { "Car 2" },
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -274,17 +274,35 @@ fun DrivingActivityCard(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                if (showCar1) {
+                                if (showCar1 && showCar2) {
                                     Text(
-                                        text = "${car1Name.split(" ").firstOrNull() ?: "Car 1"}: ${numberFormat.format(activeInspectBar.car1Miles)} mi",
+                                        text = "${car1Name.ifBlank { "Car 1" }}: ${numberFormat.format(activeInspectBar.car1Miles)} mi",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold
                                     )
-                                }
-                                if (showCar2) {
                                     Text(
-                                        text = "${car2Name.split(" ").firstOrNull() ?: "Car 2"}: ${numberFormat.format(activeInspectBar.car2Miles)} mi",
+                                        text = "${car2Name.ifBlank { "Car 2" }}: ${numberFormat.format(activeInspectBar.car2Miles)} mi",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.tertiary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "(${numberFormat.format(activeInspectBar.totalMiles)} mi total)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                } else if (showCar1) {
+                                    Text(
+                                        text = "${car1Name.ifBlank { "Car 1" }}: ${numberFormat.format(activeInspectBar.car1Miles)} mi",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                } else if (showCar2) {
+                                    Text(
+                                        text = "${car2Name.ifBlank { "Car 2" }}: ${numberFormat.format(activeInspectBar.car2Miles)} mi",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.tertiary,
                                         fontWeight = FontWeight.Bold
