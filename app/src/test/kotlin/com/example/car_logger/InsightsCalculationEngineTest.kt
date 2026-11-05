@@ -197,6 +197,122 @@ class InsightsCalculationEngineTest {
     }
 
     @Test
+    fun computeUiState_threeCars_prioritizesCarsWithTelemetryAndCalculatesSelectedCar3Miles() {
+        val oct1Ms = LocalDate.of(2026, 10, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val oct29Ms = LocalDate.of(2026, 10, 29).atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        val blazer = Car(id = "car_blazer", make = "Chevrolet", model = "Blazer EV", year = 2024, telemetryProvider = "SMARTCAR")
+        val sonic = Car(id = "car_sonic", make = "Chevrolet", model = "Sonic", year = 2013)
+        val model3 = Car(id = "car_model3", make = "Tesla", model = "Model 3", year = 2023, telemetryProvider = "TESLA_FLEET")
+
+        val blazerLog1 = OdometerLogEntity("1", "car_blazer", 10000, oct1Ms, "sync")
+        val blazerLog2 = OdometerLogEntity("2", "car_blazer", 11200, oct29Ms, "sync")
+
+        val model3Log1 = OdometerLogEntity("3", "car_model3", 20000, oct1Ms, "sync")
+        val model3Log2 = OdometerLogEntity("4", "car_model3", 20500, oct29Ms, "sync")
+
+        val allLogs = listOf(blazerLog1, blazerLog2, model3Log1, model3Log2)
+
+        // Fleet view: should prioritize Blazer and Model 3 over Sonic
+        val fleetState = InsightsCalculationEngine.computeUiState(
+            cars = listOf(blazer, sonic, model3),
+            allLogs = allLogs,
+            granularity = InsightsTimeGranularity.MONTHLY,
+            selectedCarId = null,
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = oct29Ms
+        )
+
+        assertEquals("Blazer EV", fleetState.car1Name)
+        assertEquals("Model 3", fleetState.car2Name)
+        assertEquals(1200, fleetState.car1Miles)
+        assertEquals(500, fleetState.car2Miles)
+        assertEquals(1700, fleetState.totalMiles)
+
+        // Single car filter for Model 3: should calculate Model 3 miles even as 3rd car
+        val model3State = InsightsCalculationEngine.computeUiState(
+            cars = listOf(blazer, sonic, model3),
+            allLogs = allLogs,
+            granularity = InsightsTimeGranularity.MONTHLY,
+            selectedCarId = "car_model3",
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = oct29Ms
+        )
+
+        assertEquals(500, model3State.totalMiles)
+        assertEquals(500, model3State.car1Miles)
+        assertEquals("Model 3", model3State.car1Name)
+    }
+
+    @Test
+    fun computeUiState_threeCars_sonicHasPastLogs_prioritizesBlazerAndTeslaTelemetry() {
+        val oct1Ms = LocalDate.of(2026, 10, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val oct29Ms = LocalDate.of(2026, 10, 29).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val oldMs = LocalDate.of(2024, 1, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        val blazer = Car(id = "car_blazer", make = "Chevrolet", model = "Blazer EV", year = 2024, telemetryProvider = "SMARTCAR")
+        val sonic = Car(id = "car_sonic", make = "Chevrolet", model = "Sonic", year = 2013)
+        val model3 = Car(id = "car_model3", make = "Tesla", model = "Model 3", year = 2023, telemetryProvider = "TESLA_FLEET")
+
+        val sonicLog1 = OdometerLogEntity("s1", "car_sonic", 30000, oldMs, "MAINTENANCE")
+        val sonicLog2 = OdometerLogEntity("s2", "car_sonic", 35000, oldMs + 86400000L, "MAINTENANCE")
+
+        val blazerLog1 = OdometerLogEntity("b1", "car_blazer", 10000, oct1Ms, "SMARTCAR")
+        val blazerLog2 = OdometerLogEntity("b2", "car_blazer", 11200, oct29Ms, "SMARTCAR")
+
+        val model3Log1 = OdometerLogEntity("m1", "car_model3", 20000, oct1Ms, "TESLA_FLEET")
+        val model3Log2 = OdometerLogEntity("m2", "car_model3", 20500, oct29Ms, "TESLA_FLEET")
+
+        val allLogs = listOf(sonicLog1, sonicLog2, blazerLog1, blazerLog2, model3Log1, model3Log2)
+
+        val fleetState = InsightsCalculationEngine.computeUiState(
+            cars = listOf(blazer, sonic, model3),
+            allLogs = allLogs,
+            granularity = InsightsTimeGranularity.MONTHLY,
+            selectedCarId = null,
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = oct29Ms
+        )
+
+        // Despite Sonic having logs, Blazer EV and Model 3 have active telemetry and recent logs
+        assertEquals("Blazer EV", fleetState.car1Name)
+        assertEquals("Model 3", fleetState.car2Name)
+        assertEquals(1200, fleetState.car1Miles)
+        assertEquals(500, fleetState.car2Miles)
+        assertEquals(1700, fleetState.totalMiles)
+    }
+
+    @Test
+    fun computeUiState_zeroMilesDriven_fleetShareIsFiftyFifty() {
+        val oct1Ms = LocalDate.of(2026, 10, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val oct29Ms = LocalDate.of(2026, 10, 29).atStartOfDay(zoneId).toInstant().toEpochMilli()
+
+        val log1 = OdometerLogEntity("1", "car_1", 20000, oct1Ms, "sync")
+        val log2 = OdometerLogEntity("2", "car_1", 20000, oct29Ms, "sync")
+        val log3 = OdometerLogEntity("3", "car_2", 15000, oct1Ms, "sync")
+        val log4 = OdometerLogEntity("4", "car_2", 15000, oct29Ms, "sync")
+
+        val state = InsightsCalculationEngine.computeUiState(
+            cars = listOf(car1, car2),
+            allLogs = listOf(log1, log2, log3, log4),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = null,
+            gasPrice = 3.50f,
+            baselineMpg = 25.0f,
+            nowMs = oct29Ms
+        )
+
+        assertEquals(0, state.totalMiles)
+        assertEquals(0, state.car1Miles)
+        assertEquals(0, state.car2Miles)
+        assertEquals(50, state.car1SharePct)
+        assertEquals(50, state.car2SharePct)
+    }
+
+    @Test
     fun computeUiState_ignoresMaintenanceAndInitialLogs() {
         // Old maintenance record in January at 0 miles
         val jan1Ms = LocalDate.of(2026, 1, 1).atStartOfDay(zoneId).toInstant().toEpochMilli()
