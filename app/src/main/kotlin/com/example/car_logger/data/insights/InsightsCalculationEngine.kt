@@ -47,8 +47,29 @@ object InsightsCalculationEngine {
             !it.id.startsWith("car_odo_")
         }
 
-        val car1 = activeCars.firstOrNull()
-        val car2 = activeCars.getOrNull(1)
+        val sortedCars = if (selectedCarId != null) {
+            val selected = activeCars.find { it.id == selectedCarId }
+            val remainder = activeCars.filter { it.id != selectedCarId }
+            listOfNotNull(selected) + remainder
+        } else if (activeCars.size <= 2) {
+            activeCars
+        } else {
+            // More than 2 cars in fleet: prioritize cars with active telemetry and recent odometer activity
+            activeCars.sortedWith(
+                compareByDescending<Car> { !it.telemetryProvider.isNullOrBlank() }
+                    .thenByDescending { car ->
+                        telemetryLogs.filter { it.carId == car.id }.maxOfOrNull { it.timestamp }
+                            ?: car.lastOdometerSyncTime
+                            ?: 0L
+                    }
+                    .thenByDescending { car ->
+                        telemetryLogs.count { it.carId == car.id }
+                    }
+            )
+        }
+
+        val car1 = sortedCars.firstOrNull()
+        val car2 = if (selectedCarId != null) null else sortedCars.getOrNull(1)
 
         val car1Logs = if (car1 != null) telemetryLogs.filter { it.carId == car1.id }.sortedBy { it.timestamp } else emptyList()
         val car2Logs = if (car2 != null) telemetryLogs.filter { it.carId == car2.id }.sortedBy { it.timestamp } else emptyList()
@@ -69,7 +90,7 @@ object InsightsCalculationEngine {
                 else -> telemetryLogs
             }
             val singleTs = relevantLogs.firstOrNull()?.timestamp ?: nowMs
-            val singleDateStr = LocalDate.ofInstant(Instant.ofEpochMilli(singleTs), zoneId).format(shortDateFormatter)
+            val singleDateStr = Instant.ofEpochMilli(singleTs).atZone(zoneId).toLocalDate().format(shortDateFormatter)
             val windowMsg = if (relevantLogs.isEmpty()) {
                 "No telemetry readings logged yet (waiting for first vehicle sync)"
             } else {
@@ -79,9 +100,9 @@ object InsightsCalculationEngine {
                 selectedCarId = selectedCarId,
                 granularity = granularity,
                 car1Id = car1?.id,
-                car1Name = car1?.model?.ifBlank { car1.displayName } ?: "Vehicle 1",
+                car1Name = car1?.model?.ifBlank { car1.displayName } ?: "",
                 car2Id = car2?.id,
-                car2Name = car2?.model?.ifBlank { car2.displayName } ?: "Vehicle 2",
+                car2Name = car2?.model?.ifBlank { car2.displayName } ?: "",
                 gasPrice = gasPrice,
                 baselineMpg = baselineMpg,
                 hasOdometerData = false,
@@ -103,7 +124,7 @@ object InsightsCalculationEngine {
         val minTimestamp = eligibleLogs.minOf { it.timestamp }
         val maxTimestamp = eligibleLogs.maxOf { it.timestamp }
 
-        val now = LocalDate.ofInstant(Instant.ofEpochMilli(nowMs), zoneId)
+        val now = Instant.ofEpochMilli(nowMs).atZone(zoneId).toLocalDate()
 
         // Generate intervals based on granularity and periodOffset
         val intervals = generateIntervals(granularity, periodOffset, nowMs)
@@ -112,9 +133,9 @@ object InsightsCalculationEngine {
                 selectedCarId = selectedCarId,
                 granularity = granularity,
                 car1Id = car1?.id,
-                car1Name = car1?.displayName ?: "",
+                car1Name = car1?.model?.ifBlank { car1.displayName } ?: "",
                 car2Id = car2?.id,
-                car2Name = car2?.displayName ?: "",
+                car2Name = car2?.model?.ifBlank { car2.displayName } ?: "",
                 gasPrice = gasPrice,
                 baselineMpg = baselineMpg,
                 hasOdometerData = true,
@@ -154,12 +175,12 @@ object InsightsCalculationEngine {
         }
 
         val totalFleetMiles = totalC1Miles + totalC2Miles
-        val car1Pct = if (totalFleetMiles > 0) {
-            ((totalC1Miles.toFloat() / totalFleetMiles.toFloat()) * 100f).roundToInt().coerceIn(0, 100)
-        } else 0
-        val car2Pct = if (totalFleetMiles > 0) {
-            (100 - car1Pct).coerceIn(0, 100)
-        } else 0
+        val car1Pct = when {
+            car2 == null -> if (totalFleetMiles > 0) 100 else 0
+            totalFleetMiles == 0 -> 0
+            else -> ((totalC1Miles.toFloat() / totalFleetMiles.toFloat()) * 100f).roundToInt().coerceIn(0, 100)
+        }
+        val car2Pct = if (car2 == null || totalFleetMiles == 0) 0 else (100 - car1Pct).coerceIn(0, 100)
 
         val daysCount = when (granularity) {
             InsightsTimeGranularity.WEEKLY -> {
@@ -285,7 +306,7 @@ object InsightsCalculationEngine {
         periodOffset: Int,
         nowMs: Long
     ): List<DateInterval> {
-        val now = LocalDate.ofInstant(Instant.ofEpochMilli(nowMs), zoneId)
+        val now = Instant.ofEpochMilli(nowMs).atZone(zoneId).toLocalDate()
 
         return when (granularity) {
             InsightsTimeGranularity.WEEKLY -> {

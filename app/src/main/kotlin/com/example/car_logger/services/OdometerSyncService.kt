@@ -51,28 +51,8 @@ class OdometerSyncService(
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 ) {
-    private suspend fun recordOdometerReading(carId: String, odometer: Int, provider: String, syncTime: Long) {
-        carDao.updateOdometerFromTelemetry(
-            carId = carId,
-            odometer = odometer,
-            provider = provider,
-            status = "Synced",
-            syncTime = syncTime
-        )
-        try {
-            val latest = odometerLogDao?.getLatestLogForCar(carId)
-            if (latest == null || latest.odometer < odometer) {
-                odometerLogDao?.insertLog(
-                    OdometerLogEntity(
-                        id = UUID.randomUUID().toString(),
-                        carId = carId,
-                        odometer = odometer,
-                        timestamp = syncTime,
-                        source = provider
-                    )
-                )
-            }
-        } catch (_: Exception) {}
+    internal suspend fun recordOdometerReading(carId: String, odometer: Int, provider: String, syncTime: Long) {
+        recordOdometerReading(carDao, odometerLogDao, carId, odometer, provider, syncTime)
     }
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
@@ -82,6 +62,64 @@ class OdometerSyncService(
 
     companion object {
         private const val TAG = "OdometerSyncService"
+
+        internal suspend fun recordOdometerReading(
+            carDao: CarDao,
+            odometerLogDao: OdometerLogDao?,
+            carId: String,
+            odometer: Int,
+            provider: String,
+            syncTime: Long
+        ) {
+            val existingCar = carDao.getCarById(carId)
+            val prevOdo = existingCar?.odometer
+            val prevSyncTime = existingCar?.lastOdometerSyncTime
+
+            carDao.updateOdometerFromTelemetry(
+                carId = carId,
+                odometer = odometer,
+                provider = provider,
+                status = "Synced",
+                syncTime = syncTime
+            )
+            try {
+                val latest = odometerLogDao?.getLatestLogForCar(carId)
+                if (latest == null) {
+                    // If there were no prior logs for this car, record baseline if car had a prior verified odometer
+                    if (prevOdo != null && prevOdo > 0 && prevOdo < odometer) {
+                        val baselineTime = if (prevSyncTime != null && prevSyncTime < syncTime) prevSyncTime else (syncTime - 86_400_000L)
+                        odometerLogDao?.insertLog(
+                            OdometerLogEntity(
+                                id = UUID.randomUUID().toString(),
+                                carId = carId,
+                                odometer = prevOdo,
+                                timestamp = baselineTime,
+                                source = provider
+                            )
+                        )
+                    }
+                    odometerLogDao?.insertLog(
+                        OdometerLogEntity(
+                            id = UUID.randomUUID().toString(),
+                            carId = carId,
+                            odometer = odometer,
+                            timestamp = syncTime,
+                            source = provider
+                        )
+                    )
+                } else if (latest.odometer < odometer) {
+                    odometerLogDao?.insertLog(
+                        OdometerLogEntity(
+                            id = UUID.randomUUID().toString(),
+                            carId = carId,
+                            odometer = odometer,
+                            timestamp = syncTime,
+                            source = provider
+                        )
+                    )
+                }
+            } catch (_: Exception) {}
+        }
 
         const val PROVIDER_SMARTCAR = "SMARTCAR"
         const val PROVIDER_TESLA = "TESLA_FLEET"

@@ -1,6 +1,9 @@
 package com.example.car_logger
 
+import com.example.car_logger.data.model.Car
+import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.Tire
+import com.example.car_logger.data.model.TireRotationCalculator
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -47,7 +50,7 @@ class TireModelTest {
 
     @Test
     fun testCarTireRotationIntervalDefaultsAndCustom() {
-        val evCarDefault = com.example.car_logger.data.model.Car(
+        val evCarDefault = Car(
             id = "c1",
             make = "Tesla",
             model = "Model Y",
@@ -58,5 +61,208 @@ class TireModelTest {
 
         val evCarCustom = evCarDefault.copy(tireRotationInterval = 6000)
         assertEquals(6000, evCarCustom.effectiveTireRotationInterval)
+    }
+
+    @Test
+    fun testUsesLatestTireRotationMaintenanceLogOverStaleTireEntity() {
+        val car = Car(
+            id = "c1",
+            make = "Tesla",
+            model = "Model Y",
+            year = 2023,
+            odometer = 35350,
+            isEv = true,
+            tireRotationInterval = 7500
+        )
+        val tire = Tire(
+            id = "t1",
+            carId = "c1",
+            manufacturer = "Michelin",
+            model = "Defender 2",
+            dateInstalled = "2024-01-01",
+            odometerInstalled = 15000,
+            estimatedTreadLifeMiles = 60000,
+            lastRotationDate = "2024-06-01",
+            lastRotationOdometer = 22500
+        )
+        val records = listOf(
+            MaintenanceRecord(
+                id = "r1",
+                carId = "c1",
+                title = "Tire Rotation",
+                date = "2025-02-01",
+                odometer = 30000
+            ),
+            MaintenanceRecord(
+                id = "r2",
+                carId = "c1",
+                title = "Cabin Air Filter",
+                date = "2025-05-01",
+                odometer = 34000
+            )
+        )
+
+        val status = TireRotationCalculator.calculateRotationStatus(car, tire, records)
+        assertEquals(30000, status.lastRotationOdometer)
+        assertEquals(37500, status.nextRotationOdometer)
+        assertEquals(2150, status.remainingMilesToRotation)
+        assertEquals(5350, status.milesSinceBaseline)
+    }
+
+    @Test
+    fun testRecognizesRotationInDescriptionAndIgnoresPreInstallLogs() {
+        val car = Car(
+            id = "c1",
+            make = "Rivian",
+            model = "R1T",
+            year = 2024,
+            odometer = 43000,
+            isEv = true,
+            tireRotationInterval = 7500
+        )
+        val tire = Tire(
+            id = "t1",
+            carId = "c1",
+            manufacturer = "Pirelli",
+            model = "Scorpion",
+            dateInstalled = "2025-01-01",
+            odometerInstalled = 40000,
+            estimatedTreadLifeMiles = 50000,
+            lastRotationOdometer = null
+        )
+        val records = listOf(
+            MaintenanceRecord(
+                id = "r_old",
+                carId = "c1",
+                title = "Tire Rotation",
+                date = "2024-08-01",
+                odometer = 25000
+            ),
+            MaintenanceRecord(
+                id = "r_desc",
+                carId = "c1",
+                title = "42k Multi-Point Service",
+                description = "Rotated tires and checked alignment",
+                date = "2025-03-01",
+                odometer = 42000
+            )
+        )
+
+        val status = TireRotationCalculator.calculateRotationStatus(car, tire, records)
+        assertEquals(42000, status.lastRotationOdometer)
+        assertEquals(49500, status.nextRotationOdometer)
+        assertEquals(6500, status.remainingMilesToRotation)
+    }
+
+    @Test
+    fun testNoActiveTireAndNoRotationLogsDoesNotUseFakeOffset() {
+        val car = Car(
+            id = "c1",
+            make = "Ford",
+            model = "Mustang Mach-E",
+            year = 2023,
+            odometer = 18000,
+            isEv = true,
+            tireRotationInterval = 7500
+        )
+        val status = TireRotationCalculator.calculateRotationStatus(car, activeTire = null, records = emptyList())
+        assertEquals(null, status.lastRotationOdometer)
+        assertEquals(0, status.baselineOdometer)
+        assertEquals(7500, status.nextRotationOdometer)
+        assertEquals(-10500, status.remainingMilesToRotation)
+        assertEquals(true, status.isOverdue)
+    }
+
+    @Test
+    fun testRotationOdometerHigherThanCarOdometerClampsCleanly() {
+        val car = Car(
+            id = "c1",
+            make = "Tesla",
+            model = "Model 3",
+            year = 2023,
+            odometer = 29500,
+            isEv = true,
+            tireRotationInterval = 7500
+        )
+        val records = listOf(
+            MaintenanceRecord(
+                id = "r1",
+                carId = "c1",
+                title = "Rotate Tires",
+                date = "2025-06-01",
+                odometer = 30000
+            )
+        )
+        val status = TireRotationCalculator.calculateRotationStatus(car, activeTire = null, records = records)
+        assertEquals(30000, status.lastRotationOdometer)
+        assertEquals(30000, status.currentOdometer)
+        assertEquals(37500, status.nextRotationOdometer)
+        assertEquals(7500, status.remainingMilesToRotation)
+        assertEquals(0, status.milesSinceBaseline)
+        assertEquals(0f, status.rotationProgress, 0.001f)
+    }
+
+    @Test
+    fun testPreInstallRotationLogAloneFallsBackToOdometerInstalled() {
+        val car = Car(
+            id = "c1",
+            make = "Rivian",
+            model = "R1T",
+            year = 2024,
+            odometer = 43000,
+            isEv = true,
+            tireRotationInterval = 7500
+        )
+        val tire = Tire(
+            id = "t1",
+            carId = "c1",
+            manufacturer = "Pirelli",
+            model = "Scorpion",
+            dateInstalled = "2025-01-01",
+            odometerInstalled = 40000,
+            estimatedTreadLifeMiles = 50000,
+            lastRotationOdometer = null
+        )
+        val records = listOf(
+            MaintenanceRecord(
+                id = "r_old",
+                carId = "c1",
+                title = "Tire Rotation",
+                date = "2024-08-01",
+                odometer = 25000
+            )
+        )
+
+        val status = TireRotationCalculator.calculateRotationStatus(car, tire, records)
+        assertEquals(null, status.lastRotationOdometer)
+        assertEquals(40000, status.baselineOdometer)
+        assertEquals(47500, status.nextRotationOdometer)
+        assertEquals(4500, status.remainingMilesToRotation)
+    }
+
+    @Test
+    fun testDefaultTireCreatedForHistoricalRotationPreservesRotationBaseline() {
+        val car = Car(
+            id = "c1",
+            make = "Tesla",
+            model = "Model Y",
+            year = 2024,
+            odometer = 28000,
+            isEv = true,
+            tireRotationInterval = 7500
+        )
+        val synthesizedTire = TireRotationCalculator.createDefaultTireForRotation(
+            carId = car.id,
+            date = "2026-09-01",
+            rotationOdometer = 25000
+        )
+        val status = TireRotationCalculator.calculateRotationStatus(
+            car = car,
+            activeTire = synthesizedTire,
+            records = emptyList()
+        )
+        assertEquals(25000, status.lastRotationOdometer)
+        assertEquals(32500, status.nextRotationOdometer)
+        assertEquals(4500, status.remainingMilesToRotation)
     }
 }
