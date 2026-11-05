@@ -46,7 +46,15 @@ jobs:
           SMARTCAR_CLIENT_SECRET: ${{ secrets.SMARTCAR_CLIENT_SECRET }}
           TESLA_CLIENT_ID: ${{ secrets.TESLA_CLIENT_ID }}
           TESLA_CLIENT_SECRET: ${{ secrets.TESLA_CLIENT_SECRET }}
-        run: ./gradlew testReleaseUnitTest assembleRelease -PbuildNumber=$(git rev-list --count HEAD)
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          # Offset to maintain continuous sequential increment (+1) from highest existing release.
+          # Previous releases reached 166 (at github.run_number 80).
+          # With BUILD_OFFSET=86: next run 81 produces 167 (166 + 1), run 82 produces 168 (+1), etc.
+          BUILD_OFFSET=86
+          BUILD_NUMBER=$(( RUN_NUMBER + BUILD_OFFSET ))
+          echo "Using release build number: ${BUILD_NUMBER}"
+          ./gradlew testReleaseUnitTest assembleRelease -PbuildNumber="${BUILD_NUMBER}"
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
