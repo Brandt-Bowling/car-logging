@@ -65,11 +65,13 @@ class PreferencesManager(private val context: Context) {
 
         val KEY_GAS_PRICE = floatPreferencesKey("comparison_gas_price")
         val KEY_BASELINE_MPG = floatPreferencesKey("comparison_baseline_mpg")
+        val KEY_DEFAULT_ELECTRICITY_RATE = floatPreferencesKey("default_electricity_rate")
 
         const val DEFAULT_GARAGE_NAME = "My Garage"
         const val DEFAULT_COOLDOWN_HOURS = 72
         const val DEFAULT_GAS_PRICE = 3.65f
         const val DEFAULT_BASELINE_MPG = 28.0f
+        const val DEFAULT_ELECTRICITY_RATE = 0.16f
     }
 
     val gasPriceFlow: Flow<Float> = context.dataStore.data.map { prefs ->
@@ -78,6 +80,10 @@ class PreferencesManager(private val context: Context) {
 
     val baselineMpgFlow: Flow<Float> = context.dataStore.data.map { prefs ->
         prefs[KEY_BASELINE_MPG] ?: DEFAULT_BASELINE_MPG
+    }
+
+    val defaultElectricityRateFlow: Flow<Float> = context.dataStore.data.map { prefs ->
+        prefs[KEY_DEFAULT_ELECTRICITY_RATE] ?: DEFAULT_ELECTRICITY_RATE
     }
 
     val garageNameFlow: Flow<String> = context.dataStore.data.map { prefs ->
@@ -405,6 +411,12 @@ class PreferencesManager(private val context: Context) {
     suspend fun setBaselineMpg(mpg: Float) {
         context.dataStore.edit { prefs ->
             prefs[KEY_BASELINE_MPG] = mpg
+        }
+    }
+
+    suspend fun setDefaultElectricityRate(rate: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_DEFAULT_ELECTRICITY_RATE] = rate
         }
     }
 }

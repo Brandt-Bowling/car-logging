@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.car_logger.data.insights.DrivingActivityBar
+import com.example.car_logger.data.insights.ElectricityCostData
 import com.example.car_logger.data.insights.GasComparisonData
 import com.example.car_logger.data.insights.InsightsTimeGranularity
 import com.example.car_logger.data.insights.InsightsUiState
@@ -23,6 +24,7 @@ private val sampleCars = listOf(
         model = "Model 3",
         trim = "Long Range AWD",
         odometer = 24500,
+        isEv = true,
         isArchived = false
     ),
     Car(
@@ -32,6 +34,7 @@ private val sampleCars = listOf(
         model = "Bolt EUV",
         trim = "Premier",
         odometer = 18200,
+        isEv = true,
         isArchived = false
     )
 )
@@ -67,14 +70,42 @@ private val sampleUiState = InsightsUiState(
         car1Cost = 40.00,
         car1Gallons = 10.96,
         car2Cost = 32.86,
-        car2Gallons = 9.00
+        car2Gallons = 9.00,
+        electricityTotalCost = 22.94,
+        netFuelSavings = 49.92
     ),
     gasPrice = 3.65f,
     baselineMpg = 28.0f,
     hasOdometerData = true,
     canGoPrevious = true,
     canGoNext = false,
-    periodOffset = 0
+    periodOffset = 0,
+    electricityCost = ElectricityCostData(
+        hasHomeData = true,
+        hasPublicData = false,
+        hasAnyData = true,
+        homeTotalCost = 22.94,
+        homeTotalKwh = 155.0,
+        homeMilesPerKwh = 3.61,
+        homeCostPerMile = 0.041,
+        homeEffectiveRate = 0.148,
+        homeRateSourceLabel = "PG&E · Oct 1–Oct 31",
+        homeIsEstimatedRate = false,
+        homeHasMatchedBill = true,
+        homeCar1Cost = 12.62,
+        homeCar1Kwh = 85.25,
+        homeCar1SharePct = 55,
+        homeCar2Cost = 10.32,
+        homeCar2Kwh = 69.75,
+        homeCar2SharePct = 45,
+        homeSessionCount = 6,
+        combinedTotalCost = 22.94,
+        combinedTotalKwh = 155.0,
+        combinedMilesPerKwh = 3.61,
+        combinedCostPerMile = 0.041,
+        latestBillEffectiveRate = 0.148,
+        latestBillLabel = "PG&E · Oct 1–Oct 31"
+    )
 )
 
 @Preview(name = "Insights Tab - Light", showBackground = true)

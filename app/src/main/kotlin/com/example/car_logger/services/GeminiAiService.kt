@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
@@ -361,5 +362,264 @@ class GeminiAiService(
             .build()
 
         return client.newCall(request).execute()
+    }
+
+    suspend fun parseUtilityBill(
+        fileName: String,
+        mimeType: String,
+        fileBytes: ByteArray?
+    ): ParsedUtilityBillDraft = withContext(Dispatchers.IO) {
+        val apiKey = preferencesManager?.getGeminiApiKey()
+        if (apiKey.isNullOrBlank() || fileBytes == null || fileBytes.isEmpty()) {
+            val hint = if (apiKey.isNullOrBlank()) {
+                "Add a Gemini API key in Settings to scan electric bills automatically."
+            } else {
+                "Could not read bill file."
+            }
+            return@withContext ElectricityImportParser.fallbackBillDraftFromFilename(fileName, error = hint)
+        }
+
+        val prompt = """
+            You are an expert utility bill analyzer. Analyze the attached residential electric utility bill (PDF or image) and extract the electricity usage and billing amounts as a JSON object:
+            1. providerName: Utility company name (e.g., "DTE Energy", "PG&E", "Con Edison").
+            2. billingStartDate: Billing period start date in YYYY-MM-DD format.
+            3. billingEndDate: Billing period end date in YYYY-MM-DD format.
+            4. totalKwh: Total billed electricity consumption in kWh as a number.
+            5. totalAmount: Total electric charges for this billing period in USD (excluding prior balance or late fees if shown) as a number.
+            6. fixedCharges: Total fixed monthly non-volumetric charges (such as customer charge, basic service fee, meter fee, connection fee) in USD as a number. Output 0.0 if none listed.
+
+            Return ONLY a valid JSON object matching:
+            {
+              "providerName": "...",
+              "billingStartDate": "YYYY-MM-DD",
+              "billingEndDate": "YYYY-MM-DD",
+              "totalKwh": 1250.0,
+              "totalAmount": 195.40,
+              "fixedCharges": 12.50
+            }
+        """.trimIndent()
+
+        try {
+            val rawJson = executeMultimodalJsonRequest(apiKey, prompt, mimeType, fileBytes)
+            val root = json.parseToJsonElement(rawJson).jsonObject
+            val fallback = ElectricityImportParser.fallbackBillDraftFromFilename(fileName)
+
+            val providerName = root["providerName"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                ?: fallback.providerName
+            val startDate = ElectricityImportParser.parseDateToLocalDate(
+                root["billingStartDate"]?.jsonPrimitive?.content
+            )?.toString() ?: fallback.startDateIso
+            val endDate = ElectricityImportParser.parseDateToLocalDate(
+                root["billingEndDate"]?.jsonPrimitive?.content
+            )?.toString() ?: fallback.endDateIso
+            val totalKwh = root["totalKwh"]?.jsonPrimitive?.doubleOrNull?.coerceAtLeast(0.0) ?: 0.0
+            val totalAmount = root["totalAmount"]?.jsonPrimitive?.doubleOrNull?.coerceAtLeast(0.0) ?: 0.0
+            val fixedCharges = root["fixedCharges"]?.jsonPrimitive?.doubleOrNull?.coerceAtLeast(0.0) ?: 0.0
+
+            return@withContext ParsedUtilityBillDraft(
+                providerName = providerName,
+                startDateIso = startDate,
+                endDateIso = endDate,
+                totalKwh = totalKwh,
+                totalAmount = totalAmount,
+                fixedCharges = fixedCharges,
+                source = "gemini",
+                fileName = fileName
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Gemini utility bill parsing failed: ${e.message}")
+            return@withContext ElectricityImportParser.fallbackBillDraftFromFilename(
+                fileName = fileName,
+                error = "Could not scan bill automatically (${e.message ?: "unknown error"}). Please enter values manually."
+            )
+        }
+    }
+
+    suspend fun parseChargerUsage(
+        fileName: String,
+        mimeType: String,
+        fileBytes: ByteArray?
+    ): ParsedChargerImportResult = withContext(Dispatchers.IO) {
+        if (fileBytes == null || fileBytes.isEmpty()) {
+            return@withContext ParsedChargerImportResult(
+                sessions = emptyList(),
+                fileName = fileName,
+                source = "manual",
+                error = "Selected file was empty."
+            )
+        }
+
+        val looksLikeCsv = mimeType.contains("csv", ignoreCase = true) ||
+            mimeType.startsWith("text/", ignoreCase = true) ||
+            fileName.endsWith(".csv", ignoreCase = true)
+
+        if (looksLikeCsv) {
+            val csvText = fileBytes.toString(Charsets.UTF_8)
+            val parsedCsv = ElectricityImportParser.parseChargerCsv(fileName, csvText)
+            if (parsedCsv.isNotEmpty()) {
+                return@withContext ParsedChargerImportResult(
+                    sessions = parsedCsv,
+                    fileName = fileName,
+                    source = "csv"
+                )
+            }
+        }
+
+        val apiKey = preferencesManager?.getGeminiApiKey()
+        if (apiKey.isNullOrBlank()) {
+            return@withContext ParsedChargerImportResult(
+                sessions = emptyList(),
+                fileName = fileName,
+                source = "manual",
+                error = if (looksLikeCsv) {
+                    "Could not detect date and kWh columns in CSV. Add a Gemini API key in Settings or enter usage manually."
+                } else {
+                    "Add a Gemini API key in Settings to scan screenshots or PDFs automatically."
+                }
+            )
+        }
+
+        val prompt = """
+            You are an EV charging data extractor. Analyze the attached charger export (screenshot, PDF, or CSV) and extract EV charging usage as JSON.
+            - If individual charging sessions are listed, return one entry per session with startDate == endDate.
+            - If only a weekly/monthly/period total summary is shown, return a single entry with startDate and endDate covering that period and isSummary = true.
+            - Set venue to "HOME" for residential/home chargers and "PUBLIC" for commercial fast chargers (e.g., Supercharger, Electrify America, ChargePoint paid stations).
+            - Include directCost in USD only when a commercial/public session price is shown (null for home charging).
+
+            Return ONLY a valid JSON object matching:
+            {
+              "sessions": [
+                {
+                  "startDate": "YYYY-MM-DD",
+                  "endDate": "YYYY-MM-DD",
+                  "kwh": 42.5,
+                  "venue": "HOME",
+                  "directCost": null,
+                  "chargerName": "Home Wall Connector",
+                  "isSummary": false
+                }
+              ]
+            }
+        """.trimIndent()
+
+        try {
+            val effectiveMime = if (looksLikeCsv) "text/plain" else mimeType
+            val rawJson = executeMultimodalJsonRequest(apiKey, prompt, effectiveMime, fileBytes)
+            val root = json.parseToJsonElement(rawJson).jsonObject
+            val sessionsArray = root["sessions"]?.jsonArray.orEmpty()
+            val todayIso = LocalDate.now().toString()
+
+            val sessions = sessionsArray.mapNotNull { item ->
+                val obj = item.jsonObject
+                val kwh = obj["kwh"]?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
+                if (kwh <= 0.0) return@mapNotNull null
+                val startIso = ElectricityImportParser.parseDateToLocalDate(
+                    obj["startDate"]?.jsonPrimitive?.content
+                )?.toString() ?: todayIso
+                val endIso = ElectricityImportParser.parseDateToLocalDate(
+                    obj["endDate"]?.jsonPrimitive?.content
+                )?.toString() ?: startIso
+                val chargerName = obj["chargerName"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                val directCost = obj["directCost"]?.jsonPrimitive?.doubleOrNull?.takeIf { it > 0.0 }
+                val rawVenue = obj["venue"]?.jsonPrimitive?.content?.uppercase()?.trim()
+                val venue = when (rawVenue) {
+                    "HOME", "PUBLIC" -> rawVenue
+                    else -> ElectricityImportParser.classifyVenue(chargerName, directCost)
+                }
+                val isSummary = obj["isSummary"]?.jsonPrimitive?.booleanOrNull
+                    ?: (endIso != startIso)
+
+                ParsedChargingSessionDraft(
+                    startDateIso = startIso,
+                    endDateIso = endIso,
+                    kwh = kwh,
+                    venue = venue,
+                    directCost = if (venue == "PUBLIC") directCost else null,
+                    chargerName = chargerName ?: fileName.substringBeforeLast("."),
+                    isSummary = isSummary
+                )
+            }
+
+            return@withContext ParsedChargerImportResult(
+                sessions = sessions,
+                fileName = fileName,
+                source = "gemini",
+                error = if (sessions.isEmpty()) "No charging sessions found in file. You can add them manually." else null
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Gemini charger usage parsing failed: ${e.message}")
+            return@withContext ParsedChargerImportResult(
+                sessions = emptyList(),
+                fileName = fileName,
+                source = "manual",
+                error = "Could not scan file (${e.message ?: "unknown error"}). You can enter usage manually."
+            )
+        }
+    }
+
+    private fun executeMultimodalJsonRequest(
+        apiKey: String,
+        prompt: String,
+        mimeType: String,
+        fileBytes: ByteArray
+    ): String {
+        val url = "$GEMINI_BASE_URL/$MODEL_NAME:generateContent?key=$apiKey"
+        val base64Data = Base64.encodeToString(fileBytes, Base64.NO_WRAP)
+        val normalizedMime = mimeType.ifBlank { "application/octet-stream" }
+
+        val requestJson = buildJsonObject {
+            put("contents", buildJsonArray {
+                add(buildJsonObject {
+                    put("parts", buildJsonArray {
+                        add(buildJsonObject {
+                            put("text", prompt)
+                        })
+                        add(buildJsonObject {
+                            put("inlineData", buildJsonObject {
+                                put("mimeType", normalizedMime)
+                                put("data", base64Data)
+                            })
+                        })
+                    })
+                })
+            })
+            put("generationConfig", buildJsonObject {
+                put("responseMimeType", "application/json")
+            })
+        }
+
+        val requestBody = requestJson.toString().toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Accept", "application/json")
+            .post(requestBody)
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val bodyString = response.body?.string() ?: ""
+            if (!response.isSuccessful) {
+                throw IllegalStateException("HTTP ${response.code}: ${parseImageGenerationError(response.code, bodyString)}")
+            }
+            val root = json.parseToJsonElement(bodyString).jsonObject
+            val parts = root["candidates"]?.jsonArray
+                ?.firstOrNull()?.jsonObject
+                ?.get("content")?.jsonObject
+                ?.get("parts")?.jsonArray
+                ?: throw IllegalStateException("Empty candidates from Gemini")
+
+            val rawText = parts.firstNotNullOfOrNull { part ->
+                part.jsonObject["text"]?.jsonPrimitive?.content?.trim()?.takeIf { it.isNotEmpty() }
+            } ?: throw IllegalStateException("No text part returned from Gemini")
+
+            var cleaned = rawText
+            if (cleaned.startsWith("```")) {
+                val lines = cleaned.lines().toMutableList()
+                if (lines.isNotEmpty() && lines.first().startsWith("```")) lines.removeAt(0)
+                if (lines.isNotEmpty() && lines.last().startsWith("```")) lines.removeAt(lines.size - 1)
+                cleaned = lines.joinToString("\n").trim()
+            }
+            return cleaned
+        }
     }
 }
