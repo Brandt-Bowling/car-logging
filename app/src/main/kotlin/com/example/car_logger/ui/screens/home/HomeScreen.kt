@@ -85,6 +85,12 @@ fun HomeScreen(
     val scheduledServices by viewModel.scheduledServices.collectAsState()
     val hasUrgentService by viewModel.hasUrgentService.collectAsState()
     val insightsUiState by viewModel.insightsUiState.collectAsState()
+    val insightsChargingVenue by viewModel.insightsChargingVenue.collectAsState()
+    val isParsingElectricityFile by viewModel.isParsingElectricityFile.collectAsState()
+    val pendingUtilityBillDraft by viewModel.pendingUtilityBillDraft.collectAsState()
+    val showUtilityBillSheet by viewModel.showUtilityBillSheet.collectAsState()
+    val pendingChargerImport by viewModel.pendingChargerImport.collectAsState()
+    val showChargerUsageSheet by viewModel.showChargerUsageSheet.collectAsState()
 
     var showRenameDialog by remember { mutableStateOf(false) }
     var showArchivedOnly by remember { mutableStateOf(false) }
@@ -291,7 +297,38 @@ fun HomeScreen(
                                 onNextPeriod = { viewModel.navigateInsightsNextPeriod() },
                                 onResetPeriod = { viewModel.resetInsightsPeriod() },
                                 onUpdateGasPrice = { viewModel.updateComparisonGasPrice(it) },
-                                onUpdateBaselineMpg = { viewModel.updateComparisonBaselineMpg(it) }
+                                onUpdateBaselineMpg = { viewModel.updateComparisonBaselineMpg(it) },
+                                selectedVenue = insightsChargingVenue,
+                                onSelectVenue = { viewModel.setInsightsChargingVenue(it) },
+                                isParsingElectricityFile = isParsingElectricityFile,
+                                pendingUtilityBillDraft = pendingUtilityBillDraft,
+                                showUtilityBillSheet = showUtilityBillSheet,
+                                pendingChargerImport = pendingChargerImport,
+                                showChargerUsageSheet = showChargerUsageSheet,
+                                onUploadUtilityBillUri = { viewModel.parseUtilityBillUri(it) },
+                                onUploadChargerUsageUri = { viewModel.parseChargerUsageUri(it) },
+                                onOpenManualUtilityBillSheet = { viewModel.openManualUtilityBillSheet() },
+                                onDismissUtilityBillSheet = { viewModel.dismissUtilityBillSheet() },
+                                onSaveUtilityBill = { provider, startMs, endMs, kwh, amount, fixed, override, replaceId ->
+                                    viewModel.saveUtilityBill(
+                                        providerName = provider,
+                                        startDateMs = startMs,
+                                        endDateMs = endMs,
+                                        totalKwh = kwh,
+                                        totalAmount = amount,
+                                        fixedCharges = fixed,
+                                        overrideRate = override,
+                                        replaceExistingId = replaceId
+                                    )
+                                },
+                                onOpenManualChargerUsageSheet = { viewModel.openManualChargerUsageSheet() },
+                                onDismissChargerUsageSheet = { viewModel.dismissChargerUsageSheet() },
+                                onSaveChargingSessions = { sessions, skipped ->
+                                    viewModel.saveChargingSessions(sessions, skipped)
+                                },
+                                onDeleteUtilityBill = { viewModel.deleteUtilityBill(it) },
+                                onDeleteChargingSession = { viewModel.deleteChargingSession(it) },
+                                onUpdateDefaultElectricityRate = { viewModel.updateDefaultElectricityRate(it) }
                             )
                         }
                         GarageNavigationTab.SETTINGS -> {

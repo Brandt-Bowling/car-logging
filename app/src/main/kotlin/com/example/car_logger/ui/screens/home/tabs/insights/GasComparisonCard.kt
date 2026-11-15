@@ -1,5 +1,6 @@
 package com.example.car_logger.ui.screens.home.tabs.insights
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.rounded.Savings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -26,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -127,6 +130,83 @@ fun GasComparisonCard(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+
+            // Net Savings vs. Gas banner (shown when EV charging data exists in period)
+            val netSavings = gasComparison.netFuelSavings
+            if (netSavings != null) {
+                val isDark = isSystemInDarkTheme()
+                val isPositive = netSavings >= 0.0
+                val bannerBg = when {
+                    !isPositive -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
+                    isDark -> Color(0xFF0F4020)
+                    else -> Color(0xFFD3F5DC)
+                }
+                val bannerAccent = when {
+                    !isPositive -> MaterialTheme.colorScheme.onErrorContainer
+                    isDark -> Color(0xFF81E6A1)
+                    else -> Color(0xFF0B5F2A)
+                }
+                val bannerValueColor = when {
+                    !isPositive -> MaterialTheme.colorScheme.onErrorContainer
+                    isDark -> Color(0xFFC6F7D4)
+                    else -> Color(0xFF072711)
+                }
+                val formattedDiff = if (isPositive) {
+                    "+$${String.format(Locale.US, "%.2f", netSavings)}"
+                } else {
+                    "-$${String.format(Locale.US, "%.2f", kotlin.math.abs(netSavings))}"
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = bannerBg,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Savings,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = bannerAccent
+                                )
+                                Text(
+                                    text = if (isPositive) "SAVED VS. GAS" else "EXTRA VS. GAS",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.8.sp
+                                    ),
+                                    color = bannerAccent
+                                )
+                            }
+                            Text(
+                                text = "After $${String.format(Locale.US, "%.2f", gasComparison.electricityTotalCost)} total EV charging",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = bannerValueColor.copy(alpha = 0.85f)
+                            )
+                        }
+
+                        Text(
+                            text = formattedDiff,
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                            color = bannerValueColor
                         )
                     }
                 }
