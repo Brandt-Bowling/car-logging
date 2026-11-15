@@ -1,19 +1,20 @@
 # Agent Guidelines & Project Memory
 
-## Git Worktrees: Required Setup for Google Services
+## Git Worktrees: Required Setup (`google-services.json` & `local.properties`)
 
-When working in or initializing a new `git worktree` for this project:
+Both `app/google-services.json` and `local.properties` are gitignored and are not copied automatically when a new `git worktree` is created. Without them, `./gradlew` builds fail (`com.google.gms.google-services` requires `app/google-services.json` and Android Gradle Plugin requires `sdk.dir` in `local.properties`).
 
-> [!IMPORTANT]
-> `app/google-services.json` (and `android/app/google-services.json`) is ignored by `.gitignore` and **will not be copied over automatically** when a new `git worktree` is created.
->
-> Without this file, the Android build (`./gradlew assembleDebug`, `./gradlew assembleRelease`, etc.) will fail because `com.google.gms.google-services` is required in `app/build.gradle.kts`.
+Whenever working in a new `git worktree`, run:
+```bash
+./scripts/setup_worktree.sh
+```
+Or copy them manually from the primary repository:
+```bash
+cp /Users/bbowling/Developer/car-logging/app/google-services.json app/google-services.json
+cp /Users/bbowling/Developer/car-logging/local.properties local.properties
+```
 
-### Action Required for Future Agents:
-Whenever creating or checking out a new `git worktree`:
-1. Check if `app/google-services.json` exists in the worktree.
-2. If missing, copy it from the primary repository into the worktree:
-   ```bash
-   cp /Users/bbowling/Developer/car-logging/android/app/google-services.json app/google-services.json
-   ```
-   Or if `git worktree` path is relative, locate the main working directory and copy `android/app/google-services.json` to `<worktree>/app/google-services.json`.
+## CLI & Tooling Notes
+
+- **GitHub CLI (`gh`)**: Installed at `/opt/homebrew/bin/gh`.
+- **Verification**: Always run `./gradlew testDebugUnitTest assembleDebug` before opening or merging a PR.

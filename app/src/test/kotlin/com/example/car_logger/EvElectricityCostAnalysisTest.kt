@@ -313,10 +313,10 @@ class EvElectricityCostAnalysisTest {
 
         // 1) Proportional split across two EVs: ev1 drove 300 mi (75%), ev2 drove 100 mi (25%)
         val logsTwoEvs = listOf(
-            OdometerLogEntity("l1", "ev1", 10000, tsAtHour("2026-11-09", 8), "TELEMETRY"),
-            OdometerLogEntity("l2", "ev1", 10300, tsAtHour("2026-11-14", 8), "TELEMETRY"),
-            OdometerLogEntity("l3", "ev2", 5000, tsAtHour("2026-11-09", 8), "TELEMETRY"),
-            OdometerLogEntity("l4", "ev2", 5100, tsAtHour("2026-11-14", 8), "TELEMETRY")
+            OdometerLogEntity("l1", "ev1", 10000, tsAtHour("2026-11-09", 16), "TELEMETRY"),
+            OdometerLogEntity("l2", "ev1", 10300, tsAtHour("2026-11-14", 16), "TELEMETRY"),
+            OdometerLogEntity("l3", "ev2", 5000, tsAtHour("2026-11-09", 16), "TELEMETRY"),
+            OdometerLogEntity("l4", "ev2", 5100, tsAtHour("2026-11-14", 16), "TELEMETRY")
         )
         val twoEvState = InsightsCalculationEngine.computeUiState(
             cars = listOf(ev1, ev2),
@@ -355,10 +355,10 @@ class EvElectricityCostAnalysisTest {
 
         // 3) Mixed garage (1 EV + 1 Gas car): 100% goes to ev1, 0% to gasCar even though gasCar drove 500 mi
         val mixedLogs = listOf(
-            OdometerLogEntity("m1", "ev1", 10000, tsAtHour("2026-11-09", 8), "TELEMETRY"),
-            OdometerLogEntity("m2", "ev1", 10200, tsAtHour("2026-11-14", 8), "TELEMETRY"),
-            OdometerLogEntity("m3", "ice1", 20000, tsAtHour("2026-11-09", 8), "TELEMETRY"),
-            OdometerLogEntity("m4", "ice1", 20500, tsAtHour("2026-11-14", 8), "TELEMETRY")
+            OdometerLogEntity("m1", "ev1", 10000, tsAtHour("2026-11-09", 16), "TELEMETRY"),
+            OdometerLogEntity("m2", "ev1", 10200, tsAtHour("2026-11-14", 16), "TELEMETRY"),
+            OdometerLogEntity("m3", "ice1", 20000, tsAtHour("2026-11-09", 16), "TELEMETRY"),
+            OdometerLogEntity("m4", "ice1", 20500, tsAtHour("2026-11-14", 16), "TELEMETRY")
         )
         val mixedState = InsightsCalculationEngine.computeUiState(
             cars = listOf(ev1, gasCar),
@@ -381,8 +381,8 @@ class EvElectricityCostAnalysisTest {
     fun homeVsPublicSeparation_andSavedVsGasNetSavings() {
         val ev = Car(id = "ev1", year = 2024, make = "Tesla", model = "Model 3", isEv = true)
         val logs = listOf(
-            OdometerLogEntity("l1", "ev1", 1000, tsAtHour("2026-11-09", 8), "TELEMETRY"),
-            OdometerLogEntity("l2", "ev1", 1560, tsAtHour("2026-11-14", 8), "TELEMETRY") // 560 miles -> 20 gal @ 28mpg -> $73.00 @ $3.65/gal
+            OdometerLogEntity("l1", "ev1", 1000, tsAtHour("2026-11-09", 16), "TELEMETRY"),
+            OdometerLogEntity("l2", "ev1", 1560, tsAtHour("2026-11-14", 16), "TELEMETRY") // 560 miles -> 20 gal @ 28mpg -> $73.00 @ $3.65/gal
         )
         val sessions = listOf(
             ChargingSessionEntity(

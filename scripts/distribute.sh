@@ -89,6 +89,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Ensure homebrew binaries (e.g. gh) are available if on macOS
+if ! command -v gh &> /dev/null && [ -x "/opt/homebrew/bin/gh" ]; then
+    export PATH="/opt/homebrew/bin:$PATH"
+fi
+
 # Ensure Firebase CLI is installed
 if ! command -v firebase &> /dev/null; then
     log_error "Firebase CLI (firebase-tools) is not installed."
@@ -113,7 +118,19 @@ log_info "Release Notes: \"${RELEASE_NOTES}\""
 if [ "$SKIP_BUILD" = false ]; then
     log_info "Building Android Release APK via Gradle..."
     if [ -z "$BUILD_NUMBER" ]; then
-        BUILD_NUMBER=$(git rev-list --count HEAD 2>/dev/null || echo 1)
+        # Try fetching the latest GitHub Actions run number if gh CLI is available
+        if command -v gh &> /dev/null; then
+            LATEST_RUN=$(gh run list --workflow=firebase_app_distribution.yml -L 1 --json number -q '.[0].number' 2>/dev/null || true)
+            if [ -n "$LATEST_RUN" ] && [ "$LATEST_RUN" -gt 0 ] 2>/dev/null; then
+                # Offset ensures continuity (+1) matching CI (80 + 86 = 166, next run/local build = 167)
+                BUILD_OFFSET=86
+                BUILD_NUMBER=$(( LATEST_RUN + BUILD_OFFSET + 1 ))
+            fi
+        fi
+        # Fallback to git commit count if gh CLI is unavailable
+        if [ -z "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER=$(git rev-list --count HEAD 2>/dev/null || echo 1)
+        fi
     fi
     log_info "Using build number: ${BUILD_NUMBER}"
     ./gradlew assembleRelease -PbuildNumber="${BUILD_NUMBER}"

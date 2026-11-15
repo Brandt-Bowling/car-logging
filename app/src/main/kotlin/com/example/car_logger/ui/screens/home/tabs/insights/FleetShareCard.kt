@@ -102,8 +102,9 @@ fun FleetShareCard(
 
             // Proportional Capsule Bar
             if (hasTwoCars) {
+                val hasAnyMiles = car1Miles + car2Miles > 0
                 val animatedCar1Share by animateFloatAsState(
-                    targetValue = (car1SharePct.coerceIn(0, 100) / 100f),
+                    targetValue = if (hasAnyMiles) (car1SharePct.coerceIn(0, 100) / 100f) else 0f,
                     animationSpec = ExpressiveMotionTokens.SpatialSpring,
                     label = "prop_bar_anim"
                 )
@@ -115,24 +116,26 @@ fun FleetShareCard(
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 ) {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        if (animatedCar1Share > 0f) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(animatedCar1Share.coerceAtLeast(0.01f))
-                                    .fillMaxHeight()
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                            )
-                        }
-                        if (1f - animatedCar1Share > 0f) {
-                            Box(
-                                modifier = Modifier
-                                    .weight((1f - animatedCar1Share).coerceAtLeast(0.01f))
-                                    .fillMaxHeight()
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.tertiary)
-                            )
+                    if (hasAnyMiles) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            if (animatedCar1Share > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(animatedCar1Share.coerceAtLeast(0.01f))
+                                        .fillMaxHeight()
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary)
+                                )
+                            }
+                            if (1f - animatedCar1Share > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight((1f - animatedCar1Share).coerceAtLeast(0.01f))
+                                        .fillMaxHeight()
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.tertiary)
+                                )
+                            }
                         }
                     }
                 }

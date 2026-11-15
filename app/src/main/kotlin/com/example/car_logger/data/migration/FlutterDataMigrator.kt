@@ -387,6 +387,24 @@ object FlutterDataMigrator {
                 odometer = 28000,
                 cost = 165.0,
                 description = "Installed new AGM 12V battery with 3-year warranty."
+            ),
+            MaintenanceRecordEntity(
+                id = "mock_tesla_1",
+                carId = "2",
+                title = "Tire Rotation & Balance",
+                date = "2023-10-12",
+                odometer = 26500,
+                cost = 60.0,
+                description = "Rotated tires front to rear, checked tread depths and brake pads."
+            ),
+            MaintenanceRecordEntity(
+                id = "mock_tesla_2",
+                carId = "2",
+                title = "Cabin Air Filter & Wiper Blades",
+                date = "2024-02-20",
+                odometer = 30800,
+                cost = 85.0,
+                description = "Replaced HEPA cabin air filters and installed new OEM wiper blades."
             )
         )
         recordDao.insertRecords(defaultRecords)

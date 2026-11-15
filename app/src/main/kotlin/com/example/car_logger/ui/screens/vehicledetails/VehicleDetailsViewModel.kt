@@ -9,11 +9,13 @@ import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.GloveboxEntity
 import com.example.car_logger.data.local.entity.MaintenanceRecordEntity
+import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.local.entity.TireEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Glovebox
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.Tire
+import com.example.car_logger.data.model.TireRotationCalculator
 import com.example.car_logger.data.vehicle.VehicleImageRepository
 import com.example.car_logger.services.GeminiAiService
 import com.example.car_logger.services.GoogleDriveService
@@ -210,7 +212,45 @@ class VehicleDetailsViewModel(
 
     fun updateOdometer(newOdometer: Int) {
         viewModelScope.launch {
+            val existingCar = carDao.getCarById(carId)
+            val prevOdo = existingCar?.odometer
             carDao.updateOdometer(carId, newOdometer)
+            try {
+                val latest = odometerLogDao.getLatestLogForCar(carId)
+                val now = System.currentTimeMillis()
+                if (latest == null) {
+                    if (prevOdo != null && prevOdo > 0 && prevOdo < newOdometer) {
+                        odometerLogDao.insertLog(
+                            OdometerLogEntity(
+                                id = UUID.randomUUID().toString(),
+                                carId = carId,
+                                odometer = prevOdo,
+                                timestamp = now - 86_400_000L,
+                                source = "INITIAL"
+                            )
+                        )
+                    }
+                    odometerLogDao.insertLog(
+                        OdometerLogEntity(
+                            id = UUID.randomUUID().toString(),
+                            carId = carId,
+                            odometer = newOdometer,
+                            timestamp = now,
+                            source = "MANUAL"
+                        )
+                    )
+                } else if (latest.odometer < newOdometer) {
+                    odometerLogDao.insertLog(
+                        OdometerLogEntity(
+                            id = UUID.randomUUID().toString(),
+                            carId = carId,
+                            odometer = newOdometer,
+                            timestamp = now,
+                            source = "MANUAL"
+                        )
+                    )
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -283,6 +323,25 @@ class VehicleDetailsViewModel(
                     if (resolvedOdo > 0 && (currentCarOdo == null || resolvedOdo > currentCarOdo)) {
                         carDao.updateOdometer(carId, resolvedOdo)
                     }
+                    if (resolvedOdo > 0) {
+                        val ts = try {
+                            java.time.LocalDate.parse(parsed.date.take(10))
+                                .atStartOfDay(java.time.ZoneId.systemDefault())
+                                .toInstant()
+                                .toEpochMilli()
+                        } catch (_: Exception) {
+                            System.currentTimeMillis()
+                        }
+                        odometerLogDao.insertLog(
+                            OdometerLogEntity(
+                                id = "rec_${newRecord.id}",
+                                carId = carId,
+                                odometer = resolvedOdo,
+                                timestamp = ts,
+                                source = "MAINTENANCE"
+                            )
+                        )
+                    }
                 }
             } finally {
                 _isSyncingDrive.value = false
@@ -306,18 +365,26 @@ class VehicleDetailsViewModel(
                 )
                 tireDao.updateTire(TireEntity.fromModel(updated))
             } else {
-                val newTire = Tire(
-                    id = UUID.randomUUID().toString(),
+                val newTire = TireRotationCalculator.createDefaultTireForRotation(
                     carId = carId,
-                    manufacturer = "OEM / All Season",
-                    model = "Standard Tires",
-                    dateInstalled = date,
-                    odometerInstalled = car.value?.odometer ?: 0,
-                    estimatedTreadLifeMiles = 50000,
-                    lastRotationDate = date,
-                    lastRotationOdometer = odometer
+                    date = date,
+                    rotationOdometer = odometer
                 )
                 tireDao.insertTire(TireEntity.fromModel(newTire))
+            }
+
+            val rotationRecord = MaintenanceRecordEntity(
+                id = UUID.randomUUID().toString(),
+                carId = carId,
+                title = "Tire Rotation",
+                date = date,
+                odometer = odometer
+            )
+            recordDao.insertRecord(rotationRecord)
+
+            val currentCarOdo = carDao.getCarById(carId)?.odometer
+            if (odometer > 0 && (currentCarOdo == null || odometer > currentCarOdo)) {
+                carDao.updateOdometer(carId, odometer)
             }
         }
     }
