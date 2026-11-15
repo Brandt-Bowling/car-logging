@@ -1,5 +1,6 @@
 package com.example.car_logger.services
 
+import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -302,6 +303,73 @@ object ElectricityImportParser {
             source = "manual",
             fileName = fileName,
             error = error
+        )
+    }
+
+    /**
+     * Identifies the most recently uploaded batch of charging sessions so the user can
+     * undo their last upload in a single action (or re-tag it with a different vehicle).
+     *
+     * For sessions saved with an explicit [ChargingSessionEntity.uploadBatchId], all sessions
+     * sharing the latest upload's batch ID are returned. For legacy sessions created prior to
+     * batch tracking, sessions are ordered by [ChargingSessionEntity.uploadedAtMs] descending
+     * (backfilled from SQLite `rowid` insertion order) and the contiguous latest group sharing
+     * the same `carId` is returned.
+     */
+    fun resolveLastUploadBatch(sessions: List<ChargingSessionEntity>): List<ChargingSessionEntity> {
+        if (sessions.isEmpty()) return emptyList()
+        val latest = sessions.maxWithOrNull(
+            compareBy<ChargingSessionEntity> { it.uploadedAtMs }
+                .thenBy { it.startDateMs }
+                .thenBy { it.id }
+        ) ?: return emptyList()
+
+        val batchId = latest.uploadBatchId
+        if (!batchId.isNullOrBlank()) {
+            return sessions
+                .filter { it.uploadBatchId == batchId }
+                .sortedByDescending { it.startDateMs }
+        }
+
+        val legacyOrdered = sessions
+            .filter { it.uploadBatchId.isNullOrBlank() }
+            .sortedWith(
+                compareByDescending<ChargingSessionEntity> { it.uploadedAtMs }
+                    .thenByDescending { it.startDateMs }
+                    .thenByDescending { it.id }
+            )
+        val targetCarId = latest.carId
+        return legacyOrdered
+            .takeWhile { it.carId == targetCarId }
+            .sortedByDescending { it.startDateMs }
+    }
+
+    /**
+     * Converts a batch of saved [ChargingSessionEntity] rows back into a [ParsedChargerImportResult]
+     * so an undone upload can be immediately reopened in the review sheet to pick a vehicle tag.
+     */
+    fun sessionsToImportResult(
+        sessions: List<ChargingSessionEntity>,
+        fileName: String = "last upload",
+        zoneId: ZoneId = ZoneId.systemDefault()
+    ): ParsedChargerImportResult {
+        val drafts = sessions
+            .sortedByDescending { it.startDateMs }
+            .map { session ->
+                ParsedChargingSessionDraft(
+                    startDateIso = formatEpochMsToIsoDate(session.startDateMs, zoneId),
+                    endDateIso = formatEpochMsToIsoDate(session.endDateMs, zoneId),
+                    kwh = session.kwh,
+                    venue = session.venue,
+                    directCost = session.directCost,
+                    chargerName = session.chargerName,
+                    isSummary = session.isSummary
+                )
+            }
+        return ParsedChargerImportResult(
+            sessions = drafts,
+            fileName = fileName,
+            source = "undo"
         )
     }
 

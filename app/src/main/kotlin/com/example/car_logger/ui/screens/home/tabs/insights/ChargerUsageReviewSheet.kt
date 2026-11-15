@@ -19,13 +19,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.EvStation
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -76,14 +79,19 @@ fun ChargerUsageReviewSheet(
     onUploadFile: () -> Unit,
     onDismiss: () -> Unit,
     onSaveSessions: (sessions: List<ChargingSessionEntity>, skippedDuplicates: Int) -> Unit,
+    initialSelectedCarId: String? = null,
+    lastUploadBatch: List<ChargingSessionEntity> = emptyList(),
+    onUndoLastUpload: () -> Unit = {},
+    onUndoAndRetagLastUpload: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val activeCars = remember(cars) { cars.filter { !it.isArchived }.ifEmpty { cars } }
 
-    // Default vehicle assignment: Both EVs (null) if multiple cars exist, or single car id
-    var selectedCarId by remember(activeCars) {
-        mutableStateOf(if (activeCars.size == 1) activeCars.first().id else null)
+    // Default vehicle assignment: active filter carId if set, or single car id, or Both EVs (null)
+    var selectedCarId by remember(activeCars, initialSelectedCarId) {
+        val validInitial = initialSelectedCarId?.takeIf { id -> activeCars.any { it.id == id } }
+        mutableStateOf(validInitial ?: if (activeCars.size == 1) activeCars.first().id else null)
     }
 
     val isImportReviewMode = initialImport != null && initialImport.sessions.isNotEmpty()
@@ -168,6 +176,65 @@ fun ChargerUsageReviewSheet(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Import CSV, PDF, or Screenshot")
+                }
+
+                if (lastUploadBatch.isNotEmpty()) {
+                    val carNameById = remember(activeCars) {
+                        activeCars.associate { it.id to it.model.ifBlank { it.displayName } }
+                    }
+                    val lastVehicleLabel = lastUploadBatch.first().carId?.let { carNameById[it] } ?: "Both EVs"
+                    val lastKwh = lastUploadBatch.sumOf { it.kwh }
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Last upload: ${lastUploadBatch.size} ${if (lastUploadBatch.size == 1) "log" else "logs"} (${String.format(Locale.US, "%.1f", lastKwh)} kWh · $lastVehicleLabel)",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = onUndoLastUpload,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .expressiveBounceClick()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.Undo,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Undo Upload", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                FilledTonalButton(
+                                    onClick = onUndoAndRetagLastUpload,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .expressiveBounceClick()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.DirectionsCar,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Undo & Re-tag", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
                 }
             } else if (initialImport?.source == "gemini") {
                 Surface(

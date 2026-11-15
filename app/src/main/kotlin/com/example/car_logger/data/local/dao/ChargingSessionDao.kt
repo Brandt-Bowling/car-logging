@@ -27,4 +27,10 @@ interface ChargingSessionDao {
 
     @Query("DELETE FROM charging_sessions WHERE id = :id")
     suspend fun deleteSessionById(id: String)
+
+    @Query("DELETE FROM charging_sessions WHERE id IN (:ids)")
+    suspend fun deleteSessionsByIds(ids: List<String>)
+
+    @Query("DELETE FROM charging_sessions WHERE uploadBatchId = :batchId")
+    suspend fun deleteSessionsByBatchId(batchId: String)
 }

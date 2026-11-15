@@ -404,12 +404,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             var insertedCount = 0
             var totalSkipped = skippedFromUi
+            val batchId = "batch_${UUID.randomUUID()}"
+            val uploadedAtMs = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
                 val existingFingerprints = chargingSessionDao.getAllFingerprints().toMutableSet()
                 val uniqueNew = mutableListOf<ChargingSessionEntity>()
                 for (session in sessions) {
                     if (existingFingerprints.add(session.fingerprint)) {
-                        uniqueNew.add(session)
+                        uniqueNew.add(
+                            session.copy(
+                                uploadBatchId = batchId,
+                                uploadedAtMs = uploadedAtMs
+                            )
+                        )
                     } else {
                         totalSkipped++
                     }
@@ -430,6 +437,39 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 else -> "No charging entries saved"
             }
             _toastMessage.emit(msg)
+        }
+    }
+
+    fun undoLastChargingUpload(reopenForRetag: Boolean = false) {
+        viewModelScope.launch {
+            val lastBatch = withContext(Dispatchers.IO) {
+                val all = chargingSessionDao.getAllSessionsList()
+                val batch = ElectricityImportParser.resolveLastUploadBatch(all)
+                if (batch.isNotEmpty()) {
+                    batch.map { it.id }.chunked(500).forEach { chunk ->
+                        chargingSessionDao.deleteSessionsByIds(chunk)
+                    }
+                }
+                batch
+            }
+            if (lastBatch.isEmpty()) {
+                _toastMessage.emit("No charging upload to undo")
+                return@launch
+            }
+            if (reopenForRetag) {
+                _pendingChargerImport.value = ElectricityImportParser.sessionsToImportResult(
+                    sessions = lastBatch,
+                    fileName = "last upload"
+                )
+                _showChargerUsageSheet.value = true
+                _toastMessage.emit(
+                    "Undid last upload (${lastBatch.size} ${if (lastBatch.size == 1) "entry" else "entries"}) — pick a vehicle to re-save"
+                )
+            } else {
+                _toastMessage.emit(
+                    "Undid last upload (${lastBatch.size} charging ${if (lastBatch.size == 1) "entry" else "entries"} removed)"
+                )
+            }
         }
     }
 

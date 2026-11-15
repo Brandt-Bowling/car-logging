@@ -326,6 +326,12 @@ fun HomeScreen(
                                 onSaveChargingSessions = { sessions, skipped ->
                                     viewModel.saveChargingSessions(sessions, skipped)
                                 },
+                                onUndoLastChargingUpload = {
+                                    viewModel.undoLastChargingUpload(reopenForRetag = false)
+                                },
+                                onUndoAndRetagChargingUpload = {
+                                    viewModel.undoLastChargingUpload(reopenForRetag = true)
+                                },
                                 onDeleteUtilityBill = { viewModel.deleteUtilityBill(it) },
                                 onDeleteChargingSession = { viewModel.deleteChargingSession(it) },
                                 onUpdateDefaultElectricityRate = { viewModel.updateDefaultElectricityRate(it) }
