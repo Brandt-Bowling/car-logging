@@ -31,7 +31,7 @@ import com.example.car_logger.data.local.entity.UtilityBillEntity
         UtilityBillEntity::class,
         ChargingSessionEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -124,6 +124,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE charging_sessions ADD COLUMN uploadBatchId TEXT")
+                } catch (_: Exception) {
+                    // Column already exists
+                }
+                try {
+                    db.execSQL("ALTER TABLE charging_sessions ADD COLUMN uploadedAtMs INTEGER NOT NULL DEFAULT 0")
+                } catch (_: Exception) {
+                    // Column already exists
+                }
+                try {
+                    db.execSQL("UPDATE charging_sessions SET uploadedAtMs = rowid WHERE uploadedAtMs = 0")
+                } catch (_: Exception) {
+                    // Ignore if table empty
+                }
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -134,7 +154,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "car_logger_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

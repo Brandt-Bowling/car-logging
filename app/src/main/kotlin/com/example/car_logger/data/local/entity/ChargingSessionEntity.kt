@@ -21,5 +21,7 @@ data class ChargingSessionEntity(
     val directCost: Double? = null,
     val chargerName: String? = null,
     val isSummary: Boolean = false,
-    val fingerprint: String
+    val fingerprint: String,
+    val uploadBatchId: String? = null,
+    val uploadedAtMs: Long = 0L
 )

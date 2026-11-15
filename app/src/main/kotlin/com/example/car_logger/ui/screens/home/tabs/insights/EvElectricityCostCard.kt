@@ -24,7 +24,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.ElectricBolt
 import androidx.compose.material.icons.rounded.EvStation
 import androidx.compose.material.icons.rounded.Home
@@ -76,6 +78,9 @@ fun EvElectricityCostCard(
     onOpenManualChargerSheet: () -> Unit,
     onOpenManualBillSheet: () -> Unit,
     onOpenManageSheet: () -> Unit,
+    lastUploadCount: Int = 0,
+    onUndoLastChargerUpload: () -> Unit = {},
+    onUndoAndRetagLastChargerUpload: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -206,7 +211,10 @@ fun EvElectricityCostCard(
                 onUploadChargerUsage = onUploadChargerUsage,
                 onOpenManualChargerSheet = onOpenManualChargerSheet,
                 onOpenManualBillSheet = onOpenManualBillSheet,
-                onOpenManageSheet = onOpenManageSheet
+                onOpenManageSheet = onOpenManageSheet,
+                lastUploadCount = lastUploadCount,
+                onUndoLastChargerUpload = onUndoLastChargerUpload,
+                onUndoAndRetagLastChargerUpload = onUndoAndRetagLastChargerUpload
             )
         }
     }
@@ -686,7 +694,10 @@ private fun ExpressiveChargingSplitButton(
     onUploadChargerUsage: () -> Unit,
     onOpenManualChargerSheet: () -> Unit,
     onOpenManualBillSheet: () -> Unit,
-    onOpenManageSheet: () -> Unit
+    onOpenManageSheet: () -> Unit,
+    lastUploadCount: Int = 0,
+    onUndoLastChargerUpload: () -> Unit = {},
+    onUndoAndRetagLastChargerUpload: () -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -809,6 +820,28 @@ private fun ExpressiveChargingSplitButton(
                     onOpenManualBillSheet()
                 }
             )
+            if (lastUploadCount > 0) {
+                DropdownMenuItem(
+                    text = {
+                        Text("Undo Last Charger Upload ($lastUploadCount ${if (lastUploadCount == 1) "log" else "logs"})")
+                    },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = null) },
+                    onClick = {
+                        menuExpanded = false
+                        onUndoLastChargerUpload()
+                    }
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text("Undo & Re-tag Last Upload ($lastUploadCount ${if (lastUploadCount == 1) "log" else "logs"})")
+                    },
+                    leadingIcon = { Icon(Icons.Rounded.DirectionsCar, contentDescription = null) },
+                    onClick = {
+                        menuExpanded = false
+                        onUndoAndRetagLastChargerUpload()
+                    }
+                )
+            }
             DropdownMenuItem(
                 text = { Text("Charging & Bills History") },
                 leadingIcon = { Icon(Icons.Rounded.Tune, contentDescription = null) },

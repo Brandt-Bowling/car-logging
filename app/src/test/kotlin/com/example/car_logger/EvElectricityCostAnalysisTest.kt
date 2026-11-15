@@ -477,4 +477,117 @@ class EvElectricityCostAnalysisTest {
         assertTrue(statePastMonth.electricityCost.hasHomeData)
         assertEquals(9.60, statePastMonth.electricityCost.homeTotalCost, 0.01)
     }
+
+    @Test
+    fun undoLastUpload_resolvesExplicitBatch_andLegacyRowidBatch_andConvertsForRetag() {
+        // 1. Legacy sessions (uploadBatchId == null, uploadedAtMs backfilled from rowid)
+        // Earlier upload tagged to car_1 (rowids 1, 2) followed by untagged upload (carId = null, rowids 3, 4)
+        val legacyTagged1 = ChargingSessionEntity(
+            id = "leg_1",
+            carId = "car_1",
+            startDateMs = startMs("2026-10-01"),
+            endDateMs = endMs("2026-10-01"),
+            kwh = 25.0,
+            venue = "HOME",
+            fingerprint = "fp_leg_1",
+            uploadBatchId = null,
+            uploadedAtMs = 1L
+        )
+        val legacyTagged2 = ChargingSessionEntity(
+            id = "leg_2",
+            carId = "car_1",
+            startDateMs = startMs("2026-10-02"),
+            endDateMs = endMs("2026-10-02"),
+            kwh = 30.0,
+            venue = "HOME",
+            fingerprint = "fp_leg_2",
+            uploadBatchId = null,
+            uploadedAtMs = 2L
+        )
+        val legacyUntagged1 = ChargingSessionEntity(
+            id = "leg_3",
+            carId = null,
+            startDateMs = startMs("2026-11-01"),
+            endDateMs = endMs("2026-11-01"),
+            kwh = 40.0,
+            venue = "HOME",
+            chargerName = "Wall Connector",
+            fingerprint = "fp_leg_3",
+            uploadBatchId = null,
+            uploadedAtMs = 3L
+        )
+        val legacyUntagged2 = ChargingSessionEntity(
+            id = "leg_4",
+            carId = null,
+            startDateMs = startMs("2026-11-05"),
+            endDateMs = endMs("2026-11-05"),
+            kwh = 45.5,
+            venue = "PUBLIC",
+            directCost = 18.20,
+            chargerName = "Supercharger",
+            fingerprint = "fp_leg_4",
+            uploadBatchId = null,
+            uploadedAtMs = 4L
+        )
+
+        val legacyAll = listOf(legacyTagged1, legacyTagged2, legacyUntagged1, legacyUntagged2)
+        val legacyLastBatch = ElectricityImportParser.resolveLastUploadBatch(legacyAll)
+        assertEquals(listOf("leg_4", "leg_3"), legacyLastBatch.map { it.id })
+
+        // Convert undone batch back into ParsedChargerImportResult for re-tagging with a car
+        val retagImport = ElectricityImportParser.sessionsToImportResult(legacyLastBatch, "last upload", zoneId)
+        assertEquals("undo", retagImport.source)
+        assertEquals(2, retagImport.sessions.size)
+        assertEquals("2026-11-05", retagImport.sessions[0].startDateIso)
+        assertEquals(45.5, retagImport.sessions[0].kwh, 0.01)
+        assertEquals("PUBLIC", retagImport.sessions[0].venue)
+        assertEquals(18.20, retagImport.sessions[0].directCost ?: 0.0, 0.01)
+        assertEquals("2026-11-01", retagImport.sessions[1].startDateIso)
+        assertEquals(40.0, retagImport.sessions[1].kwh, 0.01)
+        assertEquals("HOME", retagImport.sessions[1].venue)
+
+        // 2. Explicit uploadBatchId sessions override older batches cleanly
+        val newBatch1 = ChargingSessionEntity(
+            id = "new_1",
+            carId = null,
+            startDateMs = startMs("2026-11-10"),
+            endDateMs = endMs("2026-11-10"),
+            kwh = 20.0,
+            venue = "HOME",
+            fingerprint = "fp_new_1",
+            uploadBatchId = "batch_a",
+            uploadedAtMs = 1_000_000L
+        )
+        val newBatch2a = ChargingSessionEntity(
+            id = "new_2a",
+            carId = null,
+            startDateMs = startMs("2026-11-11"),
+            endDateMs = endMs("2026-11-11"),
+            kwh = 22.0,
+            venue = "HOME",
+            fingerprint = "fp_new_2a",
+            uploadBatchId = "batch_b",
+            uploadedAtMs = 2_000_000L
+        )
+        val newBatch2b = ChargingSessionEntity(
+            id = "new_2b",
+            carId = null,
+            startDateMs = startMs("2026-11-12"),
+            endDateMs = endMs("2026-11-12"),
+            kwh = 28.0,
+            venue = "HOME",
+            fingerprint = "fp_new_2b",
+            uploadBatchId = "batch_b",
+            uploadedAtMs = 2_000_000L
+        )
+
+        val withExplicitBatches = legacyAll + listOf(newBatch1, newBatch2a, newBatch2b)
+        val resolvedBatchB = ElectricityImportParser.resolveLastUploadBatch(withExplicitBatches)
+        assertEquals(listOf("new_2b", "new_2a"), resolvedBatchB.map { it.id })
+
+        // After undoing batch_b, batch_a becomes the next undoable upload
+        val afterUndoingB = withExplicitBatches.filterNot { it.uploadBatchId == "batch_b" }
+        val resolvedBatchA = ElectricityImportParser.resolveLastUploadBatch(afterUndoingB)
+        assertEquals(listOf("new_1"), resolvedBatchA.map { it.id })
+    }
 }

@@ -55,6 +55,7 @@ import com.example.car_logger.data.insights.InsightsTimeGranularity
 import com.example.car_logger.data.insights.InsightsUiState
 import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import com.example.car_logger.data.model.Car
+import com.example.car_logger.services.ElectricityImportParser
 import com.example.car_logger.services.ParsedChargerImportResult
 import com.example.car_logger.services.ParsedUtilityBillDraft
 import com.example.car_logger.ui.screens.home.tabs.insights.ChargerUsageReviewSheet
@@ -95,6 +96,8 @@ fun InsightsTab(
     onOpenManualChargerUsageSheet: () -> Unit = {},
     onDismissChargerUsageSheet: () -> Unit = {},
     onSaveChargingSessions: (List<ChargingSessionEntity>, Int) -> Unit = { _, _ -> },
+    onUndoLastChargingUpload: () -> Unit = {},
+    onUndoAndRetagChargingUpload: () -> Unit = {},
     onDeleteUtilityBill: (String) -> Unit = {},
     onDeleteChargingSession: (String) -> Unit = {},
     onUpdateDefaultElectricityRate: (Float) -> Unit = {},
@@ -103,6 +106,9 @@ fun InsightsTab(
     var showEditSheet by remember { mutableStateOf(false) }
     var showManageElectricitySheet by remember { mutableStateOf(false) }
     val activeCars = cars.filter { !it.isArchived }.ifEmpty { cars }
+    val lastUploadBatch = remember(state.chargingSessions) {
+        ElectricityImportParser.resolveLastUploadBatch(state.chargingSessions)
+    }
 
     val billFilePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -281,7 +287,10 @@ fun InsightsTab(
                     onUploadChargerUsage = launchChargerPicker,
                     onOpenManualChargerSheet = onOpenManualChargerUsageSheet,
                     onOpenManualBillSheet = onOpenManualUtilityBillSheet,
-                    onOpenManageSheet = { showManageElectricitySheet = true }
+                    onOpenManageSheet = { showManageElectricitySheet = true },
+                    lastUploadCount = lastUploadBatch.size,
+                    onUndoLastChargerUpload = onUndoLastChargingUpload,
+                    onUndoAndRetagLastChargerUpload = onUndoAndRetagChargingUpload
                 )
             }
 
@@ -338,7 +347,10 @@ fun InsightsTab(
                     onUploadChargerUsage = launchChargerPicker,
                     onOpenManualChargerSheet = onOpenManualChargerUsageSheet,
                     onOpenManualBillSheet = onOpenManualUtilityBillSheet,
-                    onOpenManageSheet = { showManageElectricitySheet = true }
+                    onOpenManageSheet = { showManageElectricitySheet = true },
+                    lastUploadCount = lastUploadBatch.size,
+                    onUndoLastChargerUpload = onUndoLastChargingUpload,
+                    onUndoAndRetagLastChargerUpload = onUndoAndRetagChargingUpload
                 )
             }
 
@@ -426,7 +438,11 @@ fun InsightsTab(
             existingFingerprints = fingerprints,
             onUploadFile = launchChargerPicker,
             onDismiss = onDismissChargerUsageSheet,
-            onSaveSessions = onSaveChargingSessions
+            onSaveSessions = onSaveChargingSessions,
+            initialSelectedCarId = state.selectedCarId,
+            lastUploadBatch = lastUploadBatch,
+            onUndoLastUpload = onUndoLastChargingUpload,
+            onUndoAndRetagLastUpload = onUndoAndRetagChargingUpload
         )
     }
 
@@ -439,6 +455,11 @@ fun InsightsTab(
             onUpdateDefaultRate = onUpdateDefaultElectricityRate,
             onDeleteBill = onDeleteUtilityBill,
             onDeleteSession = onDeleteChargingSession,
+            onUndoLastChargerUpload = onUndoLastChargingUpload,
+            onUndoAndRetagLastChargerUpload = {
+                showManageElectricitySheet = false
+                onUndoAndRetagChargingUpload()
+            },
             onOpenAddBill = {
                 showManageElectricitySheet = false
                 onOpenManualUtilityBillSheet()

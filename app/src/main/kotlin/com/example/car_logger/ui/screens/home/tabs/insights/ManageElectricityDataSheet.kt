@@ -19,7 +19,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.ElectricBolt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -67,13 +70,23 @@ fun ManageElectricityDataSheet(
     onUpdateDefaultRate: (Float) -> Unit,
     onDeleteBill: (String) -> Unit,
     onDeleteSession: (String) -> Unit,
+    onUndoLastChargerUpload: () -> Unit = {},
+    onUndoAndRetagLastChargerUpload: () -> Unit = {},
     onOpenAddBill: () -> Unit,
     onOpenAddCharger: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var selectedTab by remember { mutableStateOf(HistoryTab.BILLS) }
+    var selectedTab by remember {
+        mutableStateOf(
+            if (utilityBills.isEmpty() && chargingSessions.isNotEmpty()) {
+                HistoryTab.SESSIONS
+            } else {
+                HistoryTab.BILLS
+            }
+        )
+    }
     var defaultRateText by remember(currentDefaultRate) {
         mutableStateOf(String.format(Locale.US, "%.3f", currentDefaultRate))
     }
@@ -81,6 +94,9 @@ fun ManageElectricityDataSheet(
 
     val carNameById = remember(cars) {
         cars.associate { it.id to it.model.ifBlank { it.displayName } }
+    }
+    val lastUploadBatch = remember(chargingSessions) {
+        ElectricityImportParser.resolveLastUploadBatch(chargingSessions)
     }
 
     ModalBottomSheet(
@@ -287,6 +303,83 @@ fun ManageElectricityDataSheet(
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (lastUploadBatch.isNotEmpty()) {
+                            val batchKwh = lastUploadBatch.sumOf { it.kwh }
+                            val batchVehicleLabel = lastUploadBatch.first().carId?.let { carNameById[it] } ?: "Both EVs"
+                            val minStart = lastUploadBatch.minOf { it.startDateMs }
+                            val maxEnd = lastUploadBatch.maxOf { it.endDateMs }
+                            val batchDateLabel = ElectricityImportParser.formatPeriodShort(minStart, maxEnd)
+
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "Last Upload · ${lastUploadBatch.size} ${if (lastUploadBatch.size == 1) "log" else "logs"} (${String.format(Locale.US, "%.1f", batchKwh)} kWh)",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                        Text(
+                                            text = "Tagged to $batchVehicleLabel · $batchDateLabel",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = onUndoLastChargerUpload,
+                                            shape = RoundedCornerShape(14.dp),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .expressiveBounceClick()
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Rounded.Undo,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Undo Upload",
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+
+                                        FilledTonalButton(
+                                            onClick = onUndoAndRetagLastChargerUpload,
+                                            shape = RoundedCornerShape(14.dp),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .expressiveBounceClick()
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.DirectionsCar,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Undo & Re-tag",
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         chargingSessions.forEach { session ->
                             val isPublic = session.venue.equals("PUBLIC", ignoreCase = true)
                             val vehicleLabel = session.carId?.let { carNameById[it] } ?: "Both EVs"
