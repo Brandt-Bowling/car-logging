@@ -659,14 +659,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 if (!isSmartcar) {
                     val chargerResult = odometerSyncService.syncWallConnectorCharging(currentCars)
-                    if (chargerResult is com.example.car_logger.services.WallConnectorSyncResult.Synced &&
-                        chargerResult.insertedCount > 0
-                    ) {
-                        _toastMessage.tryEmit(OdometerSyncService.formatWallConnectorSyncMessage(chargerResult))
+                    when (chargerResult) {
+                        is com.example.car_logger.services.WallConnectorSyncResult.Synced -> {
+                            if (chargerResult.insertedCount > 0) {
+                                _toastMessage.tryEmit(OdometerSyncService.formatWallConnectorSyncMessage(chargerResult))
+                            }
+                        }
+                        is com.example.car_logger.services.WallConnectorSyncResult.MissingScope,
+                        is com.example.car_logger.services.WallConnectorSyncResult.Error,
+                        is com.example.car_logger.services.WallConnectorSyncResult.NoDevices -> {
+                            _toastMessage.tryEmit(OdometerSyncService.formatWallConnectorSyncMessage(chargerResult))
+                        }
+                        com.example.car_logger.services.WallConnectorSyncResult.NotConfigured -> Unit
                     }
                 }
             } else {
-                _toastMessage.tryEmit("Failed to connect $providerLabel")
+                val detail = odometerSyncService.lastSyncMessage.value
+                _toastMessage.tryEmit(detail ?: "Failed to connect $providerLabel")
             }
         }
     }

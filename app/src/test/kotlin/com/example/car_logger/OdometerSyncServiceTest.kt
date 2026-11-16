@@ -1,8 +1,12 @@
 package com.example.car_logger
 
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.dao.CarDao
+import com.example.car_logger.data.local.dao.ChargingSessionDao
 import com.example.car_logger.data.local.dao.OdometerLogDao
 import com.example.car_logger.data.local.entity.CarEntity
+import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.services.ElectricityImportParser
@@ -10,18 +14,32 @@ import com.example.car_logger.services.OdometerSyncResult
 import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.services.WallConnectorSyncResult
 import com.example.car_logger.services.WallConnectorType
+import java.time.Instant
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.util.Base64
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class OdometerSyncServiceTest {
+
+    @get:Rule
+    val tempFolder = TemporaryFolder()
 
     @Test
     fun `isCooldownActive enforces 72h window accurately`() {
@@ -733,6 +751,369 @@ class OdometerSyncServiceTest {
         assertEquals("Synced 2 vehicles • +87.3 kWh", summary)
     }
 
+    @Test
+    fun `setTeslaCredentials clears stale refresh token and expiry when manual token changes or clears`() = runBlocking {
+        val prefs = createTestPreferencesManager("manual_token_clear")
+        prefs.saveTeslaTokens("old_oauth_token", "stale_refresh_token", 3600L)
+
+        // Updating access token manually must clear stale OAuth refresh/expiry so old refresh_token never overwrites it
+        prefs.setTeslaCredentials("cid", "csec", "  new_manual_token_with_energy  ")
+        val updated = prefs.getTeslaTokens()
+        assertEquals("new_manual_token_with_energy", updated.first)
+        assertNull(updated.second)
+        assertEquals(0L, updated.third)
+
+        // Passing null preserves existing token (used by OAuth Reconnect dialog before callback finishes)
+        prefs.setTeslaCredentials("cid", "csec", null)
+        assertEquals("new_manual_token_with_energy", prefs.getTeslaTokens().first)
+
+        // Passing blank clears access token, refresh token, and expiry
+        prefs.setTeslaCredentials("cid", "csec", "   ")
+        val cleared = prefs.getTeslaTokens()
+        assertNull(cleared.first)
+        assertNull(cleared.second)
+        assertEquals(0L, cleared.third)
+    }
+
+    @Test
+    fun `buildTeslaAuthUrl includes energy_device_data prompt_missing_scopes and uses fleet-auth token url`() {
+        val url = OdometerSyncService.buildTeslaAuthUrl("my_client_id")
+        assertTrue(url.startsWith("https://auth.tesla.com/oauth2/v3/authorize?"))
+        assertTrue(url.contains("client_id=my_client_id"))
+        assertTrue(url.contains("energy_device_data"))
+        assertTrue(url.contains("prompt_missing_scopes=true"))
+        assertTrue(url.contains("require_requested_scopes=true"))
+        assertEquals(
+            "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token",
+            OdometerSyncService.TESLA_AUTH_TOKEN_URL
+        )
+    }
+
+    @Test
+    fun `parseTeslaEnergySites ignores JsonNull fields on vehicles and parses string-array wall_connectors`() {
+        val productsPayload = """
+            {
+              "response": [
+                {
+                  "id": 999111,
+                  "vin": "5YJ3E1EA1PF000001",
+                  "energy_site_id": null,
+                  "resource_type": null,
+                  "state": "asleep"
+                },
+                {
+                  "id": 999112,
+                  "vin": null,
+                  "energy_site_id": null,
+                  "resource_type": "vehicle"
+                },
+                {
+                  "energy_site_id": "225511099",
+                  "resource_type": "energy",
+                  "site_name": "Garage Chargers",
+                  "id": "site-uuid-99",
+                  "components": {
+                    "wall_connectors": [
+                      "1457768-02-G--GEN3ABC",
+                      "1734412-02-D--UNIVXYZ"
+                    ]
+                  }
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val devices = OdometerSyncService.parseTeslaEnergySites(productsPayload)
+        assertEquals(2, devices.size)
+        assertEquals("1457768-02-G--GEN3ABC", devices[0].din)
+        assertEquals(WallConnectorType.GEN_3, devices[0].connectorType)
+        assertEquals("1734412-02-D--UNIVXYZ", devices[1].din)
+        assertEquals(WallConnectorType.UNIVERSAL, devices[1].connectorType)
+    }
+
+    @Test
+    fun `parseTeslaWallConnectorChargeHistory supports time value keys and JsonNull optionals`() {
+        val json = """
+            {
+              "response": {
+                "time_series": [
+                  {
+                    "time": "2026-11-15T10:00:00-08:00",
+                    "value": 18500,
+                    "charge_duration": 7200,
+                    "din": null,
+                    "vin": null
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val sessions = OdometerSyncService.parseTeslaWallConnectorChargeHistory(json, "site_1")
+        assertEquals(1, sessions.size)
+        assertEquals(18500.0, sessions[0].energyWh, 0.01)
+        assertNull(sessions[0].din)
+        assertNull(sessions[0].vin)
+        assertEquals(sessions[0].startDateMs + 7_200_000L, sessions[0].endDateMs)
+    }
+
+    @Test
+    fun `syncWallConnectorCharging returns MissingScope when JWT lacks energy_device_data even if products returns 200`() = runBlocking {
+        val prefs = createTestPreferencesManager("missing_scope_jwt")
+        val futureExp = Instant.now().epochSecond + 3600L
+        val jwtWithoutEnergy = createJwt(scp = listOf("openid", "offline_access", "vehicle_device_data"), expEpochSec = futureExp)
+        prefs.setTeslaCredentials("cid", null, jwtWithoutEnergy)
+
+        val mockClient = createMockClient { url, _ ->
+            if (url.endsWith("/api/1/products")) {
+                200 to """{"response":[{"id":1,"vin":"5YJ3E1EA1PF000001","energy_site_id":null}]}"""
+            } else {
+                error("Unexpected request: $url")
+            }
+        }
+        val service = OdometerSyncService(prefs, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), mockClient)
+        val result = service.syncWallConnectorCharging(emptyList())
+
+        assertTrue(result is WallConnectorSyncResult.MissingScope)
+        assertTrue(prefs.lastChargerSyncStatusFlow.first().orEmpty().contains("energy_device_data"))
+    }
+
+    @Test
+    fun `syncWallConnectorCharging returns NoDevices when energy scope is present and zero sites exist`() = runBlocking {
+        val prefs = createTestPreferencesManager("no_devices")
+        val futureExp = Instant.now().epochSecond + 3600L
+        val jwtWithEnergy = createJwt(scp = listOf("openid", "energy_device_data"), expEpochSec = futureExp)
+        prefs.setTeslaCredentials("cid", null, jwtWithEnergy)
+
+        val mockClient = createMockClient { _, _ ->
+            200 to """{"response":[{"id":1,"vin":"5YJ3E1EA1PF000001"}]}"""
+        }
+        val service = OdometerSyncService(prefs, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), mockClient)
+        val result = service.syncWallConnectorCharging(emptyList())
+
+        assertTrue(result is WallConnectorSyncResult.NoDevices)
+    }
+
+    @Test
+    fun `syncWallConnectorCharging retries 401 via refresh token and succeeds with clamped 30d window`() = runBlocking {
+        val prefs = createTestPreferencesManager("refresh_retry")
+        val futureExp = Instant.now().epochSecond + 3600L
+        val oldJwt = createJwt(scp = listOf("openid", "energy_device_data"), expEpochSec = futureExp)
+        val refreshedJwt = createJwt(scp = listOf("openid", "energy_device_data"), expEpochSec = futureExp + 3600L)
+        prefs.setTeslaCredentials("cid", "csec", oldJwt)
+        prefs.saveTeslaTokens(oldJwt, "valid_refresh_tok", 3600L)
+
+        val dao = FakeChargingSessionDao()
+        var telemetryStartDate: String? = null
+        var telemetryEndDate: String? = null
+        val mockClient = createMockClient { url, auth ->
+            when {
+                url.contains("/oauth2/v3/token") -> {
+                    200 to """{"access_token":"$refreshedJwt","refresh_token":"next_refresh","expires_in":28800}"""
+                }
+                url.endsWith("/api/1/products") && auth == "Bearer $oldJwt" -> {
+                    401 to """{"error":"token_revoked"}"""
+                }
+                url.endsWith("/api/1/products") && auth == "Bearer $refreshedJwt" -> {
+                    200 to """
+                        {
+                          "response": [
+                            {
+                              "energy_site_id": "998877",
+                              "resource_type": "wall_connector",
+                              "site_name": "Garage",
+                              "components": {
+                                "wall_connectors": [
+                                  { "din": "1457768-02-G--GEN3ONE", "part_number": "1457768-02-G" }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                    """.trimIndent()
+                }
+                url.contains("/api/1/energy_sites/998877/telemetry_history") && auth == "Bearer $refreshedJwt" -> {
+                    val uriQuery = url.substringAfter("?")
+                    val params = uriQuery.split("&").associate {
+                        val parts = it.split("=", limit = 2)
+                        parts[0] to java.net.URLDecoder.decode(parts.getOrElse(1) { "" }, "UTF-8")
+                    }
+                    telemetryStartDate = params["start_date"]
+                    telemetryEndDate = params["end_date"]
+                    200 to """
+                        {
+                          "response": {
+                            "time_series": [
+                              {
+                                "charge_start_time": "2026-11-15T20:00:00-08:00",
+                                "charge_stop_time": "2026-11-15T23:00:00-08:00",
+                                "charge_energy_imported": 24000,
+                                "din": "1457768-02-G--GEN3ONE",
+                                "vin": "5YJ3E1EA1PF000001"
+                              }
+                            ]
+                          }
+                        }
+                    """.trimIndent()
+                }
+                else -> error("Unexpected request: $url with auth=$auth")
+            }
+        }
+
+        val garage = listOf(Car(id = "m3", make = "Tesla", model = "Model 3", year = 2023, vin = "5YJ3E1EA1PF000001", isEv = true))
+        val service = OdometerSyncService(prefs, FakeCarDao(), FakeOdometerLogDao(), dao, mockClient)
+        val result = service.syncWallConnectorCharging(garage)
+
+        assertTrue(result is WallConnectorSyncResult.Synced)
+        val synced = result as WallConnectorSyncResult.Synced
+        assertEquals(1, synced.insertedCount)
+        assertEquals(24.0, synced.totalKwhAdded, 0.01)
+        assertEquals(refreshedJwt, prefs.getTeslaTokens().first)
+        assertEquals(1, dao.sessions.size)
+
+        // Ensure clamped date span never exceeds 30 days
+        val startMs = OffsetDateTime.parse(telemetryStartDate).toInstant().toEpochMilli()
+        val endMs = OffsetDateTime.parse(telemetryEndDate).toInstant().toEpochMilli()
+        assertTrue((endMs - startMs) <= (30L * 86_400_000L + 1000L))
+    }
+
+    @Test
+    fun `syncWallConnectorCharging returns Error on unrecoverable 401 and manual token is not overwritten by stale refresh`() = runBlocking {
+        val prefs = createTestPreferencesManager("manual_override_401")
+        val futureExp = Instant.now().epochSecond + 3600L
+        val oldJwt = createJwt(scp = listOf("openid", "vehicle_device_data"), expEpochSec = futureExp)
+        val manualJwt = createJwt(scp = listOf("openid", "vehicle_device_data", "energy_device_data"), expEpochSec = futureExp)
+
+        // First simulate prior OAuth connect with expired token & old refresh_token
+        prefs.saveTeslaTokens(oldJwt, "stale_refresh_should_be_cleared", -60L)
+        // User updates manual token in Settings -> stale refresh & expiry MUST be wiped
+        prefs.setTeslaCredentials("cid", null, manualJwt)
+
+        var calledTokenRefresh = false
+        val mockClient = createMockClient { url, auth ->
+            if (url.contains("/oauth2/v3/token")) {
+                calledTokenRefresh = true
+                error("Token refresh endpoint must not be called with stale refresh_token!")
+            }
+            assertEquals("Bearer $manualJwt", auth)
+            401 to """{"error":"invalid_token"}"""
+        }
+
+        val service = OdometerSyncService(prefs, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), mockClient)
+        val result = service.syncWallConnectorCharging(emptyList())
+
+        assertFalse(calledTokenRefresh)
+        assertTrue(result is WallConnectorSyncResult.Error)
+        val msg = (result as WallConnectorSyncResult.Error).message
+        assertTrue("Expected 401 error message, got: $msg", msg.contains("401"))
+    }
+
+    @Test
+    fun `syncWallConnectorCharging retries 400 with YYYY-MM-DD and surfaces persistent errors instead of no new sessions`() = runBlocking {
+        val prefs = createTestPreferencesManager("fallback_and_error")
+        val futureExp = Instant.now().epochSecond + 3600L
+        val jwt = createJwt(scp = listOf("openid", "energy_device_data"), expEpochSec = futureExp)
+        prefs.setTeslaCredentials("cid", null, jwt)
+
+        val dao = FakeChargingSessionDao()
+        var returnPersistentError = false
+        val seenHistoryUrls = mutableListOf<String>()
+        val mockClient = createMockClient { url, _ ->
+            when {
+                url.endsWith("/api/1/products") -> {
+                    200 to """
+                        {
+                          "response": [
+                            {
+                              "energy_site_id": "555",
+                              "resource_type": "wall_connector",
+                              "components": {
+                                "wall_connectors": ["1734412-02-D--UNIV1"]
+                              }
+                            }
+                          ]
+                        }
+                    """.trimIndent()
+                }
+                url.contains("/telemetry_history") -> {
+                    seenHistoryUrls.add(url)
+                    if (returnPersistentError) {
+                        500 to """{"error":"internal_server_error"}"""
+                    } else if (url.contains("%3A")) {
+                        // RFC3339 timestamp format contains encoded colons (%3A) -> simulate 400 to trigger YYYY-MM-DD retry
+                        400 to """{"error":"invalid start_date"}"""
+                    } else {
+                        200 to """
+                            {
+                              "response": {
+                                "time_series": [
+                                  {
+                                    "charge_start_time": "2026-11-15T18:00:00-08:00",
+                                    "charge_stop_time": "2026-11-15T20:00:00-08:00",
+                                    "charge_energy_imported": 15200,
+                                    "din": "1734412-02-D--UNIV1"
+                                  }
+                                ]
+                              }
+                            }
+                        """.trimIndent()
+                    }
+                }
+                else -> error("Unexpected url: $url")
+            }
+        }
+
+        val service = OdometerSyncService(prefs, FakeCarDao(), FakeOdometerLogDao(), dao, mockClient)
+        val okResult = service.syncWallConnectorCharging(emptyList())
+        assertTrue(okResult is WallConnectorSyncResult.Synced)
+        assertEquals(1, (okResult as WallConnectorSyncResult.Synced).insertedCount)
+        assertEquals(2, seenHistoryUrls.size)
+
+        // Now verify persistent 500 surfaces Error rather than Synced(0)
+        returnPersistentError = true
+        val errResult = service.syncWallConnectorCharging(emptyList())
+        assertTrue(errResult is WallConnectorSyncResult.Error)
+        assertTrue((errResult as WallConnectorSyncResult.Error).message.contains("500"))
+    }
+
+    private fun createTestPreferencesManager(name: String): PreferencesManager {
+        val dataStore = PreferenceDataStoreFactory.create(
+            produceFile = { tempFolder.newFile("$name.preferences_pb") }
+        )
+        return PreferencesManager(dataStore)
+    }
+
+    private fun createJwt(scp: List<String>? = null, expEpochSec: Long? = null): String {
+        val encoder = Base64.getUrlEncoder().withoutPadding()
+        val header = encoder.encodeToString("""{"alg":"RS256","typ":"JWT"}""".toByteArray())
+        val claimsParts = mutableListOf<String>()
+        if (scp != null) {
+            val arr = scp.joinToString(",") { "\"$it\"" }
+            claimsParts.add("\"scp\":[$arr]")
+        }
+        if (expEpochSec != null) {
+            claimsParts.add("\"exp\":$expEpochSec")
+        }
+        val payload = encoder.encodeToString("{${claimsParts.joinToString(",")}}".toByteArray())
+        return "$header.$payload.sig"
+    }
+
+    private fun createMockClient(handler: (url: String, authHeader: String?) -> Pair<Int, String>): OkHttpClient {
+        return OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                val (code, bodyStr) = handler(req.url.toString(), req.header("Authorization"))
+                Response.Builder()
+                    .request(req)
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(code)
+                    .message("HTTP $code")
+                    .body(bodyStr.toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+    }
+
     private class FakeCarDao : CarDao {
         val cars = mutableMapOf<String, CarEntity>()
 
@@ -794,5 +1175,27 @@ class OdometerSyncServiceTest {
         override suspend fun deleteNonTelemetryLogs() {
             logs.removeAll { it.source in listOf("MAINTENANCE", "INITIAL") || it.id.startsWith("rec_") || it.id.startsWith("car_odo_") }
         }
+    }
+
+    private class FakeChargingSessionDao : ChargingSessionDao {
+        val sessions = mutableListOf<ChargingSessionEntity>()
+
+        override fun getAllSessions(): Flow<List<ChargingSessionEntity>> = emptyFlow()
+        override suspend fun getAllSessionsList(): List<ChargingSessionEntity> = sessions.sortedByDescending { it.startDateMs }
+        override suspend fun getAllFingerprints(): List<String> = sessions.map { it.fingerprint }
+        override suspend fun insertSessions(sessions: List<ChargingSessionEntity>) {
+            sessions.forEach { session ->
+                if (this.sessions.none { it.id == session.id }) {
+                    this.sessions.add(session)
+                }
+            }
+        }
+        override suspend fun insertSession(session: ChargingSessionEntity) {
+            sessions.removeAll { it.id == session.id }
+            sessions.add(session)
+        }
+        override suspend fun deleteSessionById(id: String) { sessions.removeAll { it.id == id } }
+        override suspend fun deleteSessionsByIds(ids: List<String>) { sessions.removeAll { it.id in ids } }
+        override suspend fun deleteSessionsByBatchId(batchId: String) { sessions.removeAll { it.uploadBatchId == batchId } }
     }
 }
