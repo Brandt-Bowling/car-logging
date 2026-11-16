@@ -430,7 +430,7 @@ fun SettingsTab(
                         FilledTonalButton(
                             onClick = {
                                 coroutineScope.launch {
-                                    preferencesManager.setTeslaCredentials(clientId, clientSecret, accessToken.ifBlank { null })
+                                    preferencesManager.setTeslaCredentials(clientId, clientSecret, accessToken = null)
                                     val url = odometerSyncService.buildTeslaAuthUrl(clientId)
                                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                                     showTeslaDialog = false
@@ -947,6 +947,18 @@ fun SettingsTab(
                     val universalLabel = mappedUniversalCar?.model?.ifBlank { mappedUniversalCar.displayName } ?: "Blazer EV"
                     val chargerSyncTimeText = OdometerSyncService.formatRelativeTime(lastChargerSyncTime)
 
+                    val hasChargerError = lastChargerSyncStatus?.let { status ->
+                        status.contains("energy_device_data", ignoreCase = true) ||
+                            status.contains("failed", ignoreCase = true) ||
+                            status.contains("expired", ignoreCase = true) ||
+                            status.contains("unauthorized", ignoreCase = true) ||
+                            status.contains("401") ||
+                            status.contains("403") ||
+                            status.contains("error", ignoreCase = true) ||
+                            status.contains("forbidden", ignoreCase = true) ||
+                            status.contains("reconnect", ignoreCase = true)
+                    } == true
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -974,7 +986,7 @@ fun SettingsTab(
                             Text(
                                 text = chargerStatusText,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (lastChargerSyncStatus?.contains("energy_device_data") == true) {
+                                color = if (hasChargerError) {
                                     MaterialTheme.colorScheme.error
                                 } else {
                                     MaterialTheme.colorScheme.primary
@@ -983,6 +995,23 @@ fun SettingsTab(
                             )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (teslaConnected && hasChargerError && odometerSyncService != null) {
+                                TextButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            val (id, _) = odometerSyncService.getEffectiveTeslaCredentials()
+                                            if (!id.isNullOrBlank()) {
+                                                val url = odometerSyncService.buildTeslaAuthUrl(id)
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                            } else {
+                                                showTeslaDialog = true
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Text("Reconnect")
+                                }
+                            }
                             if (cars.isNotEmpty()) {
                                 TextButton(onClick = { showWallConnectorMappingDialog = true }) {
                                     Text("Map")

@@ -30,6 +30,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -74,6 +76,7 @@ sealed class WallConnectorSyncResult {
         val totalSessionsScanned: Int
     ) : WallConnectorSyncResult()
     data object NotConfigured : WallConnectorSyncResult()
+    data class NoDevices(val message: String = "No Wall Connectors found on Tesla account") : WallConnectorSyncResult()
     data class MissingScope(val message: String) : WallConnectorSyncResult()
     data class Error(val message: String) : WallConnectorSyncResult()
 }
@@ -192,11 +195,84 @@ class OdometerSyncService(
         const val SMARTCAR_V3_IAM_TOKEN_URL = "https://iam.smartcar.com/oauth2/token"
 
         const val TESLA_API_BASE = "https://fleet-api.prd.na.vn.cloud.tesla.com"
-        const val TESLA_AUTH_TOKEN_URL = "https://auth.tesla.com/oauth2/v3/token"
+        const val TESLA_AUTH_TOKEN_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
+        const val TESLA_SCOPE_ENERGY_DEVICE_DATA = "energy_device_data"
 
         private val json = Json {
             ignoreUnknownKeys = true
             isLenient = true
+        }
+
+        private fun JsonElement?.asStringOrNull(): String? =
+            (this as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+
+        private fun JsonElement?.asDoubleOrNull(): Double? =
+            (this as? JsonPrimitive)?.doubleOrNull
+
+        private fun JsonElement?.asLongOrNull(): Long? =
+            (this as? JsonPrimitive)?.longOrNull
+
+        internal fun parseJwtClaims(token: String): JsonObject? {
+            val parts = token.trim().split(".")
+            if (parts.size != 3 || parts[1].isBlank()) return null
+            return try {
+                val decoded = java.util.Base64.getUrlDecoder().decode(parts[1])
+                json.parseToJsonElement(String(decoded, Charsets.UTF_8)) as? JsonObject
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        internal fun extractJwtExpiryMs(token: String): Long? {
+            val expSec = parseJwtClaims(token)?.get("exp").asLongOrNull() ?: return null
+            return if (expSec > 0L) expSec * 1000L else null
+        }
+
+        internal fun extractJwtScopes(token: String): Set<String>? {
+            val claims = parseJwtClaims(token) ?: return null
+            val scpElem = claims["scp"] ?: claims["scope"] ?: return null
+            val scopes = when (scpElem) {
+                is JsonArray -> scpElem.mapNotNull { it.asStringOrNull() }
+                is JsonPrimitive -> scpElem.contentOrNull
+                    ?.split(Regex("[\\s,]+"))
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    ?: emptyList()
+                else -> emptyList()
+            }
+            return scopes.toSet().takeIf { it.isNotEmpty() }
+        }
+
+        internal fun parseTeslaErrorDetail(rawBody: String): String? {
+            val trimmed = rawBody.trim()
+            if (trimmed.isEmpty()) return null
+            return try {
+                val root = json.parseToJsonElement(trimmed) as? JsonObject ?: return trimmed.take(160)
+                val err = root["error"].asStringOrNull()
+                val desc = root["error_description"].asStringOrNull()
+                val msg = root["message"].asStringOrNull()
+                when {
+                    desc != null && err != null && !desc.equals(err, ignoreCase = true) -> "$err: $desc"
+                    desc != null -> desc
+                    err != null -> err
+                    msg != null -> msg
+                    else -> null
+                }
+            } catch (_: Exception) {
+                trimmed.take(160)
+            }
+        }
+
+        internal fun isTeslaScopeError(httpCode: Int, errorDetail: String?): Boolean {
+            if (httpCode != 403) return false
+            if (errorDetail.isNullOrBlank()) return true
+            val lower = errorDetail.lowercase(Locale.US)
+            return lower.contains("scope") ||
+                lower.contains("consent") ||
+                lower.contains("permission") ||
+                lower.contains("energy_device_data") ||
+                lower.contains("unauthorized") ||
+                lower.contains("insufficient")
         }
 
         fun isCooldownActive(
@@ -431,6 +507,8 @@ class OdometerSyncService(
                 }
                 is WallConnectorSyncResult.NotConfigured ->
                     "Tesla Fleet API not linked — connect in Settings"
+                is WallConnectorSyncResult.NoDevices ->
+                    result.message
                 is WallConnectorSyncResult.MissingScope ->
                     result.message
                 is WallConnectorSyncResult.Error ->
@@ -498,60 +576,85 @@ class OdometerSyncService(
 
         fun parseTeslaEnergySites(productsJson: String): List<TeslaWallConnectorDevice> {
             return try {
-                val root = json.parseToJsonElement(productsJson).jsonObject
-                val responseArr = root["response"]?.jsonArray ?: return emptyList()
+                val root = json.parseToJsonElement(productsJson) as? JsonObject ?: return emptyList()
+                val responseArr = root["response"] as? JsonArray ?: return emptyList()
                 val devices = mutableListOf<TeslaWallConnectorDevice>()
 
                 for (element in responseArr) {
                     val obj = element as? JsonObject ?: continue
                     // Skip pure vehicle objects from /api/1/products
-                    val hasVin = !obj["vin"]?.jsonPrimitive?.content.isNullOrBlank()
-                    val energySiteId = obj["energy_site_id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                    val resourceType = obj["resource_type"]?.jsonPrimitive?.content?.lowercase(Locale.US).orEmpty()
+                    val hasVin = obj["vin"].asStringOrNull() != null
+                    val energySiteId = obj["energy_site_id"].asStringOrNull()
+                    val resourceType = obj["resource_type"].asStringOrNull()?.lowercase(Locale.US).orEmpty()
                     val componentsObj = obj["components"] as? JsonObject
                     val wallConnectorsArr = (componentsObj?.get("wall_connectors") as? JsonArray)
                         ?: (obj["wall_connectors"] as? JsonArray)
 
-                    if (hasVin && energySiteId == null && resourceType.isEmpty() && wallConnectorsArr == null) {
+                    if (energySiteId == null && wallConnectorsArr == null &&
+                        (resourceType == "vehicle" || (hasVin && resourceType.isEmpty()))
+                    ) {
                         continue
                     }
 
                     val siteId = energySiteId
-                        ?: obj["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                        ?: obj["id"].asStringOrNull()
                         ?: continue
-                    val siteName = obj["site_name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    val siteName = obj["site_name"].asStringOrNull()
 
                     if (wallConnectorsArr != null && wallConnectorsArr.isNotEmpty()) {
                         for (wcElem in wallConnectorsArr) {
-                            val wcObj = wcElem as? JsonObject ?: continue
-                            val din = wcObj["din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                                ?: wcObj["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                            val partNumber = wcObj["part_number"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                                ?: extractPartNumberFromDin(din)
-                            val wcName = wcObj["site_name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                                ?: wcObj["name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                                ?: siteName
-                            val type = classifyWallConnectorType(
-                                din = din,
-                                partNumber = partNumber,
-                                siteName = wcName,
-                                index = devices.size
-                            )
-                            devices.add(
-                                TeslaWallConnectorDevice(
-                                    energySiteId = siteId,
-                                    din = din,
-                                    partNumber = partNumber,
-                                    siteName = wcName,
-                                    connectorType = type
-                                )
-                            )
+                            when (wcElem) {
+                                is JsonObject -> {
+                                    val din = wcElem["din"].asStringOrNull()
+                                        ?: wcElem["id"].asStringOrNull()
+                                    val partNumber = wcElem["part_number"].asStringOrNull()
+                                        ?: extractPartNumberFromDin(din)
+                                    val wcName = wcElem["site_name"].asStringOrNull()
+                                        ?: wcElem["name"].asStringOrNull()
+                                        ?: siteName
+                                    val type = classifyWallConnectorType(
+                                        din = din,
+                                        partNumber = partNumber,
+                                        siteName = wcName,
+                                        index = devices.size
+                                    )
+                                    devices.add(
+                                        TeslaWallConnectorDevice(
+                                            energySiteId = siteId,
+                                            din = din,
+                                            partNumber = partNumber,
+                                            siteName = wcName,
+                                            connectorType = type
+                                        )
+                                    )
+                                }
+                                is JsonPrimitive -> {
+                                    val din = wcElem.asStringOrNull() ?: continue
+                                    val partNumber = extractPartNumberFromDin(din)
+                                    val type = classifyWallConnectorType(
+                                        din = din,
+                                        partNumber = partNumber,
+                                        siteName = siteName,
+                                        index = devices.size
+                                    )
+                                    devices.add(
+                                        TeslaWallConnectorDevice(
+                                            energySiteId = siteId,
+                                            din = din,
+                                            partNumber = partNumber,
+                                            siteName = siteName,
+                                            connectorType = type
+                                        )
+                                    )
+                                }
+                                else -> continue
+                            }
                         }
                     } else {
-                        val rawId = obj["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                        val din = obj["din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                            ?: rawId?.takeIf { it != siteId || it.contains("--") || it.contains("-") }
-                        val partNumber = obj["part_number"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                        val rawId = obj["id"].asStringOrNull()
+                        val din = obj["din"].asStringOrNull()
+                            ?: rawId?.takeIf { it != siteId && it.contains("--") }
+                        val partNumber = obj["part_number"].asStringOrNull()
                             ?: extractPartNumberFromDin(din)
                         val type = classifyWallConnectorType(
                             din = din,
@@ -583,9 +686,9 @@ class OdometerSyncService(
             startingIndex: Int = 0
         ): List<TeslaWallConnectorDevice> {
             return try {
-                val root = json.parseToJsonElement(siteInfoJson).jsonObject
+                val root = json.parseToJsonElement(siteInfoJson) as? JsonObject ?: return emptyList()
                 val response = (root["response"] as? JsonObject) ?: root
-                val siteName = response["site_name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                val siteName = response["site_name"].asStringOrNull()
                     ?: fallbackSiteName
                 val components = response["components"] as? JsonObject
                 val wallConnectors = (components?.get("wall_connectors") as? JsonArray)
@@ -594,34 +697,57 @@ class OdometerSyncService(
                 val devices = mutableListOf<TeslaWallConnectorDevice>()
                 if (wallConnectors != null && wallConnectors.isNotEmpty()) {
                     for (wcElem in wallConnectors) {
-                        val wcObj = wcElem as? JsonObject ?: continue
-                        val din = wcObj["din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                            ?: wcObj["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                        val partNumber = wcObj["part_number"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                            ?: extractPartNumberFromDin(din)
-                        val wcName = wcObj["site_name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                            ?: wcObj["name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                            ?: siteName
-                        val type = classifyWallConnectorType(
-                            din = din,
-                            partNumber = partNumber,
-                            siteName = wcName,
-                            index = startingIndex + devices.size
-                        )
-                        devices.add(
-                            TeslaWallConnectorDevice(
-                                energySiteId = energySiteId,
-                                din = din,
-                                partNumber = partNumber,
-                                siteName = wcName,
-                                connectorType = type
-                            )
-                        )
+                        when (wcElem) {
+                            is JsonObject -> {
+                                val din = wcElem["din"].asStringOrNull()
+                                    ?: wcElem["id"].asStringOrNull()
+                                val partNumber = wcElem["part_number"].asStringOrNull()
+                                    ?: extractPartNumberFromDin(din)
+                                val wcName = wcElem["site_name"].asStringOrNull()
+                                    ?: wcElem["name"].asStringOrNull()
+                                    ?: siteName
+                                val type = classifyWallConnectorType(
+                                    din = din,
+                                    partNumber = partNumber,
+                                    siteName = wcName,
+                                    index = startingIndex + devices.size
+                                )
+                                devices.add(
+                                    TeslaWallConnectorDevice(
+                                        energySiteId = energySiteId,
+                                        din = din,
+                                        partNumber = partNumber,
+                                        siteName = wcName,
+                                        connectorType = type
+                                    )
+                                )
+                            }
+                            is JsonPrimitive -> {
+                                val din = wcElem.asStringOrNull() ?: continue
+                                val partNumber = extractPartNumberFromDin(din)
+                                val type = classifyWallConnectorType(
+                                    din = din,
+                                    partNumber = partNumber,
+                                    siteName = siteName,
+                                    index = startingIndex + devices.size
+                                )
+                                devices.add(
+                                    TeslaWallConnectorDevice(
+                                        energySiteId = energySiteId,
+                                        din = din,
+                                        partNumber = partNumber,
+                                        siteName = siteName,
+                                        connectorType = type
+                                    )
+                                )
+                            }
+                            else -> continue
+                        }
                     }
                 } else {
-                    val din = response["din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                        ?: response["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() && it != energySiteId }
-                    val partNumber = response["part_number"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    val din = response["din"].asStringOrNull()
+                        ?: response["id"].asStringOrNull()?.takeIf { it != energySiteId }
+                    val partNumber = response["part_number"].asStringOrNull()
                         ?: extractPartNumberFromDin(din)
                     if (din != null || partNumber != null || siteName != null) {
                         devices.add(
@@ -695,12 +821,12 @@ class OdometerSyncService(
         }
 
         private fun parseFlexibleTimestampMs(raw: JsonElement?): Long? {
-            val prim = raw?.jsonPrimitive ?: return null
+            val prim = raw as? JsonPrimitive ?: return null
             prim.longOrNull?.let { num ->
                 // Distinguish epoch seconds vs epoch milliseconds
                 return if (num < 100_000_000_000L) num * 1000L else num
             }
-            val text = prim.content.trim()
+            val text = prim.contentOrNull?.trim().orEmpty()
             if (text.isEmpty()) return null
             text.toLongOrNull()?.let { num ->
                 return if (num < 100_000_000_000L) num * 1000L else num
@@ -744,12 +870,16 @@ class OdometerSyncService(
                 for (elem in seriesArray) {
                     val obj = elem as? JsonObject ?: continue
 
-                    val energyWh = obj["charge_energy_imported"]?.jsonPrimitive?.doubleOrNull
-                        ?: obj["energy_wh"]?.jsonPrimitive?.doubleOrNull
-                        ?: obj["energy_added_wh"]?.jsonPrimitive?.doubleOrNull
-                        ?: obj["grid_energy_imported"]?.jsonPrimitive?.doubleOrNull
-                        ?: (obj["charge_energy_imported_kwh"]?.jsonPrimitive?.doubleOrNull?.times(1000.0))
-                        ?: (obj["energy_kwh"]?.jsonPrimitive?.doubleOrNull?.times(1000.0))
+                    val energyWh = obj["charge_energy_imported"].asDoubleOrNull()
+                        ?: obj["energy_wh"].asDoubleOrNull()
+                        ?: obj["energy_added_wh"].asDoubleOrNull()
+                        ?: obj["charge_energy_added_wh"].asDoubleOrNull()
+                        ?: obj["grid_energy_imported"].asDoubleOrNull()
+                        ?: obj["total_energy"].asDoubleOrNull()
+                        ?: obj["value"].asDoubleOrNull()
+                        ?: (obj["charge_energy_imported_kwh"].asDoubleOrNull()?.times(1000.0))
+                        ?: (obj["energy_kwh"].asDoubleOrNull()?.times(1000.0))
+                        ?: (obj["energy_added_kwh"].asDoubleOrNull()?.times(1000.0))
                         ?: continue
 
                     // Filter out zero/standby noise (< 50 Wh = 0.05 kWh)
@@ -761,6 +891,7 @@ class OdometerSyncService(
                             ?: obj["start_time"]
                             ?: obj["timestamp"]
                             ?: obj["datetime"]
+                            ?: obj["time"]
                     ) ?: continue
 
                     val explicitEndMs = parseFlexibleTimestampMs(
@@ -769,9 +900,9 @@ class OdometerSyncService(
                             ?: obj["stop_time"]
                             ?: obj["end_time"]
                     )
-                    val durationSec = obj["charge_duration"]?.jsonPrimitive?.longOrNull
-                        ?: obj["duration_seconds"]?.jsonPrimitive?.longOrNull
-                        ?: obj["duration"]?.jsonPrimitive?.longOrNull
+                    val durationSec = obj["charge_duration"].asLongOrNull()
+                        ?: obj["duration_seconds"].asLongOrNull()
+                        ?: obj["duration"].asLongOrNull()
 
                     val endMs = when {
                         explicitEndMs != null && explicitEndMs >= startMs -> explicitEndMs
@@ -779,11 +910,13 @@ class OdometerSyncService(
                         else -> startMs
                     }
 
-                    val din = obj["din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                        ?: obj["wall_connector_din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                        ?: obj["device_id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                    val vin = obj["vin"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                        ?: obj["vehicle_vin"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    val din = obj["din"].asStringOrNull()
+                        ?: obj["wall_connector_din"].asStringOrNull()
+                        ?: obj["wall_connector_id"].asStringOrNull()
+                        ?: obj["device_id"].asStringOrNull()
+                        ?: obj["serial_number"].asStringOrNull()
+                    val vin = obj["vin"].asStringOrNull()
+                        ?: obj["vehicle_vin"].asStringOrNull()
 
                     sessions.add(
                         TeslaWallConnectorChargeSession(
@@ -891,19 +1024,19 @@ class OdometerSyncService(
 
         fun parseTeslaVehicleListState(jsonBody: String, targetVin: String?): Pair<String, String>? {
             return try {
-                val root = json.parseToJsonElement(jsonBody).jsonObject
-                val responseArr = root["response"]?.jsonArray ?: return null
+                val root = json.parseToJsonElement(jsonBody) as? JsonObject ?: return null
+                val responseArr = root["response"] as? JsonArray ?: return null
                 for (element in responseArr) {
-                    val obj = element.jsonObject
-                    val vin = obj["vin"]?.jsonPrimitive?.content?.uppercase() ?: continue
-                    val state = obj["state"]?.jsonPrimitive?.content?.lowercase() ?: "unknown"
-                    if (targetVin.isNullOrBlank() || vin == targetVin.trim().uppercase()) {
+                    val obj = element as? JsonObject ?: continue
+                    val vin = obj["vin"].asStringOrNull()?.uppercase(Locale.US) ?: continue
+                    val state = obj["state"].asStringOrNull()?.lowercase(Locale.US) ?: "unknown"
+                    if (targetVin.isNullOrBlank() || vin == targetVin.trim().uppercase(Locale.US)) {
                         return Pair(vin, state)
                     }
                 }
-                val first = responseArr.firstOrNull()?.jsonObject ?: return null
-                val vin = first["vin"]?.jsonPrimitive?.content ?: return null
-                val state = first["state"]?.jsonPrimitive?.content?.lowercase() ?: "unknown"
+                val first = responseArr.firstOrNull() as? JsonObject ?: return null
+                val vin = first["vin"].asStringOrNull() ?: return null
+                val state = first["state"].asStringOrNull()?.lowercase(Locale.US) ?: "unknown"
                 Pair(vin, state)
             } catch (_: Exception) {
                 null
@@ -912,10 +1045,10 @@ class OdometerSyncService(
 
         fun parseTeslaOdometerMiles(jsonBody: String): Int? {
             return try {
-                val root = json.parseToJsonElement(jsonBody).jsonObject
-                val response = root["response"]?.jsonObject ?: root
-                val vehicleState = response["vehicle_state"]?.jsonObject ?: response
-                val odo = vehicleState["odometer"]?.jsonPrimitive?.doubleOrNull
+                val root = json.parseToJsonElement(jsonBody) as? JsonObject ?: return null
+                val response = (root["response"] as? JsonObject) ?: root
+                val vehicleState = (response["vehicle_state"] as? JsonObject) ?: response
+                val odo = vehicleState["odometer"].asDoubleOrNull()
                 odo?.roundToInt()?.takeIf { it >= 0 }
             } catch (_: Exception) {
                 null
@@ -924,9 +1057,9 @@ class OdometerSyncService(
 
         fun parseTeslaWakeState(jsonBody: String): String? {
             return try {
-                val root = json.parseToJsonElement(jsonBody).jsonObject
-                val response = root["response"]?.jsonObject ?: root
-                response["state"]?.jsonPrimitive?.content?.lowercase()
+                val root = json.parseToJsonElement(jsonBody) as? JsonObject ?: return null
+                val response = (root["response"] as? JsonObject) ?: root
+                response["state"].asStringOrNull()?.lowercase(Locale.US)
             } catch (_: Exception) {
                 null
             }
@@ -995,9 +1128,24 @@ class OdometerSyncService(
                 "&redirect_uri=$encodedRedirect" +
                 "&mode=live"
         }
+
+        fun buildTeslaAuthUrl(clientId: String): String {
+            val encodedClient = URLEncoder.encode(clientId.trim(), "UTF-8")
+            val encodedRedirect = URLEncoder.encode(TESLA_REDIRECT_URI, "UTF-8")
+            return "https://auth.tesla.com/oauth2/v3/authorize" +
+                "?response_type=code" +
+                "&client_id=$encodedClient" +
+                "&redirect_uri=$encodedRedirect" +
+                "&scope=openid%20offline_access%20vehicle_device_data%20$TESLA_SCOPE_ENERGY_DEVICE_DATA" +
+                "&prompt_missing_scopes=true" +
+                "&require_requested_scopes=true" +
+                "&state=carlogger_tesla"
+        }
     }
 
     fun buildSmartcarAuthUrl(clientOrAppId: String): String = Companion.buildSmartcarAuthUrl(clientOrAppId)
+
+    fun buildTeslaAuthUrl(clientId: String): String = Companion.buildTeslaAuthUrl(clientId)
 
     suspend fun resolveSmartcarAuthUrl(clientOrAppId: String): String = withContext(Dispatchers.IO) {
         val trimmed = clientOrAppId.trim()
@@ -1070,17 +1218,6 @@ class OdometerSyncService(
         } catch (_: Exception) {
             false
         }
-    }
-
-    fun buildTeslaAuthUrl(clientId: String): String {
-        val encodedClient = URLEncoder.encode(clientId.trim(), "UTF-8")
-        val encodedRedirect = URLEncoder.encode(TESLA_REDIRECT_URI, "UTF-8")
-        return "https://auth.tesla.com/oauth2/v3/authorize" +
-            "?response_type=code" +
-            "&client_id=$encodedClient" +
-            "&redirect_uri=$encodedRedirect" +
-            "&scope=openid%20offline_access%20vehicle_device_data%20energy_device_data" +
-            "&state=carlogger_tesla"
     }
 
     suspend fun handleOAuthCallback(uri: Uri): Boolean = withContext(Dispatchers.IO) {
@@ -1170,7 +1307,10 @@ class OdometerSyncService(
 
     private suspend fun exchangeTeslaCode(code: String): Boolean {
         val (clientId, clientSecret) = getEffectiveTeslaCredentials()
-        if (clientId.isNullOrBlank()) return false
+        if (clientId.isNullOrBlank()) {
+            _lastSyncMessage.value = "Tesla Client ID not configured"
+            return false
+        }
 
         val formBuilder = FormBody.Builder()
             .add("grant_type", "authorization_code")
@@ -1189,17 +1329,33 @@ class OdometerSyncService(
 
         return try {
             client.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) return false
-                val obj = json.parseToJsonElement(resp.body?.string().orEmpty()).jsonObject
-                val access = obj["access_token"]?.jsonPrimitive?.content ?: return false
-                val refresh = obj["refresh_token"]?.jsonPrimitive?.content
-                val expires = obj["expires_in"]?.jsonPrimitive?.longOrNull ?: 28800L
+                val rawBody = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) {
+                    val detail = parseTeslaErrorDetail(rawBody)
+                    val msg = detail?.let { "Tesla connect failed (${resp.code}: $it)" }
+                        ?: "Tesla connect failed (${resp.code})"
+                    _lastSyncMessage.value = msg
+                    return false
+                }
+                val obj = json.parseToJsonElement(rawBody) as? JsonObject
+                if (obj == null) {
+                    _lastSyncMessage.value = "Tesla connect failed: invalid token response"
+                    return false
+                }
+                val access = obj["access_token"].asStringOrNull()
+                if (access == null) {
+                    _lastSyncMessage.value = "Tesla connect failed: missing access_token"
+                    return false
+                }
+                val refresh = obj["refresh_token"].asStringOrNull()
+                val expires = obj["expires_in"].asLongOrNull() ?: 28800L
                 preferencesManager.saveTeslaTokens(access, refresh, expires)
                 _lastSyncMessage.value = "Tesla connected"
                 true
             }
         } catch (e: Exception) {
             Log.e(TAG, "Tesla code exchange failed", e)
+            _lastSyncMessage.value = "Tesla connect failed: ${e.message ?: e.javaClass.simpleName}"
             false
         }
     }
@@ -1280,14 +1436,19 @@ class OdometerSyncService(
         }
     }
 
-    private suspend fun getValidTeslaAccessToken(): String? {
+    private suspend fun getValidTeslaAccessToken(forceRefresh: Boolean = false): String? {
         val (access, refresh, expiry) = preferencesManager.getTeslaTokens()
         if (access.isNullOrBlank()) return null
-        if (expiry == 0L || System.currentTimeMillis() < expiry - 60_000L) {
+        val now = System.currentTimeMillis()
+        val effectiveExpiryMs = if (expiry > 0L) expiry else (extractJwtExpiryMs(access) ?: 0L)
+        if (!forceRefresh && (effectiveExpiryMs == 0L || now < effectiveExpiryMs - 60_000L)) {
             return access
         }
+        val fallbackIfUnexpired = access.takeIf { !forceRefresh && (effectiveExpiryMs == 0L || now < effectiveExpiryMs) }
         val (clientId, clientSecret) = getEffectiveTeslaCredentials()
-        if (clientId.isNullOrBlank() || refresh.isNullOrBlank()) return access
+        if (clientId.isNullOrBlank() || refresh.isNullOrBlank()) {
+            return fallbackIfUnexpired
+        }
 
         val formBuilder = FormBody.Builder()
             .add("grant_type", "refresh_token")
@@ -1304,37 +1465,64 @@ class OdometerSyncService(
 
         return try {
             client.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) return access
-                val obj = json.parseToJsonElement(resp.body?.string().orEmpty()).jsonObject
-                val newAccess = obj["access_token"]?.jsonPrimitive?.content ?: return access
-                val newRefresh = obj["refresh_token"]?.jsonPrimitive?.content ?: refresh
-                val expires = obj["expires_in"]?.jsonPrimitive?.longOrNull ?: 28800L
+                if (!resp.isSuccessful) return fallbackIfUnexpired
+                val obj = json.parseToJsonElement(resp.body?.string().orEmpty()) as? JsonObject
+                    ?: return fallbackIfUnexpired
+                val newAccess = obj["access_token"].asStringOrNull() ?: return fallbackIfUnexpired
+                val newRefresh = obj["refresh_token"].asStringOrNull() ?: refresh
+                val expires = obj["expires_in"].asLongOrNull() ?: 28800L
                 preferencesManager.saveTeslaTokens(newAccess, newRefresh, expires)
                 newAccess
             }
         } catch (_: Exception) {
-            access
+            fallbackIfUnexpired
         }
     }
 
+    private suspend fun executeTeslaGetWithRefresh(url: String, initialToken: String): Triple<Int, String, String> {
+        var activeToken = initialToken
+        fun doGet(bearer: String): Pair<Int, String> {
+            val req = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $bearer")
+                .build()
+            return client.newCall(req).execute().use { resp ->
+                Pair(resp.code, resp.body?.string().orEmpty())
+            }
+        }
+
+        var (code, body) = doGet(activeToken)
+        if (code == 401) {
+            val refreshed = getValidTeslaAccessToken(forceRefresh = true)
+            if (!refreshed.isNullOrBlank() && refreshed != activeToken) {
+                activeToken = refreshed
+                val retry = doGet(activeToken)
+                code = retry.first
+                body = retry.second
+            }
+        }
+        return Triple(code, body, activeToken)
+    }
+
     private suspend fun syncTeslaVehicle(car: Car, forceWake: Boolean): OdometerSyncResult {
-        val token = getValidTeslaAccessToken()
-            ?: return OdometerSyncResult.NotConfigured(car.id)
+        val (storedAccess, _, _) = preferencesManager.getTeslaTokens()
+        if (storedAccess.isNullOrBlank()) {
+            return OdometerSyncResult.NotConfigured(car.id)
+        }
+        var token = getValidTeslaAccessToken()
+            ?: return OdometerSyncResult.Error(car.id, "Tesla token expired — reconnect or paste a new token in Settings")
 
         // Step 1: Zero-Wake Cloud State Check
-        val listReq = Request.Builder()
-            .url("$TESLA_API_BASE/api/1/vehicles")
-            .addHeader("Authorization", "Bearer $token")
-            .build()
-
         val (vin, state) = try {
-            client.newCall(listReq).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    return OdometerSyncResult.Error(car.id, "Tesla API (${resp.code})")
-                }
-                parseTeslaVehicleListState(resp.body?.string().orEmpty(), car.vin)
-                    ?: return OdometerSyncResult.Error(car.id, "No Tesla found")
+            val (listCode, listBody, updatedToken) = executeTeslaGetWithRefresh("$TESLA_API_BASE/api/1/vehicles", token)
+            token = updatedToken
+            if (listCode !in 200..299) {
+                val detail = parseTeslaErrorDetail(listBody)
+                val msg = detail?.let { "Tesla API ($listCode: $it)" } ?: "Tesla API ($listCode)"
+                return OdometerSyncResult.Error(car.id, msg)
             }
+            parseTeslaVehicleListState(listBody, car.vin)
+                ?: return OdometerSyncResult.Error(car.id, "No Tesla found")
         } catch (e: Exception) {
             return OdometerSyncResult.Error(car.id, "Network error")
         }
@@ -1363,39 +1551,39 @@ class OdometerSyncService(
         // Step 3: Fetch vehicle_state.odometer (retry 408 timeouts when forceWake is true)
         val maxDataAttempts = if (forceWake) 3 else 1
         for (attempt in 1..maxDataAttempts) {
-            val dataReq = Request.Builder()
-                .url("$TESLA_API_BASE/api/1/vehicles/$vin/vehicle_data?endpoints=vehicle_state")
-                .addHeader("Authorization", "Bearer $token")
-                .build()
-
             try {
-                val result = client.newCall(dataReq).execute().use { resp ->
-                    if (!resp.isSuccessful) {
-                        if (resp.code == 408) {
-                            if (attempt < maxDataAttempts) {
-                                null // Signal retry after delay
-                            } else {
-                                carDao.updateTelemetryStatus(car.id, PROVIDER_TESLA, "Asleep")
-                                OdometerSyncResult.SkippedAsleep(car.id)
-                            }
+                val (dataCode, dataBody, updatedToken) = executeTeslaGetWithRefresh(
+                    "$TESLA_API_BASE/api/1/vehicles/$vin/vehicle_data?endpoints=vehicle_state",
+                    token
+                )
+                token = updatedToken
+                val result = if (dataCode !in 200..299) {
+                    if (dataCode == 408) {
+                        if (attempt < maxDataAttempts) {
+                            null // Signal retry after delay
                         } else {
-                            OdometerSyncResult.Error(car.id, "Tesla data (${resp.code})")
+                            carDao.updateTelemetryStatus(car.id, PROVIDER_TESLA, "Asleep")
+                            OdometerSyncResult.SkippedAsleep(car.id)
                         }
                     } else {
-                        val newOdo = parseTeslaOdometerMiles(resp.body?.string().orEmpty())
-                            ?: return OdometerSyncResult.Error(car.id, "Invalid odometer payload")
-
-                        val finalOdo = maxOf(newOdo, car.odometer ?: 0)
-                        val now = System.currentTimeMillis()
-                        recordOdometerReading(
-                            carId = car.id,
-                            odometer = finalOdo,
-                            provider = PROVIDER_TESLA,
-                            syncTime = now
-                        )
-                        _lastSyncMessage.value = "${car.model}: $finalOdo mi"
-                        OdometerSyncResult.Updated(car.id, finalOdo, PROVIDER_TESLA)
+                        val detail = parseTeslaErrorDetail(dataBody)
+                        val msg = detail?.let { "Tesla data ($dataCode: $it)" } ?: "Tesla data ($dataCode)"
+                        OdometerSyncResult.Error(car.id, msg)
                     }
+                } else {
+                    val newOdo = parseTeslaOdometerMiles(dataBody)
+                        ?: return OdometerSyncResult.Error(car.id, "Invalid odometer payload")
+
+                    val finalOdo = maxOf(newOdo, car.odometer ?: 0)
+                    val now = System.currentTimeMillis()
+                    recordOdometerReading(
+                        carId = car.id,
+                        odometer = finalOdo,
+                        provider = PROVIDER_TESLA,
+                        syncTime = now
+                    )
+                    _lastSyncMessage.value = "${car.model}: $finalOdo mi"
+                    OdometerSyncResult.Updated(car.id, finalOdo, PROVIDER_TESLA)
                 }
                 if (result != null) {
                     return result
@@ -1658,44 +1846,65 @@ class OdometerSyncService(
         lookbackDays: Int? = null
     ): WallConnectorSyncResult = withContext(Dispatchers.IO) {
         val dao = chargingSessionDao ?: return@withContext WallConnectorSyncResult.Error("Charging database unavailable")
-        val token = getValidTeslaAccessToken() ?: return@withContext WallConnectorSyncResult.NotConfigured
+        val (storedAccess, _, _) = preferencesManager.getTeslaTokens()
+        if (storedAccess.isNullOrBlank()) {
+            return@withContext WallConnectorSyncResult.NotConfigured
+        }
+        val initialToken = getValidTeslaAccessToken()
+        if (initialToken.isNullOrBlank()) {
+            val expiredMsg = "Tesla access token expired — reconnect or paste a new token in Settings"
+            preferencesManager.recordChargerSyncResult(System.currentTimeMillis(), expiredMsg)
+            _lastSyncMessage.value = expiredMsg
+            return@withContext WallConnectorSyncResult.Error(expiredMsg)
+        }
+        var token: String = initialToken
 
         _isSyncing.value = true
         try {
-            val productsReq = Request.Builder()
-                .url("$TESLA_API_BASE/api/1/products")
-                .addHeader("Authorization", "Bearer $token")
-                .build()
-
-            val (productsCode, productsBody) = try {
-                client.newCall(productsReq).execute().use { resp ->
-                    Pair(resp.code, resp.body?.string().orEmpty())
-                }
+            val (productsCode, productsBody, refreshedAfterProducts) = try {
+                executeTeslaGetWithRefresh("$TESLA_API_BASE/api/1/products", token)
             } catch (e: Exception) {
-                val res = WallConnectorSyncResult.Error("Network error")
-                preferencesManager.recordChargerSyncResult(
-                    System.currentTimeMillis(),
-                    formatWallConnectorSyncMessage(res)
-                )
+                val res = WallConnectorSyncResult.Error("Network error: ${e.message ?: e.javaClass.simpleName}")
+                val statusMsg = formatWallConnectorSyncMessage(res)
+                preferencesManager.recordChargerSyncResult(System.currentTimeMillis(), statusMsg)
+                _lastSyncMessage.value = statusMsg
                 return@withContext res
             }
+            token = refreshedAfterProducts
 
-            if (productsCode == 401 || productsCode == 403) {
-                val missingScopeRes = WallConnectorSyncResult.MissingScope(
-                    "Reconnect Tesla in Settings to grant energy_device_data scope"
-                )
-                preferencesManager.recordChargerSyncResult(
-                    System.currentTimeMillis(),
-                    missingScopeRes.message
-                )
-                return@withContext missingScopeRes
+            if (productsCode == 401) {
+                val detail = parseTeslaErrorDetail(productsBody)
+                val msg = detail?.let { "Tesla authorization failed (401: $it) — reconnect or update token in Settings" }
+                    ?: "Tesla token expired or unauthorized (401) — reconnect or update token in Settings"
+                preferencesManager.recordChargerSyncResult(System.currentTimeMillis(), msg)
+                _lastSyncMessage.value = msg
+                return@withContext WallConnectorSyncResult.Error(msg)
+            }
+            if (productsCode == 403) {
+                val detail = parseTeslaErrorDetail(productsBody)
+                if (isTeslaScopeError(403, detail)) {
+                    val missingScopeRes = WallConnectorSyncResult.MissingScope(
+                        "Tesla token is missing energy_device_data scope — tap Reconnect in Settings"
+                    )
+                    preferencesManager.recordChargerSyncResult(System.currentTimeMillis(), missingScopeRes.message)
+                    _lastSyncMessage.value = missingScopeRes.message
+                    return@withContext missingScopeRes
+                }
+                val errMsg = detail?.let { "Tesla API error (403: $it)" } ?: "Tesla products API (403)"
+                val errRes = WallConnectorSyncResult.Error(errMsg)
+                val statusMsg = formatWallConnectorSyncMessage(errRes)
+                preferencesManager.recordChargerSyncResult(System.currentTimeMillis(), statusMsg)
+                _lastSyncMessage.value = statusMsg
+                return@withContext errRes
             }
             if (productsCode !in 200..299) {
-                val errRes = WallConnectorSyncResult.Error("Tesla products API ($productsCode)")
-                preferencesManager.recordChargerSyncResult(
-                    System.currentTimeMillis(),
-                    formatWallConnectorSyncMessage(errRes)
-                )
+                val detail = parseTeslaErrorDetail(productsBody)
+                val errMsg = detail?.let { "Tesla products API ($productsCode: $it)" }
+                    ?: "Tesla products API ($productsCode)"
+                val errRes = WallConnectorSyncResult.Error(errMsg)
+                val statusMsg = formatWallConnectorSyncMessage(errRes)
+                preferencesManager.recordChargerSyncResult(System.currentTimeMillis(), statusMsg)
+                _lastSyncMessage.value = statusMsg
                 return@withContext errRes
             }
 
@@ -1703,13 +1912,20 @@ class OdometerSyncService(
             val uniqueSiteIds = discoveredDevices.map { it.energySiteId }.distinct()
 
             if (uniqueSiteIds.isEmpty()) {
+                val jwtScopes = extractJwtScopes(token)
                 val nowMs = System.currentTimeMillis()
-                preferencesManager.recordChargerSyncResult(nowMs, "No Wall Connectors found on Tesla account")
-                return@withContext WallConnectorSyncResult.Synced(
-                    insertedCount = 0,
-                    totalKwhAdded = 0.0,
-                    totalSessionsScanned = 0
-                )
+                if (jwtScopes != null && !jwtScopes.contains(TESLA_SCOPE_ENERGY_DEVICE_DATA)) {
+                    val missingScopeRes = WallConnectorSyncResult.MissingScope(
+                        "Tesla token is missing energy_device_data scope — tap Reconnect in Settings"
+                    )
+                    preferencesManager.recordChargerSyncResult(nowMs, missingScopeRes.message)
+                    _lastSyncMessage.value = missingScopeRes.message
+                    return@withContext missingScopeRes
+                }
+                val noDevicesRes = WallConnectorSyncResult.NoDevices()
+                preferencesManager.recordChargerSyncResult(nowMs, noDevicesRes.message)
+                _lastSyncMessage.value = noDevicesRes.message
+                return@withContext noDevicesRes
             }
 
             // Enrich device metadata via /site_info when DIN or partNumber wasn't included in /products
@@ -1718,22 +1934,21 @@ class OdometerSyncService(
                 val siteDevices = discoveredDevices.filter { it.energySiteId == siteId }
                 val needsSiteInfo = siteDevices.all { it.din.isNullOrBlank() && it.partNumber.isNullOrBlank() }
                 if (needsSiteInfo) {
-                    val infoReq = Request.Builder()
-                        .url("$TESLA_API_BASE/api/1/energy_sites/$siteId/site_info")
-                        .addHeader("Authorization", "Bearer $token")
-                        .build()
                     val parsedInfo = try {
-                        client.newCall(infoReq).execute().use { resp ->
-                            if (resp.isSuccessful) {
-                                parseTeslaSiteInfoWallConnectors(
-                                    siteInfoJson = resp.body?.string().orEmpty(),
-                                    energySiteId = siteId,
-                                    fallbackSiteName = siteDevices.firstOrNull()?.siteName,
-                                    startingIndex = enrichedDevices.size
-                                )
-                            } else {
-                                emptyList()
-                            }
+                        val (infoCode, infoBody, updatedToken) = executeTeslaGetWithRefresh(
+                            "$TESLA_API_BASE/api/1/energy_sites/$siteId/site_info",
+                            token
+                        )
+                        token = updatedToken
+                        if (infoCode in 200..299) {
+                            parseTeslaSiteInfoWallConnectors(
+                                siteInfoJson = infoBody,
+                                energySiteId = siteId,
+                                fallbackSiteName = siteDevices.firstOrNull()?.siteName,
+                                startingIndex = enrichedDevices.size
+                            )
+                        } else {
+                            emptyList()
                         }
                     } catch (_: Exception) {
                         emptyList()
@@ -1748,52 +1963,95 @@ class OdometerSyncService(
                 }
             }
 
+            val existingSessions = dao.getAllSessionsList()
+            val hasImportedWallConnectorHistory = existingSessions.any {
+                it.uploadBatchId == ElectricityImportParser.AUTO_WALL_CONNECTOR_BATCH_ID
+            }
             val lastChargerSyncMs = preferencesManager.getLastChargerSyncTime()
-            val effectiveLookbackDays = lookbackDays ?: if (lastChargerSyncMs == 0L) 30 else 7
+            val effectiveLookbackDays = (lookbackDays ?: if (lastChargerSyncMs == 0L || !hasImportedWallConnectorHistory) 30 else 7)
+                .coerceIn(1, 30)
             val zoneId = ZoneId.systemDefault()
             val endZdt = ZonedDateTime.now(zoneId)
-            val startZdt = endZdt.minusDays(effectiveLookbackDays.toLong())
+            val startCandidate = endZdt.minusDays(effectiveLookbackDays.toLong())
                 .withHour(0)
                 .withMinute(0)
                 .withSecond(0)
                 .withNano(0)
+            val earliestAllowedStart = Instant.ofEpochMilli(
+                endZdt.toInstant().toEpochMilli() - 30L * 86_400_000L
+            ).atZone(zoneId)
+            val startZdt = if (startCandidate.isBefore(earliestAllowedStart)) earliestAllowedStart else startCandidate
+
             val rfc3339Formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+            val localDateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
             val encodedStart = URLEncoder.encode(startZdt.format(rfc3339Formatter), "UTF-8")
             val encodedEnd = URLEncoder.encode(endZdt.format(rfc3339Formatter), "UTF-8")
+            val encodedStartDate = URLEncoder.encode(startZdt.toLocalDate().format(localDateFormatter), "UTF-8")
+            val encodedEndDate = URLEncoder.encode(endZdt.toLocalDate().format(localDateFormatter), "UTF-8")
             val encodedTz = URLEncoder.encode(zoneId.id, "UTF-8")
 
             val allRawSessions = mutableListOf<TeslaWallConnectorChargeSession>()
+            val siteErrors = mutableListOf<String>()
             for (siteId in uniqueSiteIds) {
-                val historyUrl = "$TESLA_API_BASE/api/1/energy_sites/$siteId/telemetry_history" +
+                val primaryUrl = "$TESLA_API_BASE/api/1/energy_sites/$siteId/telemetry_history" +
                     "?kind=charge&start_date=$encodedStart&end_date=$encodedEnd&time_zone=$encodedTz"
-                val historyReq = Request.Builder()
-                    .url(historyUrl)
-                    .addHeader("Authorization", "Bearer $token")
-                    .build()
 
                 try {
-                    client.newCall(historyReq).execute().use { resp ->
-                        if (resp.code == 401 || resp.code == 403) {
-                            val missingScopeRes = WallConnectorSyncResult.MissingScope(
-                                "Reconnect Tesla in Settings to grant energy_device_data scope"
-                            )
-                            preferencesManager.recordChargerSyncResult(
-                                System.currentTimeMillis(),
-                                missingScopeRes.message
-                            )
-                            return@withContext missingScopeRes
+                    var (code, bodyStr, updatedToken) = executeTeslaGetWithRefresh(primaryUrl, token)
+                    token = updatedToken
+
+                    if (code == 400) {
+                        val fallbackUrl = "$TESLA_API_BASE/api/1/energy_sites/$siteId/telemetry_history" +
+                            "?kind=charge&start_date=$encodedStartDate&end_date=$encodedEndDate&time_zone=$encodedTz"
+                        val retry = executeTeslaGetWithRefresh(fallbackUrl, token)
+                        code = retry.first
+                        bodyStr = retry.second
+                        token = retry.third
+                    }
+
+                    when {
+                        code == 401 -> {
+                            val detail = parseTeslaErrorDetail(bodyStr)
+                            val msg = detail?.let { "Tesla authorization failed (401: $it) — reconnect or update token in Settings" }
+                                ?: "Tesla token expired or unauthorized (401) — reconnect or update token in Settings"
+                            preferencesManager.recordChargerSyncResult(System.currentTimeMillis(), msg)
+                            _lastSyncMessage.value = msg
+                            return@withContext WallConnectorSyncResult.Error(msg)
                         }
-                        if (resp.isSuccessful) {
-                            val bodyStr = resp.body?.string().orEmpty()
+                        code == 403 -> {
+                            val detail = parseTeslaErrorDetail(bodyStr)
+                            if (isTeslaScopeError(403, detail)) {
+                                val missingScopeRes = WallConnectorSyncResult.MissingScope(
+                                    "Tesla token is missing energy_device_data scope — tap Reconnect in Settings"
+                                )
+                                preferencesManager.recordChargerSyncResult(System.currentTimeMillis(), missingScopeRes.message)
+                                _lastSyncMessage.value = missingScopeRes.message
+                                return@withContext missingScopeRes
+                            }
+                            siteErrors.add(detail?.let { "Site $siteId (403: $it)" } ?: "Site $siteId (403)")
+                        }
+                        code in 200..299 -> {
                             allRawSessions.addAll(parseTeslaWallConnectorChargeHistory(bodyStr, siteId))
+                        }
+                        else -> {
+                            val detail = parseTeslaErrorDetail(bodyStr)
+                            siteErrors.add(detail?.let { "Site $siteId ($code: $it)" } ?: "Site $siteId ($code)")
                         }
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Wall Connector telemetry_history fetch failed for $siteId: ${e.message}")
+                    siteErrors.add("Site $siteId (${e.message ?: e.javaClass.simpleName})")
                 }
             }
 
-            val existingSessions = dao.getAllSessionsList()
+            if (allRawSessions.isEmpty() && siteErrors.isNotEmpty()) {
+                val errRes = WallConnectorSyncResult.Error(siteErrors.first())
+                val statusMsg = formatWallConnectorSyncMessage(errRes)
+                preferencesManager.recordChargerSyncResult(System.currentTimeMillis(), statusMsg)
+                _lastSyncMessage.value = statusMsg
+                return@withContext errRes
+            }
+
             val existingIds = existingSessions.map { it.id }.toSet()
             val existingFingerprints = existingSessions.map { it.fingerprint }.toSet()
             val (gen3OverrideCarId, universalOverrideCarId) = preferencesManager.getWallConnectorCarMapping()
