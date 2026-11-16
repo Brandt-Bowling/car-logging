@@ -5,8 +5,11 @@ import com.example.car_logger.data.local.dao.OdometerLogDao
 import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.model.Car
+import com.example.car_logger.services.ElectricityImportParser
 import com.example.car_logger.services.OdometerSyncResult
 import com.example.car_logger.services.OdometerSyncService
+import com.example.car_logger.services.WallConnectorSyncResult
+import com.example.car_logger.services.WallConnectorType
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
@@ -493,6 +496,241 @@ class OdometerSyncServiceTest {
             syncTime = nextDay
         )
         assertEquals(2, odometerLogDao.logs.size)
+    }
+
+    @Test
+    fun `parseTeslaEnergySites extracts Gen 3 and Universal Wall Connectors while ignoring vehicle entries`() {
+        val productsPayload = """
+            {
+              "response": [
+                {
+                  "id": 999111,
+                  "vehicle_id": 888222,
+                  "vin": "5YJ3E1EA1PF000001",
+                  "display_name": "Model 3",
+                  "state": "asleep"
+                },
+                {
+                  "energy_site_id": "225511001",
+                  "resource_type": "wall_connector",
+                  "site_name": "Garage Gen 3",
+                  "id": "1457768-02-G--TWC11111",
+                  "components": {
+                    "wall_connectors": [
+                      {
+                        "din": "1457768-02-G--TWC11111",
+                        "part_number": "1457768-02-G"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "energy_site_id": "225511002",
+                  "resource_type": "wall_connector",
+                  "site_name": "Driveway Universal",
+                  "id": "1734412-02-D--TWC22222",
+                  "components": {
+                    "wall_connectors": [
+                      {
+                        "din": "1734412-02-D--TWC22222",
+                        "part_number": "1734412-02-D"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "count": 3
+            }
+        """.trimIndent()
+
+        val devices = OdometerSyncService.parseTeslaEnergySites(productsPayload)
+        assertEquals(2, devices.size)
+
+        assertEquals("225511001", devices[0].energySiteId)
+        assertEquals("1457768-02-G--TWC11111", devices[0].din)
+        assertEquals(WallConnectorType.GEN_3, devices[0].connectorType)
+
+        assertEquals("225511002", devices[1].energySiteId)
+        assertEquals("1734412-02-D--TWC22222", devices[1].din)
+        assertEquals(WallConnectorType.UNIVERSAL, devices[1].connectorType)
+    }
+
+    @Test
+    fun `resolveCarForWallConnector maps Gen 3 to Model 3 and Universal to Blazer EV and honors user overrides`() {
+        val blazerEv = Car(
+            id = "car_blazer",
+            make = "Chevrolet",
+            model = "Blazer EV",
+            year = 2024,
+            vin = "3GNKDCRJ5RS100002",
+            isEv = true
+        )
+        val model3 = Car(
+            id = "car_model3",
+            make = "Tesla",
+            model = "Model 3",
+            year = 2023,
+            vin = "5YJ3E1EA1PF000001",
+            isEv = true
+        )
+        val garage = listOf(blazerEv, model3)
+
+        // Default auto-attribution: Gen 3 -> Model 3, Universal -> Blazer EV
+        assertEquals(
+            "car_model3",
+            OdometerSyncService.resolveCarForWallConnector(
+                connectorType = WallConnectorType.GEN_3,
+                cars = garage
+            )?.id
+        )
+        assertEquals(
+            "car_blazer",
+            OdometerSyncService.resolveCarForWallConnector(
+                connectorType = WallConnectorType.UNIVERSAL,
+                cars = garage
+            )?.id
+        )
+
+        // Explicit user overrides in PreferencesManager take precedence
+        assertEquals(
+            "car_blazer",
+            OdometerSyncService.resolveCarForWallConnector(
+                connectorType = WallConnectorType.GEN_3,
+                cars = garage,
+                gen3OverrideCarId = "car_blazer",
+                universalOverrideCarId = "car_model3"
+            )?.id
+        )
+        assertEquals(
+            "car_model3",
+            OdometerSyncService.resolveCarForWallConnector(
+                connectorType = WallConnectorType.UNIVERSAL,
+                cars = garage,
+                gen3OverrideCarId = "car_blazer",
+                universalOverrideCarId = "car_model3"
+            )?.id
+        )
+    }
+
+    @Test
+    fun `parseTeslaWallConnectorChargeHistory and buildWallConnectorSessionEntities convert Wh to kWh and deduplicate`() {
+        val blazerEv = Car(
+            id = "car_blazer",
+            make = "Chevrolet",
+            model = "Blazer EV",
+            year = 2024,
+            isEv = true
+        )
+        val model3 = Car(
+            id = "car_model3",
+            make = "Tesla",
+            model = "Model 3",
+            year = 2023,
+            vin = "5YJ3E1EA1PF000001",
+            isEv = true
+        )
+        val garage = listOf(blazerEv, model3)
+
+        val devices = listOf(
+            com.example.car_logger.services.TeslaWallConnectorDevice(
+                energySiteId = "site_home",
+                din = "1457768-02-G--GEN3",
+                partNumber = "1457768-02-G",
+                siteName = "Left Bay",
+                connectorType = WallConnectorType.GEN_3
+            ),
+            com.example.car_logger.services.TeslaWallConnectorDevice(
+                energySiteId = "site_home",
+                din = "1734412-02-D--UNIV",
+                partNumber = "1734412-02-D",
+                siteName = "Right Bay",
+                connectorType = WallConnectorType.UNIVERSAL
+            )
+        )
+
+        val telemetryHistoryJson = """
+            {
+              "response": {
+                "time_series": [
+                  {
+                    "charge_start_time": "2026-11-14T21:15:00-08:00",
+                    "charge_stop_time": "2026-11-15T01:05:00-08:00",
+                    "charge_energy_imported": 34500,
+                    "din": "1457768-02-G--GEN3",
+                    "vin": "5YJ3E1EA1PF000001"
+                  },
+                  {
+                    "charge_start_time": "2026-11-14T22:00:00-08:00",
+                    "charge_stop_time": "2026-11-15T03:30:00-08:00",
+                    "charge_energy_imported": 52800,
+                    "din": "1734412-02-D--UNIV"
+                  },
+                  {
+                    "charge_start_time": "2026-11-15T04:00:00-08:00",
+                    "charge_stop_time": "2026-11-15T04:01:00-08:00",
+                    "charge_energy_imported": 10,
+                    "din": "1734412-02-D--UNIV"
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val rawSessions = OdometerSyncService.parseTeslaWallConnectorChargeHistory(telemetryHistoryJson, "site_home")
+        assertEquals("Standby <50Wh noise should be filtered out", 2, rawSessions.size)
+
+        val zoneId = ZoneId.of("America/Los_Angeles")
+        val entities = OdometerSyncService.buildWallConnectorSessionEntities(
+            rawSessions = rawSessions,
+            devices = devices,
+            cars = garage,
+            uploadedAtMs = 1_763_200_000_000L,
+            zoneId = zoneId
+        )
+        assertEquals(2, entities.size)
+
+        val model3Session = entities[0]
+        assertEquals("car_model3", model3Session.carId)
+        assertEquals(34.5, model3Session.kwh, 0.001)
+        assertEquals("HOME", model3Session.venue)
+        assertEquals("Tesla Wall Connector (Gen 3) (Left Bay)", model3Session.chargerName)
+        assertEquals(ElectricityImportParser.AUTO_WALL_CONNECTOR_BATCH_ID, model3Session.uploadBatchId)
+
+        val blazerSession = entities[1]
+        assertEquals("car_blazer", blazerSession.carId)
+        assertEquals(52.8, blazerSession.kwh, 0.001)
+        assertEquals("HOME", blazerSession.venue)
+        assertEquals("Tesla Universal Wall Connector (Right Bay)", blazerSession.chargerName)
+        assertEquals(ElectricityImportParser.AUTO_WALL_CONNECTOR_BATCH_ID, blazerSession.uploadBatchId)
+
+        // Subsequent poll over overlapping 7-day window must skip already-saved sessions
+        val secondPollEntities = OdometerSyncService.buildWallConnectorSessionEntities(
+            rawSessions = rawSessions,
+            devices = devices,
+            cars = garage,
+            existingIds = entities.map { it.id }.toSet(),
+            existingFingerprints = entities.map { it.fingerprint }.toSet(),
+            uploadedAtMs = 1_763_286_400_000L,
+            zoneId = zoneId
+        )
+        assertTrue(secondPollEntities.isEmpty())
+    }
+
+    @Test
+    fun `formatDailyPollSummary includes Wall Connector kWh when sessions are added`() {
+        val car1 = Car(id = "1", make = "Chevrolet", model = "Blazer EV", year = 2024, odometer = 15000)
+        val car2 = Car(id = "2", make = "Tesla", model = "Model 3", year = 2023, odometer = 28000)
+        val odoResults = listOf(
+            OdometerSyncResult.Updated(car1.id, 15025, OdometerSyncService.PROVIDER_SMARTCAR),
+            OdometerSyncResult.Updated(car2.id, 28040, OdometerSyncService.PROVIDER_TESLA)
+        )
+        val chargerResult = WallConnectorSyncResult.Synced(
+            insertedCount = 2,
+            totalKwhAdded = 87.3,
+            totalSessionsScanned = 5
+        )
+        val summary = OdometerSyncService.formatDailyPollSummary(listOf(car1, car2), odoResults, chargerResult)
+        assertEquals("Synced 2 vehicles • +87.3 kWh", summary)
     }
 
     private class FakeCarDao : CarDao {

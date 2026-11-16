@@ -334,7 +334,8 @@ fun HomeScreen(
                                 },
                                 onDeleteUtilityBill = { viewModel.deleteUtilityBill(it) },
                                 onDeleteChargingSession = { viewModel.deleteChargingSession(it) },
-                                onUpdateDefaultElectricityRate = { viewModel.updateDefaultElectricityRate(it) }
+                                onUpdateDefaultElectricityRate = { viewModel.updateDefaultElectricityRate(it) },
+                                onSyncWallConnectors = { viewModel.syncWallConnectorCharging() }
                             )
                         }
                         GarageNavigationTab.SETTINGS -> {

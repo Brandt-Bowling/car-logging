@@ -81,6 +81,7 @@ fun EvElectricityCostCard(
     lastUploadCount: Int = 0,
     onUndoLastChargerUpload: () -> Unit = {},
     onUndoAndRetagLastChargerUpload: () -> Unit = {},
+    onSyncWallConnectors: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -214,7 +215,8 @@ fun EvElectricityCostCard(
                 onOpenManageSheet = onOpenManageSheet,
                 lastUploadCount = lastUploadCount,
                 onUndoLastChargerUpload = onUndoLastChargerUpload,
-                onUndoAndRetagLastChargerUpload = onUndoAndRetagLastChargerUpload
+                onUndoAndRetagLastChargerUpload = onUndoAndRetagLastChargerUpload,
+                onSyncWallConnectors = onSyncWallConnectors
             )
         }
     }
@@ -697,7 +699,8 @@ private fun ExpressiveChargingSplitButton(
     onOpenManageSheet: () -> Unit,
     lastUploadCount: Int = 0,
     onUndoLastChargerUpload: () -> Unit = {},
-    onUndoAndRetagLastChargerUpload: () -> Unit = {}
+    onUndoAndRetagLastChargerUpload: () -> Unit = {},
+    onSyncWallConnectors: () -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -788,6 +791,14 @@ private fun ExpressiveChargingSplitButton(
             onDismissRequest = { menuExpanded = false },
             shape = RoundedCornerShape(20.dp)
         ) {
+            DropdownMenuItem(
+                text = { Text("Sync Tesla Wall Connectors") },
+                leadingIcon = { Icon(Icons.Rounded.EvStation, contentDescription = null) },
+                onClick = {
+                    menuExpanded = false
+                    onSyncWallConnectors()
+                }
+            )
             DropdownMenuItem(
                 text = { Text("Upload Electric Bill (PDF / Photo)") },
                 leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null) },

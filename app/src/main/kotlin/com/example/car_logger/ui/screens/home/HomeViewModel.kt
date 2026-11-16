@@ -62,7 +62,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val chargingSessionDao = database.chargingSessionDao()
     val preferencesManager = PreferencesManager(application)
     val googleDriveService = GoogleDriveService(application)
-    val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao)
+    val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao, chargingSessionDao)
     val vehicleImageRepository = VehicleImageRepository(application, carDao)
     val geminiAiService = GeminiAiService(preferencesManager)
     private var initialTelemetryChecked = false
@@ -624,6 +624,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val result = odometerSyncService.syncVehicle(car = car, isManual = true, forceWake = forceWake)
             _toastMessage.tryEmit(OdometerSyncService.formatSyncResultMessage(car, result))
+            val currentCars = cars.value.ifEmpty { carDao.getAllCarsList().map { it.toModel() } }
+            odometerSyncService.syncWallConnectorCharging(currentCars)
+        }
+    }
+
+    fun syncWallConnectorCharging() {
+        viewModelScope.launch {
+            val currentCars = cars.value.ifEmpty { carDao.getAllCarsList().map { it.toModel() } }
+            val result = odometerSyncService.syncWallConnectorCharging(currentCars)
+            _toastMessage.emit(OdometerSyncService.formatWallConnectorSyncMessage(result))
         }
     }
 
@@ -646,6 +656,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 for (car in matchingCars) {
                     val result = odometerSyncService.syncVehicle(car = car, isManual = true, forceWake = true)
                     _toastMessage.tryEmit(OdometerSyncService.formatSyncResultMessage(car, result))
+                }
+                if (!isSmartcar) {
+                    val chargerResult = odometerSyncService.syncWallConnectorCharging(currentCars)
+                    if (chargerResult is com.example.car_logger.services.WallConnectorSyncResult.Synced &&
+                        chargerResult.insertedCount > 0
+                    ) {
+                        _toastMessage.tryEmit(OdometerSyncService.formatWallConnectorSyncMessage(chargerResult))
+                    }
                 }
             } else {
                 _toastMessage.tryEmit("Failed to connect $providerLabel")

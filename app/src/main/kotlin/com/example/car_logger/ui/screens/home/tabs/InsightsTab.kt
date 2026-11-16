@@ -101,6 +101,7 @@ fun InsightsTab(
     onDeleteUtilityBill: (String) -> Unit = {},
     onDeleteChargingSession: (String) -> Unit = {},
     onUpdateDefaultElectricityRate: (Float) -> Unit = {},
+    onSyncWallConnectors: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
@@ -290,7 +291,8 @@ fun InsightsTab(
                     onOpenManageSheet = { showManageElectricitySheet = true },
                     lastUploadCount = lastUploadBatch.size,
                     onUndoLastChargerUpload = onUndoLastChargingUpload,
-                    onUndoAndRetagLastChargerUpload = onUndoAndRetagChargingUpload
+                    onUndoAndRetagLastChargerUpload = onUndoAndRetagChargingUpload,
+                    onSyncWallConnectors = onSyncWallConnectors
                 )
             }
 
@@ -350,7 +352,8 @@ fun InsightsTab(
                     onOpenManageSheet = { showManageElectricitySheet = true },
                     lastUploadCount = lastUploadBatch.size,
                     onUndoLastChargerUpload = onUndoLastChargingUpload,
-                    onUndoAndRetagLastChargerUpload = onUndoAndRetagChargingUpload
+                    onUndoAndRetagLastChargerUpload = onUndoAndRetagChargingUpload,
+                    onSyncWallConnectors = onSyncWallConnectors
                 )
             }
 

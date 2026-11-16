@@ -45,8 +45,9 @@ class VehicleDetailsViewModel(
     private val tireDao = database.tireDao()
     private val gloveboxDao = database.gloveboxDao()
     private val odometerLogDao = database.odometerLogDao()
+    private val chargingSessionDao = database.chargingSessionDao()
     private val preferencesManager = PreferencesManager(application)
-    val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao)
+    val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao, chargingSessionDao)
     val vehicleImageRepository = VehicleImageRepository(application, carDao)
     val geminiAiService = GeminiAiService(preferencesManager)
     val isSyncingOdometer: StateFlow<Boolean> = odometerSyncService.isSyncing
