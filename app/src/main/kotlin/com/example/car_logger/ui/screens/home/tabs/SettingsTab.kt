@@ -78,6 +78,7 @@ import com.example.car_logger.data.model.Car
 import com.example.car_logger.services.DailyPollScheduler
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncService
+import com.example.car_logger.services.WallConnectorType
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import kotlinx.coroutines.launch
 
@@ -103,6 +104,10 @@ fun SettingsTab(
     val dailyPollEnabled by preferencesManager.dailyPollEnabledFlow.collectAsState(initial = true)
     val lastDailyPollTime by preferencesManager.lastDailyPollTimeFlow.collectAsState(initial = 0L)
     val lastDailyPollStatus by preferencesManager.lastDailyPollStatusFlow.collectAsState(initial = null)
+    val wallConnectorGen3CarId by preferencesManager.wallConnectorGen3CarIdFlow.collectAsState(initial = null)
+    val wallConnectorUniversalCarId by preferencesManager.wallConnectorUniversalCarIdFlow.collectAsState(initial = null)
+    val lastChargerSyncTime by preferencesManager.lastChargerSyncTimeFlow.collectAsState(initial = 0L)
+    val lastChargerSyncStatus by preferencesManager.lastChargerSyncStatusFlow.collectAsState(initial = null)
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner, odometerSyncService, cars) {
@@ -135,6 +140,7 @@ fun SettingsTab(
     var showAutoDevKeyDialog by remember { mutableStateOf(false) }
     var showSmartcarDialog by remember { mutableStateOf(false) }
     var showTeslaDialog by remember { mutableStateOf(false) }
+    var showWallConnectorMappingDialog by remember { mutableStateOf(false) }
     var carPendingForceWake by remember { mutableStateOf<Car?>(null) }
 
     val signInLauncher = rememberLauncherForActivityResult(
@@ -432,7 +438,7 @@ fun SettingsTab(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Sign In with Tesla")
+                            Text(if (teslaConnected) "Reconnect Tesla" else "Sign In with Tesla")
                         }
                     }
                     if (teslaConnected) {
@@ -471,6 +477,89 @@ fun SettingsTab(
         )
     }
 
+    // Wall Connector Vehicle Mapping Dialog
+    if (showWallConnectorMappingDialog) {
+        val activeEvs = cars.filter { !it.isArchived }.ifEmpty { cars }
+        val autoGen3 = OdometerSyncService.resolveCarForWallConnector(
+            connectorType = WallConnectorType.GEN_3,
+            cars = activeEvs
+        )
+        val autoUniversal = OdometerSyncService.resolveCarForWallConnector(
+            connectorType = WallConnectorType.UNIVERSAL,
+            cars = activeEvs
+        )
+        var selectedGen3Id by remember(wallConnectorGen3CarId, autoGen3) {
+            mutableStateOf(wallConnectorGen3CarId ?: autoGen3?.id)
+        }
+        var selectedUniversalId by remember(wallConnectorUniversalCarId, autoUniversal) {
+            mutableStateOf(wallConnectorUniversalCarId ?: autoUniversal?.id)
+        }
+
+        AlertDialog(
+            onDismissRequest = { showWallConnectorMappingDialog = false },
+            title = { Text("Wall Connector Vehicle Mapping") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Assign which vehicle charges on each Tesla Wall Connector during automated daily and manual polls.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Tesla Wall Connector (Gen 3)",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            activeEvs.forEach { carOption ->
+                                FilterChip(
+                                    selected = selectedGen3Id == carOption.id,
+                                    onClick = { selectedGen3Id = carOption.id },
+                                    label = { Text(carOption.model.ifBlank { carOption.displayName }) }
+                                )
+                            }
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Tesla Universal Wall Connector",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            activeEvs.forEach { carOption ->
+                                FilterChip(
+                                    selected = selectedUniversalId == carOption.id,
+                                    onClick = { selectedUniversalId = carOption.id },
+                                    label = { Text(carOption.model.ifBlank { carOption.displayName }) }
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            preferencesManager.setWallConnectorCarMapping(selectedGen3Id, selectedUniversalId)
+                            showWallConnectorMappingDialog = false
+                            Toast.makeText(context, "Wall Connector mapping saved", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWallConnectorMappingDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     // Wake Confirmation Dialog
     if (carPendingForceWake != null && odometerSyncService != null) {
         val targetCar = carPendingForceWake!!
@@ -497,6 +586,7 @@ fun SettingsTab(
                                 OdometerSyncService.formatSyncResultMessage(carToSync, result),
                                 Toast.LENGTH_LONG
                             ).show()
+                            odometerSyncService.syncWallConnectorCharging(cars)
                         }
                     }
                 ) {
@@ -672,7 +762,7 @@ fun SettingsTab(
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                "Poll at 11:00 PM while plugged in overnight",
+                                "Poll odometer & Wall Connector charging at 11:00 PM",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -825,6 +915,7 @@ fun SettingsTab(
                                                 OdometerSyncService.formatSyncResultMessage(teslaCar, result),
                                                 Toast.LENGTH_LONG
                                             ).show()
+                                            odometerSyncService.syncWallConnectorCharging(cars)
                                         }
                                     }
                                 ) {
@@ -832,6 +923,90 @@ fun SettingsTab(
                                 }
                                 TextButton(onClick = { carPendingForceWake = teslaCar }) {
                                     Text("Wake")
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
+                    // Tesla Wall Connectors (Gen 3 & Universal) Row
+                    val mappedGen3Car = OdometerSyncService.resolveCarForWallConnector(
+                        connectorType = WallConnectorType.GEN_3,
+                        cars = cars,
+                        gen3OverrideCarId = wallConnectorGen3CarId,
+                        universalOverrideCarId = wallConnectorUniversalCarId
+                    )
+                    val mappedUniversalCar = OdometerSyncService.resolveCarForWallConnector(
+                        connectorType = WallConnectorType.UNIVERSAL,
+                        cars = cars,
+                        gen3OverrideCarId = wallConnectorGen3CarId,
+                        universalOverrideCarId = wallConnectorUniversalCarId
+                    )
+                    val gen3Label = mappedGen3Car?.model?.ifBlank { mappedGen3Car.displayName } ?: "Model 3"
+                    val universalLabel = mappedUniversalCar?.model?.ifBlank { mappedUniversalCar.displayName } ?: "Blazer EV"
+                    val chargerSyncTimeText = OdometerSyncService.formatRelativeTime(lastChargerSyncTime)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Wall Connectors (Gen 3 & Universal)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Gen 3 → $gen3Label • Universal → $universalLabel",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val chargerStatusText = when {
+                                !teslaConnected -> "Connect Tesla Fleet API to sync home charging"
+                                chargerSyncTimeText != null && !lastChargerSyncStatus.isNullOrBlank() ->
+                                    "Last sync $chargerSyncTimeText • $lastChargerSyncStatus"
+                                chargerSyncTimeText != null ->
+                                    "Last sync $chargerSyncTimeText"
+                                else -> "Polls automatically at 11:00 PM & on manual sync"
+                            }
+                            Text(
+                                text = chargerStatusText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (lastChargerSyncStatus?.contains("energy_device_data") == true) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (cars.isNotEmpty()) {
+                                TextButton(onClick = { showWallConnectorMappingDialog = true }) {
+                                    Text("Map")
+                                }
+                            }
+                            if (teslaConnected && odometerSyncService != null) {
+                                TextButton(
+                                    onClick = {
+                                        Toast.makeText(
+                                            context,
+                                            "Syncing Tesla Wall Connectors...",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        coroutineScope.launch {
+                                            val res = odometerSyncService.syncWallConnectorCharging(cars)
+                                            Toast.makeText(
+                                                context,
+                                                OdometerSyncService.formatWallConnectorSyncMessage(res),
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                                ) {
+                                    Text("Sync")
                                 }
                             }
                         }

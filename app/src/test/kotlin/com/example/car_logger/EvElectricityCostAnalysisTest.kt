@@ -589,5 +589,22 @@ class EvElectricityCostAnalysisTest {
         val afterUndoingB = withExplicitBatches.filterNot { it.uploadBatchId == "batch_b" }
         val resolvedBatchA = ElectricityImportParser.resolveLastUploadBatch(afterUndoingB)
         assertEquals(listOf("new_1"), resolvedBatchA.map { it.id })
+
+        // 3. Automated Wall Connector sessions (even with newer uploadedAtMs) are never selected by resolveLastUploadBatch
+        val autoWallConnectorSession = ChargingSessionEntity(
+            id = "twc_1457768_1763200000",
+            carId = "car_1",
+            startDateMs = startMs("2026-11-15"),
+            endDateMs = endMs("2026-11-15"),
+            kwh = 38.4,
+            venue = "HOME",
+            chargerName = "Tesla Wall Connector (Gen 3)",
+            fingerprint = "fp_twc_1",
+            uploadBatchId = ElectricityImportParser.AUTO_WALL_CONNECTOR_BATCH_ID,
+            uploadedAtMs = 9_999_999L
+        )
+        val mixedManualAndAuto = afterUndoingB + autoWallConnectorSession
+        val resolvedIgnoringAuto = ElectricityImportParser.resolveLastUploadBatch(mixedManualAndAuto)
+        assertEquals(listOf("new_1"), resolvedIgnoringAuto.map { it.id })
     }
 }

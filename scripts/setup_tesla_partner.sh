@@ -36,7 +36,7 @@ PARTNER_TOKEN=$(curl -s -X POST "https://auth.tesla.com/oauth2/v3/token" \
   --data-urlencode "grant_type=client_credentials" \
   --data-urlencode "client_id=${CLIENT_ID}" \
   --data-urlencode "client_secret=${CLIENT_SECRET}" \
-  --data-urlencode "scope=openid vehicle_device_data" \
+  --data-urlencode "scope=openid vehicle_device_data energy_device_data" \
   --data-urlencode "audience=https://fleet-api.prd.na.vn.cloud.tesla.com" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
 
 if [ -z "$PARTNER_TOKEN" ]; then

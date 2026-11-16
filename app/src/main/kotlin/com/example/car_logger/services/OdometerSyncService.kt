@@ -7,12 +7,18 @@ import com.example.car_logger.BuildConfig
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.WakeProtectionPolicy
 import com.example.car_logger.data.local.dao.CarDao
+import com.example.car_logger.data.local.dao.ChargingSessionDao
 import com.example.car_logger.data.local.dao.OdometerLogDao
+import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.model.Car
 import java.time.Instant
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -21,6 +27,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -36,6 +45,39 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
+enum class WallConnectorType(val label: String, val defaultChargerName: String) {
+    GEN_3("Gen 3 Wall Connector", "Tesla Wall Connector (Gen 3)"),
+    UNIVERSAL("Universal Wall Connector", "Tesla Universal Wall Connector")
+}
+
+data class TeslaWallConnectorDevice(
+    val energySiteId: String,
+    val din: String? = null,
+    val partNumber: String? = null,
+    val siteName: String? = null,
+    val connectorType: WallConnectorType
+)
+
+data class TeslaWallConnectorChargeSession(
+    val energySiteId: String,
+    val din: String? = null,
+    val vin: String? = null,
+    val startDateMs: Long,
+    val endDateMs: Long,
+    val energyWh: Double
+)
+
+sealed class WallConnectorSyncResult {
+    data class Synced(
+        val insertedCount: Int,
+        val totalKwhAdded: Double,
+        val totalSessionsScanned: Int
+    ) : WallConnectorSyncResult()
+    data object NotConfigured : WallConnectorSyncResult()
+    data class MissingScope(val message: String) : WallConnectorSyncResult()
+    data class Error(val message: String) : WallConnectorSyncResult()
+}
+
 sealed class OdometerSyncResult {
     data class Updated(val carId: String, val odometerMiles: Int, val provider: String) : OdometerSyncResult()
     data class SkippedAsleep(val carId: String) : OdometerSyncResult()
@@ -49,6 +91,7 @@ class OdometerSyncService(
     private val preferencesManager: PreferencesManager,
     private val carDao: CarDao,
     private val odometerLogDao: OdometerLogDao? = null,
+    private val chargingSessionDao: ChargingSessionDao? = null,
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -337,25 +380,513 @@ class OdometerSyncService(
             }
         }
 
-        fun formatDailyPollSummary(cars: List<Car>, results: List<OdometerSyncResult>): String {
+        fun formatDailyPollSummary(
+            cars: List<Car>,
+            results: List<OdometerSyncResult>,
+            chargerResult: WallConnectorSyncResult? = null
+        ): String {
             if (cars.isEmpty() && results.isEmpty()) {
                 return "No vehicles configured"
             }
             val updatedCount = results.count { it is OdometerSyncResult.Updated }
-            if (updatedCount == results.size && updatedCount > 0) {
-                return if (updatedCount == 1) "Synced 1 vehicle" else "Synced $updatedCount vehicles"
+            val baseSummary = if (updatedCount == results.size && updatedCount > 0) {
+                if (updatedCount == 1) "Synced 1 vehicle" else "Synced $updatedCount vehicles"
+            } else {
+                val carMap = cars.associateBy { it.id }
+                val details = results.mapNotNull { res ->
+                    when (res) {
+                        is OdometerSyncResult.Updated -> carMap[res.carId]?.model?.let { "$it: synced" }
+                        is OdometerSyncResult.SkippedAsleep -> carMap[res.carId]?.model?.let { "$it: asleep" }
+                        is OdometerSyncResult.NotConfigured -> carMap[res.carId]?.model?.let { "$it: not linked" }
+                        is OdometerSyncResult.Error -> carMap[res.carId]?.model?.let { "$it: error" }
+                        else -> null
+                    }
+                }
+                if (details.isNotEmpty()) details.joinToString(", ") else "Daily sync completed"
             }
-            val carMap = cars.associateBy { it.id }
-            val details = results.mapNotNull { res ->
-                when (res) {
-                    is OdometerSyncResult.Updated -> carMap[res.carId]?.model?.let { "$it: synced" }
-                    is OdometerSyncResult.SkippedAsleep -> carMap[res.carId]?.model?.let { "$it: asleep" }
-                    is OdometerSyncResult.NotConfigured -> carMap[res.carId]?.model?.let { "$it: not linked" }
-                    is OdometerSyncResult.Error -> carMap[res.carId]?.model?.let { "$it: error" }
-                    else -> null
+
+            return if (chargerResult is WallConnectorSyncResult.Synced && chargerResult.insertedCount > 0) {
+                val kwhStr = String.format(Locale.US, "%.1f", chargerResult.totalKwhAdded)
+                "$baseSummary • +$kwhStr kWh"
+            } else {
+                baseSummary
+            }
+        }
+
+        fun formatWallConnectorSyncMessage(result: WallConnectorSyncResult): String {
+            return when (result) {
+                is WallConnectorSyncResult.Synced -> {
+                    when {
+                        result.insertedCount > 0 -> {
+                            val kwhStr = String.format(Locale.US, "%.1f", result.totalKwhAdded)
+                            val label = if (result.insertedCount == 1) "session" else "sessions"
+                            "Synced ${result.insertedCount} Wall Connector $label (+$kwhStr kWh)"
+                        }
+                        result.totalSessionsScanned > 0 -> {
+                            val label = if (result.totalSessionsScanned == 1) "session" else "sessions"
+                            "Wall Connectors up to date (${result.totalSessionsScanned} $label checked)"
+                        }
+                        else -> "Wall Connectors synced (no new sessions)"
+                    }
+                }
+                is WallConnectorSyncResult.NotConfigured ->
+                    "Tesla Fleet API not linked — connect in Settings"
+                is WallConnectorSyncResult.MissingScope ->
+                    result.message
+                is WallConnectorSyncResult.Error ->
+                    "Wall Connector sync failed: ${result.message}"
+            }
+        }
+
+        private fun extractPartNumberFromDin(din: String?): String? {
+            if (din.isNullOrBlank()) return null
+            val trimmed = din.trim()
+            return if (trimmed.contains("--")) {
+                trimmed.substringBefore("--").trim().takeIf { it.isNotEmpty() }
+            } else {
+                null
+            }
+        }
+
+        fun classifyWallConnectorType(
+            din: String? = null,
+            partNumber: String? = null,
+            siteName: String? = null,
+            sessionVin: String? = null,
+            index: Int = 0
+        ): WallConnectorType {
+            val effectivePart = (partNumber?.takeIf { it.isNotBlank() } ?: extractPartNumberFromDin(din) ?: din)
+                ?.trim()
+                ?.uppercase(Locale.US)
+                .orEmpty()
+            val nameLower = siteName.orEmpty().lowercase(Locale.US)
+            val vinUpper = sessionVin.orEmpty().trim().uppercase(Locale.US)
+
+            // Tesla Universal Wall Connector part numbers begin with 1734412-
+            if (effectivePart.startsWith("1734412") ||
+                effectivePart.contains("UNIVERSAL") ||
+                nameLower.contains("universal") ||
+                nameLower.contains("j1772") ||
+                nameLower.contains("blazer") ||
+                nameLower.contains("chevy") ||
+                nameLower.contains("chevrolet") ||
+                nameLower.contains("gm") ||
+                (vinUpper.length == 17 && !vinUpper.startsWith("5YJ") && !vinUpper.startsWith("7SA") && !vinUpper.startsWith("7G2"))
+            ) {
+                return WallConnectorType.UNIVERSAL
+            }
+
+            // Tesla Gen 3 Wall Connector part numbers begin with 1457768-, 1529455-, or 1509549-
+            if (effectivePart.startsWith("1457768") ||
+                effectivePart.startsWith("1529455") ||
+                effectivePart.startsWith("1509549") ||
+                effectivePart.contains("GEN3") ||
+                nameLower.contains("gen 3") ||
+                nameLower.contains("gen3") ||
+                nameLower.contains("model 3") ||
+                nameLower.contains("tesla") ||
+                nameLower.contains("nacs") ||
+                vinUpper.startsWith("5YJ") ||
+                vinUpper.startsWith("7SA") ||
+                vinUpper.startsWith("7G2")
+            ) {
+                return WallConnectorType.GEN_3
+            }
+
+            return if (index % 2 == 1) WallConnectorType.UNIVERSAL else WallConnectorType.GEN_3
+        }
+
+        fun parseTeslaEnergySites(productsJson: String): List<TeslaWallConnectorDevice> {
+            return try {
+                val root = json.parseToJsonElement(productsJson).jsonObject
+                val responseArr = root["response"]?.jsonArray ?: return emptyList()
+                val devices = mutableListOf<TeslaWallConnectorDevice>()
+
+                for (element in responseArr) {
+                    val obj = element as? JsonObject ?: continue
+                    // Skip pure vehicle objects from /api/1/products
+                    val hasVin = !obj["vin"]?.jsonPrimitive?.content.isNullOrBlank()
+                    val energySiteId = obj["energy_site_id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    val resourceType = obj["resource_type"]?.jsonPrimitive?.content?.lowercase(Locale.US).orEmpty()
+                    val componentsObj = obj["components"] as? JsonObject
+                    val wallConnectorsArr = (componentsObj?.get("wall_connectors") as? JsonArray)
+                        ?: (obj["wall_connectors"] as? JsonArray)
+
+                    if (hasVin && energySiteId == null && resourceType.isEmpty() && wallConnectorsArr == null) {
+                        continue
+                    }
+
+                    val siteId = energySiteId
+                        ?: obj["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                        ?: continue
+                    val siteName = obj["site_name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+
+                    if (wallConnectorsArr != null && wallConnectorsArr.isNotEmpty()) {
+                        for (wcElem in wallConnectorsArr) {
+                            val wcObj = wcElem as? JsonObject ?: continue
+                            val din = wcObj["din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                                ?: wcObj["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                            val partNumber = wcObj["part_number"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                                ?: extractPartNumberFromDin(din)
+                            val wcName = wcObj["site_name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                                ?: wcObj["name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                                ?: siteName
+                            val type = classifyWallConnectorType(
+                                din = din,
+                                partNumber = partNumber,
+                                siteName = wcName,
+                                index = devices.size
+                            )
+                            devices.add(
+                                TeslaWallConnectorDevice(
+                                    energySiteId = siteId,
+                                    din = din,
+                                    partNumber = partNumber,
+                                    siteName = wcName,
+                                    connectorType = type
+                                )
+                            )
+                        }
+                    } else {
+                        val rawId = obj["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                        val din = obj["din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                            ?: rawId?.takeIf { it != siteId || it.contains("--") || it.contains("-") }
+                        val partNumber = obj["part_number"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                            ?: extractPartNumberFromDin(din)
+                        val type = classifyWallConnectorType(
+                            din = din,
+                            partNumber = partNumber,
+                            siteName = siteName,
+                            index = devices.size
+                        )
+                        devices.add(
+                            TeslaWallConnectorDevice(
+                                energySiteId = siteId,
+                                din = din,
+                                partNumber = partNumber,
+                                siteName = siteName,
+                                connectorType = type
+                            )
+                        )
+                    }
+                }
+                devices
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        fun parseTeslaSiteInfoWallConnectors(
+            siteInfoJson: String,
+            energySiteId: String,
+            fallbackSiteName: String? = null,
+            startingIndex: Int = 0
+        ): List<TeslaWallConnectorDevice> {
+            return try {
+                val root = json.parseToJsonElement(siteInfoJson).jsonObject
+                val response = (root["response"] as? JsonObject) ?: root
+                val siteName = response["site_name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    ?: fallbackSiteName
+                val components = response["components"] as? JsonObject
+                val wallConnectors = (components?.get("wall_connectors") as? JsonArray)
+                    ?: (response["wall_connectors"] as? JsonArray)
+
+                val devices = mutableListOf<TeslaWallConnectorDevice>()
+                if (wallConnectors != null && wallConnectors.isNotEmpty()) {
+                    for (wcElem in wallConnectors) {
+                        val wcObj = wcElem as? JsonObject ?: continue
+                        val din = wcObj["din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                            ?: wcObj["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                        val partNumber = wcObj["part_number"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                            ?: extractPartNumberFromDin(din)
+                        val wcName = wcObj["site_name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                            ?: wcObj["name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                            ?: siteName
+                        val type = classifyWallConnectorType(
+                            din = din,
+                            partNumber = partNumber,
+                            siteName = wcName,
+                            index = startingIndex + devices.size
+                        )
+                        devices.add(
+                            TeslaWallConnectorDevice(
+                                energySiteId = energySiteId,
+                                din = din,
+                                partNumber = partNumber,
+                                siteName = wcName,
+                                connectorType = type
+                            )
+                        )
+                    }
+                } else {
+                    val din = response["din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                        ?: response["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() && it != energySiteId }
+                    val partNumber = response["part_number"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                        ?: extractPartNumberFromDin(din)
+                    if (din != null || partNumber != null || siteName != null) {
+                        devices.add(
+                            TeslaWallConnectorDevice(
+                                energySiteId = energySiteId,
+                                din = din,
+                                partNumber = partNumber,
+                                siteName = siteName,
+                                connectorType = classifyWallConnectorType(
+                                    din = din,
+                                    partNumber = partNumber,
+                                    siteName = siteName,
+                                    index = startingIndex
+                                )
+                            )
+                        )
+                    }
+                }
+                devices
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        fun resolveCarForWallConnector(
+            connectorType: WallConnectorType,
+            sessionVin: String? = null,
+            cars: List<Car>,
+            gen3OverrideCarId: String? = null,
+            universalOverrideCarId: String? = null
+        ): Car? {
+            if (cars.isEmpty()) return null
+            val activeCars = cars.filter { !it.isArchived }.ifEmpty { cars }
+
+            // 1. Explicit user override in PreferencesManager takes highest priority
+            when (connectorType) {
+                WallConnectorType.GEN_3 -> {
+                    if (!gen3OverrideCarId.isNullOrBlank()) {
+                        activeCars.firstOrNull { it.id == gen3OverrideCarId }?.let { return it }
+                    }
+                }
+                WallConnectorType.UNIVERSAL -> {
+                    if (!universalOverrideCarId.isNullOrBlank()) {
+                        activeCars.firstOrNull { it.id == universalOverrideCarId }?.let { return it }
+                    }
                 }
             }
-            return if (details.isNotEmpty()) details.joinToString(", ") else "Daily sync completed"
+
+            // 2. Direct VIN match if the Wall Connector session reported the vehicle VIN
+            if (!sessionVin.isNullOrBlank()) {
+                val cleanVin = sessionVin.trim().uppercase(Locale.US)
+                activeCars.firstOrNull { it.vin?.trim()?.uppercase(Locale.US) == cleanVin }?.let { return it }
+            }
+
+            // 3. Auto-assign Gen 3 -> Model 3 (Tesla) and Universal -> Blazer EV (GM / Smartcar)
+            return when (connectorType) {
+                WallConnectorType.GEN_3 -> {
+                    activeCars.firstOrNull { it.model.contains("Model 3", ignoreCase = true) }
+                        ?: activeCars.firstOrNull {
+                            resolveProviderForCar(it) == PROVIDER_TESLA || it.make.contains("Tesla", ignoreCase = true)
+                        }
+                        ?: activeCars.firstOrNull { it.isEv }
+                }
+                WallConnectorType.UNIVERSAL -> {
+                    activeCars.firstOrNull { it.model.contains("Blazer", ignoreCase = true) }
+                        ?: activeCars.firstOrNull { resolveProviderForCar(it) == PROVIDER_SMARTCAR }
+                        ?: activeCars.firstOrNull { it.isEv && !it.make.contains("Tesla", ignoreCase = true) }
+                        ?: activeCars.lastOrNull { it.isEv }
+                }
+            }
+        }
+
+        private fun parseFlexibleTimestampMs(raw: JsonElement?): Long? {
+            val prim = raw?.jsonPrimitive ?: return null
+            prim.longOrNull?.let { num ->
+                // Distinguish epoch seconds vs epoch milliseconds
+                return if (num < 100_000_000_000L) num * 1000L else num
+            }
+            val text = prim.content.trim()
+            if (text.isEmpty()) return null
+            text.toLongOrNull()?.let { num ->
+                return if (num < 100_000_000_000L) num * 1000L else num
+            }
+            return runCatching { Instant.parse(text).toEpochMilli() }.getOrNull()
+                ?: runCatching { OffsetDateTime.parse(text).toInstant().toEpochMilli() }.getOrNull()
+                ?: runCatching { ZonedDateTime.parse(text).toInstant().toEpochMilli() }.getOrNull()
+                ?: ElectricityImportParser.parseDateToStartOfDayMs(text)
+        }
+
+        fun parseTeslaWallConnectorChargeHistory(
+            jsonBody: String,
+            energySiteId: String
+        ): List<TeslaWallConnectorChargeSession> {
+            return try {
+                val rootElement = json.parseToJsonElement(jsonBody)
+                val seriesArray: JsonArray = when (rootElement) {
+                    is JsonArray -> rootElement
+                    is JsonObject -> {
+                        val respElem = rootElement["response"]
+                        when (respElem) {
+                            is JsonArray -> respElem
+                            is JsonObject -> {
+                                (respElem["time_series"] as? JsonArray)
+                                    ?: (respElem["charge_history"] as? JsonArray)
+                                    ?: (respElem["sessions"] as? JsonArray)
+                                    ?: (respElem["data"] as? JsonArray)
+                                    ?: return emptyList()
+                            }
+                            else -> {
+                                (rootElement["time_series"] as? JsonArray)
+                                    ?: (rootElement["charge_history"] as? JsonArray)
+                                    ?: return emptyList()
+                            }
+                        }
+                    }
+                    else -> return emptyList()
+                }
+
+                val sessions = mutableListOf<TeslaWallConnectorChargeSession>()
+                for (elem in seriesArray) {
+                    val obj = elem as? JsonObject ?: continue
+
+                    val energyWh = obj["charge_energy_imported"]?.jsonPrimitive?.doubleOrNull
+                        ?: obj["energy_wh"]?.jsonPrimitive?.doubleOrNull
+                        ?: obj["energy_added_wh"]?.jsonPrimitive?.doubleOrNull
+                        ?: obj["grid_energy_imported"]?.jsonPrimitive?.doubleOrNull
+                        ?: (obj["charge_energy_imported_kwh"]?.jsonPrimitive?.doubleOrNull?.times(1000.0))
+                        ?: (obj["energy_kwh"]?.jsonPrimitive?.doubleOrNull?.times(1000.0))
+                        ?: continue
+
+                    // Filter out zero/standby noise (< 50 Wh = 0.05 kWh)
+                    if (energyWh < 50.0) continue
+
+                    val startMs = parseFlexibleTimestampMs(
+                        obj["charge_start_time"]
+                            ?: obj["start_date"]
+                            ?: obj["start_time"]
+                            ?: obj["timestamp"]
+                            ?: obj["datetime"]
+                    ) ?: continue
+
+                    val explicitEndMs = parseFlexibleTimestampMs(
+                        obj["charge_stop_time"]
+                            ?: obj["end_date"]
+                            ?: obj["stop_time"]
+                            ?: obj["end_time"]
+                    )
+                    val durationSec = obj["charge_duration"]?.jsonPrimitive?.longOrNull
+                        ?: obj["duration_seconds"]?.jsonPrimitive?.longOrNull
+                        ?: obj["duration"]?.jsonPrimitive?.longOrNull
+
+                    val endMs = when {
+                        explicitEndMs != null && explicitEndMs >= startMs -> explicitEndMs
+                        durationSec != null && durationSec > 0L -> startMs + (durationSec * 1000L)
+                        else -> startMs
+                    }
+
+                    val din = obj["din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                        ?: obj["wall_connector_din"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                        ?: obj["device_id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                    val vin = obj["vin"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                        ?: obj["vehicle_vin"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+
+                    sessions.add(
+                        TeslaWallConnectorChargeSession(
+                            energySiteId = energySiteId,
+                            din = din,
+                            vin = vin,
+                            startDateMs = startMs,
+                            endDateMs = endMs,
+                            energyWh = energyWh
+                        )
+                    )
+                }
+                sessions.sortedBy { it.startDateMs }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        fun buildWallConnectorSessionEntities(
+            rawSessions: List<TeslaWallConnectorChargeSession>,
+            devices: List<TeslaWallConnectorDevice>,
+            cars: List<Car>,
+            gen3OverrideCarId: String? = null,
+            universalOverrideCarId: String? = null,
+            existingIds: Set<String> = emptySet(),
+            existingFingerprints: Set<String> = emptySet(),
+            uploadedAtMs: Long = System.currentTimeMillis(),
+            zoneId: ZoneId = ZoneId.systemDefault()
+        ): List<ChargingSessionEntity> {
+            if (rawSessions.isEmpty()) return emptyList()
+            val seenIds = existingIds.toMutableSet()
+            val seenFingerprints = existingFingerprints.toMutableSet()
+            val entities = mutableListOf<ChargingSessionEntity>()
+
+            for (raw in rawSessions) {
+                val kwh = kotlin.math.round((raw.energyWh / 1000.0) * 1000.0) / 1000.0
+                if (kwh <= 0.0) continue
+
+                val matchedDevice = devices.firstOrNull { dev ->
+                    !raw.din.isNullOrBlank() && dev.din.equals(raw.din, ignoreCase = true)
+                } ?: devices.firstOrNull { dev ->
+                    dev.energySiteId == raw.energySiteId
+                }
+
+                val connectorType = if (!raw.din.isNullOrBlank() || !raw.vin.isNullOrBlank()) {
+                    classifyWallConnectorType(
+                        din = raw.din ?: matchedDevice?.din,
+                        partNumber = matchedDevice?.partNumber,
+                        siteName = matchedDevice?.siteName,
+                        sessionVin = raw.vin
+                    )
+                } else {
+                    matchedDevice?.connectorType ?: WallConnectorType.GEN_3
+                }
+
+                val targetCar = resolveCarForWallConnector(
+                    connectorType = connectorType,
+                    sessionVin = raw.vin,
+                    cars = cars,
+                    gen3OverrideCarId = gen3OverrideCarId,
+                    universalOverrideCarId = universalOverrideCarId
+                )
+
+                val chargerKey = (raw.din ?: matchedDevice?.din ?: "${raw.energySiteId}_${connectorType.name}")
+                    .replace(Regex("[^A-Za-z0-9_-]"), "_")
+                val startEpochSec = raw.startDateMs / 1000L
+                val sessionId = "twc_${chargerKey}_${startEpochSec}"
+
+                if (!seenIds.add(sessionId)) continue
+
+                val baseFingerprint = ElectricityImportParser.buildFingerprint(
+                    startDateMs = raw.startDateMs,
+                    endDateMs = raw.endDateMs,
+                    kwh = kwh,
+                    venue = "HOME",
+                    carId = targetCar?.id,
+                    zoneId = zoneId
+                )
+                if (!seenFingerprints.add(baseFingerprint)) continue
+
+                val chargerLabel = matchedDevice?.siteName
+                    ?.takeIf { it.isNotBlank() && !it.equals(connectorType.defaultChargerName, ignoreCase = true) }
+                    ?.let { "${connectorType.defaultChargerName} ($it)" }
+                    ?: connectorType.defaultChargerName
+
+                entities.add(
+                    ChargingSessionEntity(
+                        id = sessionId,
+                        carId = targetCar?.id,
+                        startDateMs = raw.startDateMs,
+                        endDateMs = raw.endDateMs,
+                        kwh = kwh,
+                        venue = "HOME",
+                        directCost = null,
+                        chargerName = chargerLabel,
+                        isSummary = false,
+                        fingerprint = baseFingerprint,
+                        uploadBatchId = ElectricityImportParser.AUTO_WALL_CONNECTOR_BATCH_ID,
+                        uploadedAtMs = uploadedAtMs
+                    )
+                )
+            }
+            return entities
         }
 
         fun parseTeslaVehicleListState(jsonBody: String, targetVin: String?): Pair<String, String>? {
@@ -548,7 +1079,7 @@ class OdometerSyncService(
             "?response_type=code" +
             "&client_id=$encodedClient" +
             "&redirect_uri=$encodedRedirect" +
-            "&scope=openid%20offline_access%20vehicle_device_data" +
+            "&scope=openid%20offline_access%20vehicle_device_data%20energy_device_data" +
             "&state=carlogger_tesla"
     }
 
@@ -704,8 +1235,13 @@ class OdometerSyncService(
             val res = syncVehicle(car = car, isManual = false, forceWake = true, bypassCooldown = true)
             results.add(res)
         }
+        val chargerResult = if (chargingSessionDao != null) {
+            syncWallConnectorCharging(cars)
+        } else {
+            null
+        }
         val nowMs = System.currentTimeMillis()
-        val summary = formatDailyPollSummary(eligibleCars, results)
+        val summary = formatDailyPollSummary(eligibleCars, results, chargerResult)
         preferencesManager.recordDailyPollResult(nowMs, summary)
         results
     }
@@ -1114,6 +1650,183 @@ class OdometerSyncService(
             val msg = "Failed to read Smartcar v3 odometer (${e.javaClass.simpleName})"
             _lastSyncMessage.value = msg
             OdometerSyncResult.Error(car.id, msg)
+        }
+    }
+
+    suspend fun syncWallConnectorCharging(
+        cars: List<Car>,
+        lookbackDays: Int? = null
+    ): WallConnectorSyncResult = withContext(Dispatchers.IO) {
+        val dao = chargingSessionDao ?: return@withContext WallConnectorSyncResult.Error("Charging database unavailable")
+        val token = getValidTeslaAccessToken() ?: return@withContext WallConnectorSyncResult.NotConfigured
+
+        _isSyncing.value = true
+        try {
+            val productsReq = Request.Builder()
+                .url("$TESLA_API_BASE/api/1/products")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+
+            val (productsCode, productsBody) = try {
+                client.newCall(productsReq).execute().use { resp ->
+                    Pair(resp.code, resp.body?.string().orEmpty())
+                }
+            } catch (e: Exception) {
+                val res = WallConnectorSyncResult.Error("Network error")
+                preferencesManager.recordChargerSyncResult(
+                    System.currentTimeMillis(),
+                    formatWallConnectorSyncMessage(res)
+                )
+                return@withContext res
+            }
+
+            if (productsCode == 401 || productsCode == 403) {
+                val missingScopeRes = WallConnectorSyncResult.MissingScope(
+                    "Reconnect Tesla in Settings to grant energy_device_data scope"
+                )
+                preferencesManager.recordChargerSyncResult(
+                    System.currentTimeMillis(),
+                    missingScopeRes.message
+                )
+                return@withContext missingScopeRes
+            }
+            if (productsCode !in 200..299) {
+                val errRes = WallConnectorSyncResult.Error("Tesla products API ($productsCode)")
+                preferencesManager.recordChargerSyncResult(
+                    System.currentTimeMillis(),
+                    formatWallConnectorSyncMessage(errRes)
+                )
+                return@withContext errRes
+            }
+
+            val discoveredDevices = parseTeslaEnergySites(productsBody).toMutableList()
+            val uniqueSiteIds = discoveredDevices.map { it.energySiteId }.distinct()
+
+            if (uniqueSiteIds.isEmpty()) {
+                val nowMs = System.currentTimeMillis()
+                preferencesManager.recordChargerSyncResult(nowMs, "No Wall Connectors found on Tesla account")
+                return@withContext WallConnectorSyncResult.Synced(
+                    insertedCount = 0,
+                    totalKwhAdded = 0.0,
+                    totalSessionsScanned = 0
+                )
+            }
+
+            // Enrich device metadata via /site_info when DIN or partNumber wasn't included in /products
+            val enrichedDevices = mutableListOf<TeslaWallConnectorDevice>()
+            for (siteId in uniqueSiteIds) {
+                val siteDevices = discoveredDevices.filter { it.energySiteId == siteId }
+                val needsSiteInfo = siteDevices.all { it.din.isNullOrBlank() && it.partNumber.isNullOrBlank() }
+                if (needsSiteInfo) {
+                    val infoReq = Request.Builder()
+                        .url("$TESLA_API_BASE/api/1/energy_sites/$siteId/site_info")
+                        .addHeader("Authorization", "Bearer $token")
+                        .build()
+                    val parsedInfo = try {
+                        client.newCall(infoReq).execute().use { resp ->
+                            if (resp.isSuccessful) {
+                                parseTeslaSiteInfoWallConnectors(
+                                    siteInfoJson = resp.body?.string().orEmpty(),
+                                    energySiteId = siteId,
+                                    fallbackSiteName = siteDevices.firstOrNull()?.siteName,
+                                    startingIndex = enrichedDevices.size
+                                )
+                            } else {
+                                emptyList()
+                            }
+                        }
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    if (parsedInfo.isNotEmpty()) {
+                        enrichedDevices.addAll(parsedInfo)
+                    } else {
+                        enrichedDevices.addAll(siteDevices)
+                    }
+                } else {
+                    enrichedDevices.addAll(siteDevices)
+                }
+            }
+
+            val lastChargerSyncMs = preferencesManager.getLastChargerSyncTime()
+            val effectiveLookbackDays = lookbackDays ?: if (lastChargerSyncMs == 0L) 30 else 7
+            val zoneId = ZoneId.systemDefault()
+            val endZdt = ZonedDateTime.now(zoneId)
+            val startZdt = endZdt.minusDays(effectiveLookbackDays.toLong())
+                .withHour(0)
+                .withMinute(0)
+                .withSecond(0)
+                .withNano(0)
+            val rfc3339Formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+            val encodedStart = URLEncoder.encode(startZdt.format(rfc3339Formatter), "UTF-8")
+            val encodedEnd = URLEncoder.encode(endZdt.format(rfc3339Formatter), "UTF-8")
+            val encodedTz = URLEncoder.encode(zoneId.id, "UTF-8")
+
+            val allRawSessions = mutableListOf<TeslaWallConnectorChargeSession>()
+            for (siteId in uniqueSiteIds) {
+                val historyUrl = "$TESLA_API_BASE/api/1/energy_sites/$siteId/telemetry_history" +
+                    "?kind=charge&start_date=$encodedStart&end_date=$encodedEnd&time_zone=$encodedTz"
+                val historyReq = Request.Builder()
+                    .url(historyUrl)
+                    .addHeader("Authorization", "Bearer $token")
+                    .build()
+
+                try {
+                    client.newCall(historyReq).execute().use { resp ->
+                        if (resp.code == 401 || resp.code == 403) {
+                            val missingScopeRes = WallConnectorSyncResult.MissingScope(
+                                "Reconnect Tesla in Settings to grant energy_device_data scope"
+                            )
+                            preferencesManager.recordChargerSyncResult(
+                                System.currentTimeMillis(),
+                                missingScopeRes.message
+                            )
+                            return@withContext missingScopeRes
+                        }
+                        if (resp.isSuccessful) {
+                            val bodyStr = resp.body?.string().orEmpty()
+                            allRawSessions.addAll(parseTeslaWallConnectorChargeHistory(bodyStr, siteId))
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Wall Connector telemetry_history fetch failed for $siteId: ${e.message}")
+                }
+            }
+
+            val existingSessions = dao.getAllSessionsList()
+            val existingIds = existingSessions.map { it.id }.toSet()
+            val existingFingerprints = existingSessions.map { it.fingerprint }.toSet()
+            val (gen3OverrideCarId, universalOverrideCarId) = preferencesManager.getWallConnectorCarMapping()
+            val nowMs = System.currentTimeMillis()
+
+            val newEntities = buildWallConnectorSessionEntities(
+                rawSessions = allRawSessions,
+                devices = enrichedDevices,
+                cars = cars,
+                gen3OverrideCarId = gen3OverrideCarId,
+                universalOverrideCarId = universalOverrideCarId,
+                existingIds = existingIds,
+                existingFingerprints = existingFingerprints,
+                uploadedAtMs = nowMs,
+                zoneId = zoneId
+            )
+
+            if (newEntities.isNotEmpty()) {
+                dao.insertSessions(newEntities)
+            }
+
+            val totalKwhAdded = newEntities.sumOf { it.kwh }
+            val result = WallConnectorSyncResult.Synced(
+                insertedCount = newEntities.size,
+                totalKwhAdded = totalKwhAdded,
+                totalSessionsScanned = allRawSessions.size
+            )
+            val statusMsg = formatWallConnectorSyncMessage(result)
+            preferencesManager.recordChargerSyncResult(nowMs, statusMsg)
+            _lastSyncMessage.value = statusMsg
+            result
+        } finally {
+            _isSyncing.value = false
         }
     }
 }

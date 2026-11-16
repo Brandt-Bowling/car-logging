@@ -41,6 +41,8 @@ data class ParsedChargerImportResult(
 
 object ElectricityImportParser {
 
+    const val AUTO_WALL_CONNECTOR_BATCH_ID = "auto_wall_connector"
+
     private val isoDateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
     private val shortDisplayFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.US)
 
@@ -317,8 +319,11 @@ object ElectricityImportParser {
      * the same `carId` is returned.
      */
     fun resolveLastUploadBatch(sessions: List<ChargingSessionEntity>): List<ChargingSessionEntity> {
-        if (sessions.isEmpty()) return emptyList()
-        val latest = sessions.maxWithOrNull(
+        val manualSessions = sessions.filterNot {
+            it.uploadBatchId == AUTO_WALL_CONNECTOR_BATCH_ID || it.id.startsWith("twc_")
+        }
+        if (manualSessions.isEmpty()) return emptyList()
+        val latest = manualSessions.maxWithOrNull(
             compareBy<ChargingSessionEntity> { it.uploadedAtMs }
                 .thenBy { it.startDateMs }
                 .thenBy { it.id }
@@ -326,12 +331,12 @@ object ElectricityImportParser {
 
         val batchId = latest.uploadBatchId
         if (!batchId.isNullOrBlank()) {
-            return sessions
+            return manualSessions
                 .filter { it.uploadBatchId == batchId }
                 .sortedByDescending { it.startDateMs }
         }
 
-        val legacyOrdered = sessions
+        val legacyOrdered = manualSessions
             .filter { it.uploadBatchId.isNullOrBlank() }
             .sortedWith(
                 compareByDescending<ChargingSessionEntity> { it.uploadedAtMs }

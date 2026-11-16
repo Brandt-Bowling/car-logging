@@ -43,7 +43,8 @@ class DailyOdometerSyncWorker(
         val database = AppDatabase.getInstance(applicationContext)
         val carDao = database.carDao()
         val odometerLogDao = database.odometerLogDao()
-        val syncService = OdometerSyncService(prefs, carDao, odometerLogDao)
+        val chargingSessionDao = database.chargingSessionDao()
+        val syncService = OdometerSyncService(prefs, carDao, odometerLogDao, chargingSessionDao)
 
         executeSyncLogic(
             isDailyPollEnabled = prefs.getDailyPollEnabled()

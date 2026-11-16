@@ -47,6 +47,10 @@ class PreferencesManager(private val context: Context) {
         val KEY_DAILY_POLL_ENABLED = booleanPreferencesKey("telemetry_daily_poll_enabled")
         val KEY_LAST_DAILY_POLL_TIME = longPreferencesKey("telemetry_last_daily_poll_time")
         val KEY_LAST_DAILY_POLL_STATUS = stringPreferencesKey("telemetry_last_daily_poll_status")
+        val KEY_WALL_CONNECTOR_GEN3_CAR_ID = stringPreferencesKey("wall_connector_gen3_car_id")
+        val KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID = stringPreferencesKey("wall_connector_universal_car_id")
+        val KEY_LAST_CHARGER_SYNC_TIME = longPreferencesKey("telemetry_last_charger_sync_time")
+        val KEY_LAST_CHARGER_SYNC_STATUS = stringPreferencesKey("telemetry_last_charger_sync_status")
 
         val KEY_SMARTCAR_APPLICATION_ID = stringPreferencesKey("smartcar_application_id")
         val KEY_SMARTCAR_CLIENT_ID = stringPreferencesKey("smartcar_client_id")
@@ -237,6 +241,22 @@ class PreferencesManager(private val context: Context) {
         prefs[KEY_LAST_DAILY_POLL_STATUS]
     }
 
+    val wallConnectorGen3CarIdFlow: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_WALL_CONNECTOR_GEN3_CAR_ID]
+    }
+
+    val wallConnectorUniversalCarIdFlow: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID]
+    }
+
+    val lastChargerSyncTimeFlow: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LAST_CHARGER_SYNC_TIME] ?: 0L
+    }
+
+    val lastChargerSyncStatusFlow: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LAST_CHARGER_SYNC_STATUS]
+    }
+
     val smartcarClientIdFlow: Flow<String?> = context.dataStore.data.map { it[KEY_SMARTCAR_CLIENT_ID] }
     val smartcarConnectedFlow: Flow<Boolean> = context.dataStore.data.map {
         !it[KEY_SMARTCAR_VEHICLE_ID].isNullOrBlank() ||
@@ -276,6 +296,34 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs[KEY_LAST_DAILY_POLL_TIME] = timestampMs
             prefs[KEY_LAST_DAILY_POLL_STATUS] = status
+        }
+    }
+
+    suspend fun getWallConnectorCarMapping(): Pair<String?, String?> = context.dataStore.data.map {
+        Pair(it[KEY_WALL_CONNECTOR_GEN3_CAR_ID], it[KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID])
+    }.first()
+
+    suspend fun setWallConnectorCarMapping(gen3CarId: String?, universalCarId: String?) {
+        context.dataStore.edit { prefs ->
+            if (gen3CarId.isNullOrBlank()) {
+                prefs.remove(KEY_WALL_CONNECTOR_GEN3_CAR_ID)
+            } else {
+                prefs[KEY_WALL_CONNECTOR_GEN3_CAR_ID] = gen3CarId.trim()
+            }
+            if (universalCarId.isNullOrBlank()) {
+                prefs.remove(KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID)
+            } else {
+                prefs[KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID] = universalCarId.trim()
+            }
+        }
+    }
+
+    suspend fun getLastChargerSyncTime(): Long = lastChargerSyncTimeFlow.first()
+
+    suspend fun recordChargerSyncResult(timestampMs: Long, status: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_LAST_CHARGER_SYNC_TIME] = timestampMs
+            prefs[KEY_LAST_CHARGER_SYNC_STATUS] = status
         }
     }
 
