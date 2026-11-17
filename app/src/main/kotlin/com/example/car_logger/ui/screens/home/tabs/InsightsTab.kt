@@ -65,6 +65,7 @@ import com.example.car_logger.ui.screens.home.tabs.insights.EvElectricityCostCar
 import com.example.car_logger.ui.screens.home.tabs.insights.FleetShareCard
 import com.example.car_logger.ui.screens.home.tabs.insights.GasComparisonCard
 import com.example.car_logger.ui.screens.home.tabs.insights.ManageElectricityDataSheet
+import com.example.car_logger.ui.screens.home.tabs.insights.PeriodChargingLogsSheet
 import com.example.car_logger.ui.screens.home.tabs.insights.UtilityBillReviewSheet
 import com.example.car_logger.ui.theme.ExpressiveMotionTokens
 import com.example.car_logger.ui.theme.expressiveBounceClick
@@ -106,6 +107,8 @@ fun InsightsTab(
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
     var showManageElectricitySheet by remember { mutableStateOf(false) }
+    var openManageSessionsDirectly by remember { mutableStateOf(false) }
+    var periodLogsVenue by remember { mutableStateOf<ChargingVenue?>(null) }
     val activeCars = cars.filter { !it.isArchived }.ifEmpty { cars }
     val lastUploadBatch = remember(state.chargingSessions) {
         ElectricityImportParser.resolveLastUploadBatch(state.chargingSessions)
@@ -292,7 +295,8 @@ fun InsightsTab(
                     lastUploadCount = lastUploadBatch.size,
                     onUndoLastChargerUpload = onUndoLastChargingUpload,
                     onUndoAndRetagLastChargerUpload = onUndoAndRetagChargingUpload,
-                    onSyncWallConnectors = onSyncWallConnectors
+                    onSyncWallConnectors = onSyncWallConnectors,
+                    onOpenPeriodLogs = { periodLogsVenue = it }
                 )
             }
 
@@ -353,7 +357,8 @@ fun InsightsTab(
                     lastUploadCount = lastUploadBatch.size,
                     onUndoLastChargerUpload = onUndoLastChargingUpload,
                     onUndoAndRetagLastChargerUpload = onUndoAndRetagChargingUpload,
-                    onSyncWallConnectors = onSyncWallConnectors
+                    onSyncWallConnectors = onSyncWallConnectors,
+                    onOpenPeriodLogs = { periodLogsVenue = it }
                 )
             }
 
@@ -461,17 +466,54 @@ fun InsightsTab(
             onUndoLastChargerUpload = onUndoLastChargingUpload,
             onUndoAndRetagLastChargerUpload = {
                 showManageElectricitySheet = false
+                openManageSessionsDirectly = false
                 onUndoAndRetagChargingUpload()
             },
             onOpenAddBill = {
                 showManageElectricitySheet = false
+                openManageSessionsDirectly = false
                 onOpenManualUtilityBillSheet()
             },
             onOpenAddCharger = {
                 showManageElectricitySheet = false
+                openManageSessionsDirectly = false
                 onOpenManualChargerUsageSheet()
             },
-            onDismiss = { showManageElectricitySheet = false }
+            onDismiss = {
+                showManageElectricitySheet = false
+                openManageSessionsDirectly = false
+            },
+            initialShowSessionsTab = openManageSessionsDirectly
+        )
+    }
+
+    periodLogsVenue?.let { activeVenue ->
+        val periodText = InsightsCalculationEngine.formatObservationWindowText(
+            state.granularity,
+            state.periodOffset
+        )
+        PeriodChargingLogsSheet(
+            venue = activeVenue,
+            data = state.electricityCost,
+            granularity = state.granularity,
+            periodText = periodText,
+            canGoPrevious = state.canGoPrevious,
+            canGoNext = state.canGoNext,
+            selectedCarId = state.selectedCarId,
+            cars = activeCars,
+            onPreviousPeriod = onPreviousPeriod,
+            onNextPeriod = onNextPeriod,
+            onDeleteSession = onDeleteChargingSession,
+            onOpenAddCharger = {
+                periodLogsVenue = null
+                onOpenManualChargerUsageSheet()
+            },
+            onOpenAllHistory = {
+                periodLogsVenue = null
+                openManageSessionsDirectly = true
+                showManageElectricitySheet = true
+            },
+            onDismiss = { periodLogsVenue = null }
         )
     }
 }

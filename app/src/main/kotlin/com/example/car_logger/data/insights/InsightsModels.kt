@@ -36,6 +36,16 @@ data class GasComparisonData(
     val netFuelSavings: Double? = null
 )
 
+data class PeriodChargingLogItem(
+    val session: ChargingSessionEntity,
+    val attributedKwh: Double,
+    val attributedCost: Double,
+    val effectiveRate: Double,
+    val isEstimatedRate: Boolean,
+    val isSharedSplit: Boolean,
+    val isProratedSummary: Boolean
+)
+
 data class ElectricityCostData(
     val hasHomeData: Boolean = false,
     val hasPublicData: Boolean = false,
@@ -56,6 +66,7 @@ data class ElectricityCostData(
     val homeCar2Kwh: Double = 0.0,
     val homeCar2SharePct: Int = 0,
     val homeSessionCount: Int = 0,
+    val homePeriodLogs: List<PeriodChargingLogItem> = emptyList(),
     // Public charging metrics for the current period & vehicle filter
     val publicTotalCost: Double = 0.0,
     val publicTotalKwh: Double = 0.0,
@@ -70,6 +81,7 @@ data class ElectricityCostData(
     val publicCar2Kwh: Double = 0.0,
     val publicCar2SharePct: Int = 0,
     val publicSessionCount: Int = 0,
+    val publicPeriodLogs: List<PeriodChargingLogItem> = emptyList(),
     // Combined (Home + Public) metrics for the current period & vehicle filter
     val combinedTotalCost: Double = 0.0,
     val combinedTotalKwh: Double = 0.0,

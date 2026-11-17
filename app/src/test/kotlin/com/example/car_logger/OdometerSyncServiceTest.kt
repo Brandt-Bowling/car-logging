@@ -1076,6 +1076,159 @@ class OdometerSyncServiceTest {
         assertTrue((errResult as WallConnectorSyncResult.Error).message.contains("500"))
     }
 
+    @Test
+    fun `parseTeslaWallConnectorChargeHistory parses protobuf seconds objects for charge_start_time and charge_duration`() {
+        val realTeslaPayload = """
+            {
+              "response": {
+                "charge_history": [
+                  {
+                    "charge_start_time": {
+                      "seconds": 1731643200
+                    },
+                    "charge_duration": {
+                      "seconds": 12000
+                    },
+                    "energy_added_wh": 25400
+                  },
+                  {
+                    "charging_start_time": {
+                      "seconds": "1731729600",
+                      "nanos": 500000000
+                    },
+                    "charge_duration": {
+                      "seconds": "7200",
+                      "nanos": 0
+                    },
+                    "energy_added_wh": 14800,
+                    "din": "1734412-02-D--UNIVXYZ"
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val sessions = OdometerSyncService.parseTeslaWallConnectorChargeHistory(realTeslaPayload, "225511099")
+        assertEquals(2, sessions.size)
+
+        assertEquals(1731643200_000L, sessions[0].startDateMs)
+        assertEquals(1731643200_000L + 12_000_000L, sessions[0].endDateMs)
+        assertEquals(25400.0, sessions[0].energyWh, 0.01)
+
+        assertEquals(1731729600_500L, sessions[1].startDateMs)
+        assertEquals(1731729600_500L + 7_200_000L, sessions[1].endDateMs)
+        assertEquals(14800.0, sessions[1].energyWh, 0.01)
+        assertEquals("1734412-02-D--UNIVXYZ", sessions[1].din)
+    }
+
+    @Test
+    fun `parseTeslaSiteInfoWallConnectors uses part_name for Gen 3 vs Universal classification`() {
+        val siteInfoPayload = """
+            {
+              "response": {
+                "site_name": "Home",
+                "components": {
+                  "wall_connectors": [
+                    {
+                      "device_id": "abc-1",
+                      "din": "din-gen3-no-part-prefix",
+                      "part_name": "Gen 3 Wall Connector",
+                      "is_active": true
+                    },
+                    {
+                      "device_id": "abc-2",
+                      "din": "din-univ-no-part-prefix",
+                      "part_name": "Universal Wall Connector",
+                      "is_active": true
+                    }
+                  ]
+                }
+              }
+            }
+        """.trimIndent()
+
+        val devices = OdometerSyncService.parseTeslaSiteInfoWallConnectors(siteInfoPayload, "site_home")
+        assertEquals(2, devices.size)
+        assertEquals(WallConnectorType.GEN_3, devices[0].connectorType)
+        assertEquals(WallConnectorType.UNIVERSAL, devices[1].connectorType)
+        assertEquals("Home", devices[0].siteName)
+    }
+
+    @Test
+    fun `syncWallConnectorCharging imports protobuf charge_history sessions and sends second-precision RFC3339 timestamps`() = runBlocking {
+        val prefs = createTestPreferencesManager("protobuf_charge_history")
+        val futureExp = Instant.now().epochSecond + 3600L
+        val jwt = createJwt(scp = listOf("openid", "energy_device_data"), expEpochSec = futureExp)
+        prefs.setTeslaCredentials("cid", null, jwt)
+
+        val dao = FakeChargingSessionDao()
+        var capturedStart: String? = null
+        var capturedEnd: String? = null
+        val mockClient = createMockClient { url, _ ->
+            when {
+                url.endsWith("/api/1/products") -> {
+                    200 to """
+                        {
+                          "response": [
+                            {
+                              "energy_site_id": 225511099,
+                              "resource_type": "wall_connector",
+                              "site_name": "Garage",
+                              "components": {
+                                "wall_connectors": [
+                                  { "din": "1457768-02-G--GEN3ONE" }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                    """.trimIndent()
+                }
+                url.contains("/api/1/energy_sites/225511099/telemetry_history") -> {
+                    val uriQuery = url.substringAfter("?")
+                    val params = uriQuery.split("&").associate {
+                        val parts = it.split("=", limit = 2)
+                        parts[0] to java.net.URLDecoder.decode(parts.getOrElse(1) { "" }, "UTF-8")
+                    }
+                    capturedStart = params["start_date"]
+                    capturedEnd = params["end_date"]
+                    200 to """
+                        {
+                          "response": {
+                            "charge_history": [
+                              {
+                                "charge_start_time": { "seconds": 1731556800 },
+                                "charge_duration": { "seconds": 10800 },
+                                "energy_added_wh": 22500
+                              }
+                            ]
+                          }
+                        }
+                    """.trimIndent()
+                }
+                else -> error("Unexpected url: $url")
+            }
+        }
+
+        val cars = listOf(Car(id = "m3", make = "Tesla", model = "Model 3", year = 2023, isEv = true))
+        val service = OdometerSyncService(prefs, FakeCarDao(), FakeOdometerLogDao(), dao, mockClient)
+        val result = service.syncWallConnectorCharging(cars)
+
+        assertTrue(result is WallConnectorSyncResult.Synced)
+        val synced = result as WallConnectorSyncResult.Synced
+        assertEquals(1, synced.insertedCount)
+        assertEquals(1, synced.totalSessionsScanned)
+        assertEquals(22.5, synced.totalKwhAdded, 0.01)
+        assertEquals(1, dao.sessions.size)
+        assertEquals("m3", dao.sessions[0].carId)
+        assertEquals(1731556800_000L, dao.sessions[0].startDateMs)
+        assertEquals(1731556800_000L + 10_800_000L, dao.sessions[0].endDateMs)
+
+        // Verify second-precision RFC3339 timestamps (no fractional sub-seconds)
+        assertFalse("Expected no fractional seconds in start_date=$capturedStart", capturedStart!!.contains("."))
+        assertFalse("Expected no fractional seconds in end_date=$capturedEnd", capturedEnd!!.contains("."))
+    }
+
     private fun createTestPreferencesManager(name: String): PreferencesManager {
         val dataStore = PreferenceDataStoreFactory.create(
             produceFile = { tempFolder.newFile("$name.preferences_pb") }

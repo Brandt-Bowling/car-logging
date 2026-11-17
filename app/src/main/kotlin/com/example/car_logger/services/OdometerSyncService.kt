@@ -18,6 +18,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,7 @@ import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 enum class WallConnectorType(val label: String, val defaultChargerName: String) {
     GEN_3("Gen 3 Wall Connector", "Tesla Wall Connector (Gen 3)"),
@@ -559,6 +561,7 @@ class OdometerSyncService(
                 effectivePart.startsWith("1529455") ||
                 effectivePart.startsWith("1509549") ||
                 effectivePart.contains("GEN3") ||
+                effectivePart.contains("GEN 3") ||
                 nameLower.contains("gen 3") ||
                 nameLower.contains("gen3") ||
                 nameLower.contains("model 3") ||
@@ -607,15 +610,20 @@ class OdometerSyncService(
                                 is JsonObject -> {
                                     val din = wcElem["din"].asStringOrNull()
                                         ?: wcElem["id"].asStringOrNull()
+                                        ?: wcElem["device_id"].asStringOrNull()
                                     val partNumber = wcElem["part_number"].asStringOrNull()
                                         ?: extractPartNumberFromDin(din)
+                                    val partName = wcElem["part_name"].asStringOrNull()
                                     val wcName = wcElem["site_name"].asStringOrNull()
                                         ?: wcElem["name"].asStringOrNull()
                                         ?: siteName
+                                    val classificationHint = listOfNotNull(wcName, partName)
+                                        .joinToString(" ")
+                                        .takeIf { it.isNotBlank() }
                                     val type = classifyWallConnectorType(
                                         din = din,
                                         partNumber = partNumber,
-                                        siteName = wcName,
+                                        siteName = classificationHint,
                                         index = devices.size
                                     )
                                     devices.add(
@@ -656,10 +664,14 @@ class OdometerSyncService(
                             ?: rawId?.takeIf { it != siteId && it.contains("--") }
                         val partNumber = obj["part_number"].asStringOrNull()
                             ?: extractPartNumberFromDin(din)
+                        val partName = obj["part_name"].asStringOrNull()
+                        val classificationHint = listOfNotNull(siteName, partName)
+                            .joinToString(" ")
+                            .takeIf { it.isNotBlank() }
                         val type = classifyWallConnectorType(
                             din = din,
                             partNumber = partNumber,
-                            siteName = siteName,
+                            siteName = classificationHint,
                             index = devices.size
                         )
                         devices.add(
@@ -701,15 +713,20 @@ class OdometerSyncService(
                             is JsonObject -> {
                                 val din = wcElem["din"].asStringOrNull()
                                     ?: wcElem["id"].asStringOrNull()
+                                    ?: wcElem["device_id"].asStringOrNull()
                                 val partNumber = wcElem["part_number"].asStringOrNull()
                                     ?: extractPartNumberFromDin(din)
+                                val partName = wcElem["part_name"].asStringOrNull()
                                 val wcName = wcElem["site_name"].asStringOrNull()
                                     ?: wcElem["name"].asStringOrNull()
                                     ?: siteName
+                                val classificationHint = listOfNotNull(wcName, partName)
+                                    .joinToString(" ")
+                                    .takeIf { it.isNotBlank() }
                                 val type = classifyWallConnectorType(
                                     din = din,
                                     partNumber = partNumber,
-                                    siteName = wcName,
+                                    siteName = classificationHint,
                                     index = startingIndex + devices.size
                                 )
                                 devices.add(
@@ -821,6 +838,22 @@ class OdometerSyncService(
         }
 
         private fun parseFlexibleTimestampMs(raw: JsonElement?): Long? {
+            if (raw is JsonObject) {
+                val secElem = raw["seconds"]
+                    ?: raw["epoch_seconds"]
+                    ?: raw["unix"]
+                    ?: raw["timestamp"]
+                    ?: raw["ms"]
+                    ?: raw["millis"]
+                    ?: raw["value"]
+                    ?: raw["iso"]
+                    ?: raw["date"]
+                val baseMs = parseFlexibleTimestampMs(secElem) ?: return null
+                val nanos = raw["nanos"].asLongOrNull()
+                    ?: raw["nanoseconds"].asLongOrNull()
+                    ?: 0L
+                return baseMs + (nanos / 1_000_000L)
+            }
             val prim = raw as? JsonPrimitive ?: return null
             prim.longOrNull?.let { num ->
                 // Distinguish epoch seconds vs epoch milliseconds
@@ -831,10 +864,44 @@ class OdometerSyncService(
             text.toLongOrNull()?.let { num ->
                 return if (num < 100_000_000_000L) num * 1000L else num
             }
+            (prim.doubleOrNull ?: text.toDoubleOrNull())?.let { num ->
+                if (num.isFinite() && num > 0.0) {
+                    return if (num < 100_000_000_000.0) (num * 1000.0).roundToLong() else num.roundToLong()
+                }
+            }
             return runCatching { Instant.parse(text).toEpochMilli() }.getOrNull()
                 ?: runCatching { OffsetDateTime.parse(text).toInstant().toEpochMilli() }.getOrNull()
                 ?: runCatching { ZonedDateTime.parse(text).toInstant().toEpochMilli() }.getOrNull()
                 ?: ElectricityImportParser.parseDateToStartOfDayMs(text)
+        }
+
+        private fun parseFlexibleDurationSeconds(raw: JsonElement?): Long? {
+            if (raw is JsonObject) {
+                val sec = raw["seconds"].asDoubleOrNull()
+                    ?: raw["value"].asDoubleOrNull()
+                    ?: raw["duration_seconds"].asDoubleOrNull()
+                    ?: raw["duration"].asDoubleOrNull()
+                if (sec != null && sec.isFinite() && sec >= 0.0) {
+                    val nanos = raw["nanos"].asLongOrNull()
+                        ?: raw["nanoseconds"].asLongOrNull()
+                        ?: 0L
+                    return (sec + (nanos / 1_000_000_000.0)).roundToLong().takeIf { it >= 0L }
+                }
+                val nested = raw["seconds"] ?: raw["value"] ?: raw["duration"]
+                return parseFlexibleDurationSeconds(nested)
+            }
+            val prim = raw as? JsonPrimitive ?: return null
+            prim.longOrNull?.let { num -> return num.takeIf { it >= 0L } }
+            prim.doubleOrNull?.let { num ->
+                if (num.isFinite() && num >= 0.0) return num.roundToLong()
+            }
+            val text = prim.contentOrNull?.trim().orEmpty()
+            if (text.isEmpty()) return null
+            text.toLongOrNull()?.let { return it.takeIf { v -> v >= 0L } }
+            text.toDoubleOrNull()?.let { num ->
+                if (num.isFinite() && num >= 0.0) return num.roundToLong()
+            }
+            return runCatching { java.time.Duration.parse(text).seconds }.getOrNull()?.takeIf { it >= 0L }
         }
 
         fun parseTeslaWallConnectorChargeHistory(
@@ -850,15 +917,20 @@ class OdometerSyncService(
                         when (respElem) {
                             is JsonArray -> respElem
                             is JsonObject -> {
-                                (respElem["time_series"] as? JsonArray)
-                                    ?: (respElem["charge_history"] as? JsonArray)
+                                (respElem["charge_history"] as? JsonArray)
+                                    ?: (respElem["time_series"] as? JsonArray)
                                     ?: (respElem["sessions"] as? JsonArray)
                                     ?: (respElem["data"] as? JsonArray)
+                                    ?: (respElem["charging_history"] as? JsonArray)
+                                    ?: (respElem["events"] as? JsonArray)
+                                    ?: (respElem["items"] as? JsonArray)
                                     ?: return emptyList()
                             }
                             else -> {
-                                (rootElement["time_series"] as? JsonArray)
-                                    ?: (rootElement["charge_history"] as? JsonArray)
+                                (rootElement["charge_history"] as? JsonArray)
+                                    ?: (rootElement["time_series"] as? JsonArray)
+                                    ?: (rootElement["sessions"] as? JsonArray)
+                                    ?: (rootElement["data"] as? JsonArray)
                                     ?: return emptyList()
                             }
                         }
@@ -874,12 +946,15 @@ class OdometerSyncService(
                         ?: obj["energy_wh"].asDoubleOrNull()
                         ?: obj["energy_added_wh"].asDoubleOrNull()
                         ?: obj["charge_energy_added_wh"].asDoubleOrNull()
+                        ?: obj["energy_imported_wh"].asDoubleOrNull()
+                        ?: obj["total_energy_wh"].asDoubleOrNull()
                         ?: obj["grid_energy_imported"].asDoubleOrNull()
                         ?: obj["total_energy"].asDoubleOrNull()
                         ?: obj["value"].asDoubleOrNull()
                         ?: (obj["charge_energy_imported_kwh"].asDoubleOrNull()?.times(1000.0))
                         ?: (obj["energy_kwh"].asDoubleOrNull()?.times(1000.0))
                         ?: (obj["energy_added_kwh"].asDoubleOrNull()?.times(1000.0))
+                        ?: (obj["charge_energy_added_kwh"].asDoubleOrNull()?.times(1000.0))
                         ?: continue
 
                     // Filter out zero/standby noise (< 50 Wh = 0.05 kWh)
@@ -887,6 +962,7 @@ class OdometerSyncService(
 
                     val startMs = parseFlexibleTimestampMs(
                         obj["charge_start_time"]
+                            ?: obj["charging_start_time"]
                             ?: obj["start_date"]
                             ?: obj["start_time"]
                             ?: obj["timestamp"]
@@ -896,13 +972,17 @@ class OdometerSyncService(
 
                     val explicitEndMs = parseFlexibleTimestampMs(
                         obj["charge_stop_time"]
+                            ?: obj["charging_stop_time"]
                             ?: obj["end_date"]
                             ?: obj["stop_time"]
                             ?: obj["end_time"]
                     )
-                    val durationSec = obj["charge_duration"].asLongOrNull()
-                        ?: obj["duration_seconds"].asLongOrNull()
-                        ?: obj["duration"].asLongOrNull()
+                    val durationSec = parseFlexibleDurationSeconds(
+                        obj["charge_duration"]
+                            ?: obj["charging_duration"]
+                            ?: obj["duration_seconds"]
+                            ?: obj["duration"]
+                    )
 
                     val endMs = when {
                         explicitEndMs != null && explicitEndMs >= startMs -> explicitEndMs
@@ -1971,7 +2051,7 @@ class OdometerSyncService(
             val effectiveLookbackDays = (lookbackDays ?: if (lastChargerSyncMs == 0L || !hasImportedWallConnectorHistory) 30 else 7)
                 .coerceIn(1, 30)
             val zoneId = ZoneId.systemDefault()
-            val endZdt = ZonedDateTime.now(zoneId)
+            val endZdt = ZonedDateTime.now(zoneId).truncatedTo(ChronoUnit.SECONDS)
             val startCandidate = endZdt.minusDays(effectiveLookbackDays.toLong())
                 .withHour(0)
                 .withMinute(0)
@@ -1979,16 +2059,24 @@ class OdometerSyncService(
                 .withNano(0)
             val earliestAllowedStart = Instant.ofEpochMilli(
                 endZdt.toInstant().toEpochMilli() - 30L * 86_400_000L
-            ).atZone(zoneId)
+            ).atZone(zoneId).truncatedTo(ChronoUnit.SECONDS)
             val startZdt = if (startCandidate.isBefore(earliestAllowedStart)) earliestAllowedStart else startCandidate
 
             val rfc3339Formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
             val localDateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
-            val encodedStart = URLEncoder.encode(startZdt.format(rfc3339Formatter), "UTF-8")
-            val encodedEnd = URLEncoder.encode(endZdt.format(rfc3339Formatter), "UTF-8")
+            val startFormatted = startZdt.format(rfc3339Formatter)
+            val endFormatted = endZdt.format(rfc3339Formatter)
+            val encodedStart = URLEncoder.encode(startFormatted, "UTF-8")
+            val encodedEnd = URLEncoder.encode(endFormatted, "UTF-8")
             val encodedStartDate = URLEncoder.encode(startZdt.toLocalDate().format(localDateFormatter), "UTF-8")
             val encodedEndDate = URLEncoder.encode(endZdt.toLocalDate().format(localDateFormatter), "UTF-8")
             val encodedTz = URLEncoder.encode(zoneId.id, "UTF-8")
+
+            Log.i(
+                TAG,
+                "Wall Connector sync: sites=${uniqueSiteIds.size}, devices=${enrichedDevices.size}, " +
+                    "lookback=${effectiveLookbackDays}d ($startFormatted -> $endFormatted)"
+            )
 
             val allRawSessions = mutableListOf<TeslaWallConnectorChargeSession>()
             val siteErrors = mutableListOf<String>()
@@ -2031,7 +2119,19 @@ class OdometerSyncService(
                             siteErrors.add(detail?.let { "Site $siteId (403: $it)" } ?: "Site $siteId (403)")
                         }
                         code in 200..299 -> {
-                            allRawSessions.addAll(parseTeslaWallConnectorChargeHistory(bodyStr, siteId))
+                            val siteSessions = parseTeslaWallConnectorChargeHistory(bodyStr, siteId)
+                            if (siteSessions.isEmpty()) {
+                                val keysSummary = runCatching {
+                                    val rootObj = json.parseToJsonElement(bodyStr) as? JsonObject
+                                    val respObj = rootObj?.get("response") as? JsonObject
+                                    "top=${rootObj?.keys?.joinToString(",") ?: "non-obj"};" +
+                                        "resp=${respObj?.keys?.joinToString(",") ?: "non-obj"}"
+                                }.getOrElse { "unparseable" }
+                                Log.i(TAG, "Site $siteId telemetry_history HTTP $code -> 0 parsed sessions ($keysSummary)")
+                            } else {
+                                Log.i(TAG, "Site $siteId telemetry_history HTTP $code -> ${siteSessions.size} parsed session(s)")
+                            }
+                            allRawSessions.addAll(siteSessions)
                         }
                         else -> {
                             val detail = parseTeslaErrorDetail(bodyStr)
