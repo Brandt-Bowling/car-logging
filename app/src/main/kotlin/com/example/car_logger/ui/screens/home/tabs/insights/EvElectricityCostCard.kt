@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.ElectricBolt
 import androidx.compose.material.icons.rounded.EvStation
@@ -82,6 +83,7 @@ fun EvElectricityCostCard(
     onUndoLastChargerUpload: () -> Unit = {},
     onUndoAndRetagLastChargerUpload: () -> Unit = {},
     onSyncWallConnectors: () -> Unit = {},
+    onOpenPeriodLogs: (ChargingVenue) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -200,7 +202,10 @@ fun EvElectricityCostCard(
                         car2Id = car2Id,
                         car2Name = car2Name,
                         onOpenManageSheet = onOpenManageSheet,
-                        onOpenManualBillSheet = onOpenManualBillSheet
+                        onOpenManualBillSheet = onOpenManualBillSheet,
+                        onOpenPeriodLogs = {
+                            onOpenPeriodLogs(if (isHome) ChargingVenue.HOME else ChargingVenue.PUBLIC)
+                        }
                     )
                 }
             }
@@ -392,7 +397,8 @@ private fun PopulatedVenueContent(
     car2Id: String?,
     car2Name: String,
     onOpenManageSheet: () -> Unit,
-    onOpenManualBillSheet: () -> Unit
+    onOpenManualBillSheet: () -> Unit,
+    onOpenPeriodLogs: () -> Unit
 ) {
     val totalCost = if (isHome) data.homeTotalCost else data.publicTotalCost
     val totalKwh = if (isHome) data.homeTotalKwh else data.publicTotalKwh
@@ -408,11 +414,13 @@ private fun PopulatedVenueContent(
     val heroAccent = if (isHome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // 20.dp Hero Tonal Highlight Container
+        // 20.dp Hero Tonal Highlight Container (tappable to view logs for active period)
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = heroBg,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .expressiveBounceClick { onOpenPeriodLogs() }
         ) {
             Row(
                 modifier = Modifier
@@ -422,14 +430,25 @@ private fun PopulatedVenueContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (isHome) "HOME CHARGING" else "PUBLIC CHARGING",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp
-                        ),
-                        color = heroAccent
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = if (isHome) "HOME CHARGING" else "PUBLIC CHARGING",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.8.sp
+                            ),
+                            color = heroAccent
+                        )
+                        Icon(
+                            imageVector = Icons.Rounded.ChevronRight,
+                            contentDescription = "View logs for period",
+                            modifier = Modifier.size(14.dp),
+                            tint = heroAccent
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = String.format(Locale.US, "$%.2f", totalCost),

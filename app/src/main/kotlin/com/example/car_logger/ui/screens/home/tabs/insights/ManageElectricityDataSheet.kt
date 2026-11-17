@@ -75,12 +75,13 @@ fun ManageElectricityDataSheet(
     onOpenAddBill: () -> Unit,
     onOpenAddCharger: () -> Unit,
     onDismiss: () -> Unit,
+    initialShowSessionsTab: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var selectedTab by remember {
+    var selectedTab by remember(initialShowSessionsTab) {
         mutableStateOf(
-            if (utilityBills.isEmpty() && chargingSessions.isNotEmpty()) {
+            if (initialShowSessionsTab || (utilityBills.isEmpty() && chargingSessions.isNotEmpty())) {
                 HistoryTab.SESSIONS
             } else {
                 HistoryTab.BILLS

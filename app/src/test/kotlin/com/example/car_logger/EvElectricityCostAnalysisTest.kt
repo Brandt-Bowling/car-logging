@@ -607,4 +607,210 @@ class EvElectricityCostAnalysisTest {
         val resolvedIgnoringAuto = ElectricityImportParser.resolveLastUploadBatch(mixedManualAndAuto)
         assertEquals(listOf("new_1"), resolvedIgnoringAuto.map { it.id })
     }
+
+    @Test
+    fun periodChargingLogs_filtersByPeriodVenueAndVehicle_andMatchesAttributedTotals() {
+        val ev1 = Car(id = "ev1", year = 2024, make = "Tesla", model = "Model 3", isEv = true)
+        val ev2 = Car(id = "ev2", year = 2024, make = "Chevy", model = "Blazer EV", isEv = true)
+
+        val logs = listOf(
+            OdometerLogEntity("l1", "ev1", 1000, tsAtHour("2026-11-09", 16), "TELEMETRY"),
+            OdometerLogEntity("l2", "ev1", 1300, tsAtHour("2026-11-14", 16), "TELEMETRY"), // 300 mi (75%)
+            OdometerLogEntity("l3", "ev2", 2000, tsAtHour("2026-11-09", 16), "TELEMETRY"),
+            OdometerLogEntity("l4", "ev2", 2100, tsAtHour("2026-11-14", 16), "TELEMETRY")  // 100 mi (25%)
+        )
+
+        val billNov = UtilityBillEntity(
+            id = "bill_nov",
+            providerName = "PG&E",
+            startDateMs = startMs("2026-11-01"),
+            endDateMs = endMs("2026-11-30"),
+            totalKwh = 500.0,
+            totalAmount = 100.0,
+            fixedCharges = 0.0,
+            calculatedRate = 0.20,
+            overrideRate = null,
+            effectiveRate = 0.20,
+            uploadedAtMs = 1_000L
+        )
+
+        val sessions = listOf(
+            // Inside Nov 9-15 week: ev1 dedicated HOME
+            ChargingSessionEntity(
+                id = "h_ev1_nov",
+                carId = "ev1",
+                startDateMs = tsAtHour("2026-11-12", 20),
+                endDateMs = tsAtHour("2026-11-12", 22),
+                kwh = 40.0,
+                venue = "HOME",
+                fingerprint = "fp_h_ev1_nov"
+            ),
+            // Inside Nov 9-15 week: shared HOME (carId = null -> 75% ev1 / 25% ev2)
+            ChargingSessionEntity(
+                id = "h_shared_nov",
+                carId = null,
+                startDateMs = tsAtHour("2026-11-10", 18),
+                endDateMs = tsAtHour("2026-11-10", 21),
+                kwh = 100.0,
+                venue = "HOME",
+                fingerprint = "fp_h_shared_nov"
+            ),
+            // Inside Nov 9-15 week: ev2 dedicated HOME (excluded when filtering for ev1)
+            ChargingSessionEntity(
+                id = "h_ev2_nov",
+                carId = "ev2",
+                startDateMs = tsAtHour("2026-11-11", 19),
+                endDateMs = tsAtHour("2026-11-11", 21),
+                kwh = 30.0,
+                venue = "HOME",
+                fingerprint = "fp_h_ev2_nov"
+            ),
+            // Inside Nov 9-15 week: ev1 PUBLIC
+            ChargingSessionEntity(
+                id = "p_ev1_nov",
+                carId = "ev1",
+                startDateMs = tsAtHour("2026-11-13", 13),
+                endDateMs = tsAtHour("2026-11-13", 14),
+                kwh = 50.0,
+                venue = "PUBLIC",
+                directCost = 22.50,
+                fingerprint = "fp_p_ev1_nov"
+            ),
+            // Outside Nov week, inside October: ev1 HOME
+            ChargingSessionEntity(
+                id = "h_ev1_oct",
+                carId = "ev1",
+                startDateMs = tsAtHour("2026-10-15", 19),
+                endDateMs = tsAtHour("2026-10-15", 22),
+                kwh = 60.0,
+                venue = "HOME",
+                fingerprint = "fp_h_ev1_oct"
+            )
+        )
+
+        // 1. All vehicles, current week (Nov 9-15)
+        val weekAllState = InsightsCalculationEngine.computeUiState(
+            cars = listOf(ev1, ev2),
+            allLogs = logs,
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = null,
+            gasPrice = 3.65f,
+            baselineMpg = 28.0f,
+            periodOffset = 0,
+            nowMs = tsAtHour("2026-11-14", 12),
+            utilityBills = listOf(billNov),
+            chargingSessions = sessions,
+            defaultElectricityRate = 0.16f
+        )
+        assertEquals(
+            listOf("h_ev1_nov", "h_ev2_nov", "h_shared_nov"),
+            weekAllState.electricityCost.homePeriodLogs.map { it.session.id }
+        )
+        assertEquals(listOf("p_ev1_nov"), weekAllState.electricityCost.publicPeriodLogs.map { it.session.id })
+        assertTrue(weekAllState.electricityCost.homePeriodLogs.none { it.isSharedSplit })
+        assertEquals(
+            weekAllState.electricityCost.homeTotalKwh,
+            weekAllState.electricityCost.homePeriodLogs.sumOf { it.attributedKwh },
+            0.001
+        )
+        assertEquals(
+            weekAllState.electricityCost.homeTotalCost,
+            weekAllState.electricityCost.homePeriodLogs.sumOf { it.attributedCost },
+            0.001
+        )
+
+        // 2. Single vehicle (ev1), current week -> excludes ev2's session and splits shared session 75%
+        val weekEv1State = InsightsCalculationEngine.computeUiState(
+            cars = listOf(ev1, ev2),
+            allLogs = logs,
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = "ev1",
+            gasPrice = 3.65f,
+            baselineMpg = 28.0f,
+            periodOffset = 0,
+            nowMs = tsAtHour("2026-11-14", 12),
+            utilityBills = listOf(billNov),
+            chargingSessions = sessions,
+            defaultElectricityRate = 0.16f
+        )
+        assertEquals(
+            listOf("h_ev1_nov", "h_shared_nov"),
+            weekEv1State.electricityCost.homePeriodLogs.map { it.session.id }
+        )
+        val sharedItem = weekEv1State.electricityCost.homePeriodLogs.last()
+        assertTrue(sharedItem.isSharedSplit)
+        assertEquals(75.0, sharedItem.attributedKwh, 0.01)
+        assertEquals(15.0, sharedItem.attributedCost, 0.01)
+        assertFalse(sharedItem.isEstimatedRate)
+        assertEquals(
+            weekEv1State.electricityCost.homeTotalKwh,
+            weekEv1State.electricityCost.homePeriodLogs.sumOf { it.attributedKwh },
+            0.001
+        )
+        assertEquals(
+            weekEv1State.electricityCost.homeTotalCost,
+            weekEv1State.electricityCost.homePeriodLogs.sumOf { it.attributedCost },
+            0.001
+        )
+
+        // 3. Previous month (October, periodOffset = -1) -> only October log appears
+        val prevMonthState = InsightsCalculationEngine.computeUiState(
+            cars = listOf(ev1, ev2),
+            allLogs = logs,
+            granularity = InsightsTimeGranularity.MONTHLY,
+            selectedCarId = null,
+            gasPrice = 3.65f,
+            baselineMpg = 28.0f,
+            periodOffset = -1,
+            nowMs = tsAtHour("2026-11-14", 12),
+            utilityBills = listOf(billNov),
+            chargingSessions = sessions,
+            defaultElectricityRate = 0.16f
+        )
+        assertEquals(listOf("h_ev1_oct"), prevMonthState.electricityCost.homePeriodLogs.map { it.session.id })
+        assertTrue(prevMonthState.electricityCost.publicPeriodLogs.isEmpty())
+
+        // 4. Summary session proration flag in Weekly vs Monthly
+        val novSummary = listOf(
+            ChargingSessionEntity(
+                id = "sum_nov",
+                carId = "ev1",
+                startDateMs = startMs("2026-11-01"),
+                endDateMs = endMs("2026-11-30"),
+                kwh = 300.0,
+                venue = "HOME",
+                isSummary = true,
+                fingerprint = "fp_sum_nov_2"
+            )
+        )
+        val weeklySummaryState = InsightsCalculationEngine.computeUiState(
+            cars = listOf(ev1),
+            allLogs = emptyList(),
+            granularity = InsightsTimeGranularity.WEEKLY,
+            selectedCarId = null,
+            gasPrice = 3.65f,
+            baselineMpg = 28.0f,
+            nowMs = tsAtHour("2026-11-11", 12),
+            chargingSessions = novSummary,
+            defaultElectricityRate = 0.20f
+        )
+        assertEquals(1, weeklySummaryState.electricityCost.homePeriodLogs.size)
+        assertTrue(weeklySummaryState.electricityCost.homePeriodLogs.first().isProratedSummary)
+        assertEquals(70.0, weeklySummaryState.electricityCost.homePeriodLogs.first().attributedKwh, 0.01)
+
+        val monthlySummaryState = InsightsCalculationEngine.computeUiState(
+            cars = listOf(ev1),
+            allLogs = emptyList(),
+            granularity = InsightsTimeGranularity.MONTHLY,
+            selectedCarId = null,
+            gasPrice = 3.65f,
+            baselineMpg = 28.0f,
+            nowMs = tsAtHour("2026-11-11", 12),
+            chargingSessions = novSummary,
+            defaultElectricityRate = 0.20f
+        )
+        assertEquals(1, monthlySummaryState.electricityCost.homePeriodLogs.size)
+        assertFalse(monthlySummaryState.electricityCost.homePeriodLogs.first().isProratedSummary)
+        assertEquals(300.0, monthlySummaryState.electricityCost.homePeriodLogs.first().attributedKwh, 0.01)
+    }
 }
