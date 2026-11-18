@@ -117,9 +117,9 @@ EOF
   export ANDROID_SDK_ROOT="$SDK_DIR"
   export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
 
-  if [[ ! -d "$SDK_DIR/platform-tools" || ! -d "$SDK_DIR/platforms/android-35" || ! -d "$SDK_DIR/build-tools/35.0.0" ]]; then
+  if [[ ! -d "$SDK_DIR/platform-tools" || ! -d "$SDK_DIR/platforms/android-37.0" || ! -d "$SDK_DIR/build-tools/36.0.0" ]]; then
     yes | sdkmanager --licenses >/dev/null || true
-    sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+    sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;36.0.0"
   fi
 fi
 

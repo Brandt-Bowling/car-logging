@@ -1229,6 +1229,64 @@ class OdometerSyncServiceTest {
         assertFalse("Expected no fractional seconds in end_date=$capturedEnd", capturedEnd!!.contains("."))
     }
 
+    @Test
+    fun `syncDailyEndOfDay polls odometers without syncing Wall Connector charging`() = runBlocking {
+        val prefs = createTestPreferencesManager("daily_poll_no_charger")
+        val token = createJwt(scp = listOf("vehicle_device_data", "energy_device_data"), expEpochSec = 4_102_444_800L)
+        prefs.setTeslaCredentials("cid", "csec", token)
+
+        val requestedUrls = mutableListOf<String>()
+        val client = createMockClient { url, _ ->
+            requestedUrls.add(url)
+            when {
+                url.endsWith("/api/1/vehicles") -> 200 to """
+                    {
+                      "response": [
+                        {
+                          "id": 42,
+                          "vin": "5YJ3E1EA1PF000001",
+                          "state": "online"
+                        }
+                      ]
+                    }
+                """.trimIndent()
+                url.contains("/vehicle_data") -> 200 to """
+                    {
+                      "response": {
+                        "state": "online",
+                        "vehicle_state": {
+                          "odometer": 28100.0
+                        }
+                      }
+                    }
+                """.trimIndent()
+                else -> 500 to """{"error":"unexpected endpoint $url"}"""
+            }
+        }
+
+        val carDao = FakeCarDao()
+        val odoDao = FakeOdometerLogDao()
+        val chargingDao = FakeChargingSessionDao()
+        val m3 = Car(
+            id = "m3",
+            make = "Tesla",
+            model = "Model 3",
+            year = 2023,
+            odometer = 28000,
+            vin = "5YJ3E1EA1PF000001"
+        )
+        carDao.insertCar(com.example.car_logger.data.local.entity.CarEntity.fromModel(m3))
+
+        val service = OdometerSyncService(prefs, carDao, odoDao, chargingDao, client)
+        val results = service.syncDailyEndOfDay(listOf(m3))
+
+        assertEquals(1, results.size)
+        assertTrue(results[0] is OdometerSyncResult.Updated)
+        assertFalse(requestedUrls.any { it.contains("/api/1/products") || it.contains("telemetry_history") })
+        assertEquals(0L, prefs.getLastChargerSyncTime())
+        assertEquals("Synced 1 vehicle", prefs.lastDailyPollStatusFlow.first())
+    }
+
     private fun createTestPreferencesManager(name: String): PreferencesManager {
         val dataStore = PreferenceDataStoreFactory.create(
             produceFile = { tempFolder.newFile("$name.preferences_pb") }

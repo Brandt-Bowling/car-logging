@@ -18,6 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -218,7 +219,7 @@ class MainActivity : ComponentActivity() {
 
                 // Add / Edit Maintenance Record Dialog
                 if (showRecordDialog) {
-                    val cars = homeViewModel.cars.value
+                    val cars by homeViewModel.cars.collectAsState()
                     MaintenanceRecordDialog(
                         cars = cars,
                         initialCarId = targetCarIdForRecord,
