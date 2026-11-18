@@ -1471,13 +1471,8 @@ class OdometerSyncService(
             val res = syncVehicle(car = car, isManual = false, forceWake = true, bypassCooldown = true)
             results.add(res)
         }
-        val chargerResult = if (chargingSessionDao != null) {
-            syncWallConnectorCharging(cars)
-        } else {
-            null
-        }
         val nowMs = System.currentTimeMillis()
-        val summary = formatDailyPollSummary(eligibleCars, results, chargerResult)
+        val summary = formatDailyPollSummary(eligibleCars, results)
         preferencesManager.recordDailyPollResult(nowMs, summary)
         results
     }

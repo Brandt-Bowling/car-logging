@@ -3,6 +3,7 @@ package com.example.car_logger.ui.screens.home.tabs
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.text.format.DateFormat
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,11 +35,14 @@ import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -50,6 +54,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimeInput
+import androidx.compose.material3.TimePickerDefaults
+import androidx.compose.material3.TimePickerDialogDefaults
+import androidx.compose.material3.TimePickerDisplayMode
+import androidx.compose.material3.TimeScroll
+import androidx.compose.material3.VibrantTimePickerDialog
+import androidx.compose.material3.isInputValid
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +76,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -75,13 +88,18 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.WakeProtectionPolicy
 import com.example.car_logger.data.model.Car
+import com.example.car_logger.services.ChargerSyncScheduler
 import com.example.car_logger.services.DailyPollScheduler
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.services.WallConnectorType
 import com.google.android.gms.auth.api.signin.GoogleSignIn
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsTab(
     preferencesManager: PreferencesManager,
@@ -106,6 +124,9 @@ fun SettingsTab(
     val lastDailyPollStatus by preferencesManager.lastDailyPollStatusFlow.collectAsState(initial = null)
     val wallConnectorGen3CarId by preferencesManager.wallConnectorGen3CarIdFlow.collectAsState(initial = null)
     val wallConnectorUniversalCarId by preferencesManager.wallConnectorUniversalCarIdFlow.collectAsState(initial = null)
+    val chargerSyncEnabled by preferencesManager.chargerSyncEnabledFlow.collectAsState(initial = true)
+    val chargerSyncHour by preferencesManager.chargerSyncHourFlow.collectAsState(initial = PreferencesManager.DEFAULT_CHARGER_SYNC_HOUR)
+    val chargerSyncMinute by preferencesManager.chargerSyncMinuteFlow.collectAsState(initial = PreferencesManager.DEFAULT_CHARGER_SYNC_MINUTE)
     val lastChargerSyncTime by preferencesManager.lastChargerSyncTimeFlow.collectAsState(initial = 0L)
     val lastChargerSyncStatus by preferencesManager.lastChargerSyncStatusFlow.collectAsState(initial = null)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -141,7 +162,15 @@ fun SettingsTab(
     var showSmartcarDialog by remember { mutableStateOf(false) }
     var showTeslaDialog by remember { mutableStateOf(false) }
     var showWallConnectorMappingDialog by remember { mutableStateOf(false) }
+    var showChargerSyncTimePicker by remember { mutableStateOf(false) }
     var carPendingForceWake by remember { mutableStateOf<Car?>(null) }
+
+    val is24Hour = DateFormat.is24HourFormat(context)
+    val formattedChargerSyncTime = remember(chargerSyncHour, chargerSyncMinute, is24Hour) {
+        val scheduledTime = LocalTime.of(chargerSyncHour.coerceIn(0, 23), chargerSyncMinute.coerceIn(0, 59))
+        val pattern = if (is24Hour) "HH:mm" else "h:mm a"
+        scheduledTime.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+    }
 
     val signInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -601,6 +630,79 @@ fun SettingsTab(
         )
     }
 
+    if (showChargerSyncTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = chargerSyncHour,
+            initialMinute = chargerSyncMinute,
+            is24Hour = is24Hour
+        )
+        var displayMode by remember { mutableStateOf(TimePickerDisplayMode.Scroll) }
+        val supportsScrollMode = LocalConfiguration.current.screenHeightDp.dp > TimePickerDialogDefaults.MinHeightForTimePicker
+
+        VibrantTimePickerDialog(
+            onDismissRequest = { showChargerSyncTimePicker = false },
+            confirmButton = {
+                TextButton(
+                    enabled = timePickerState.isInputValid,
+                    onClick = {
+                        val selectedHour = timePickerState.hour
+                        val selectedMinute = timePickerState.minute
+                        showChargerSyncTimePicker = false
+                        coroutineScope.launch {
+                            preferencesManager.setChargerSyncTime(selectedHour, selectedMinute)
+                            if (chargerSyncEnabled) {
+                                ChargerSyncScheduler.schedule(
+                                    context = context,
+                                    targetHour = selectedHour,
+                                    targetMinute = selectedMinute
+                                )
+                            }
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showChargerSyncTimePicker = false }) {
+                    Text("Cancel")
+                }
+            },
+            modeToggleButton = {
+                if (supportsScrollMode) {
+                    TimePickerDialogDefaults.ScrollDisplayModeToggle(
+                        onDisplayModeChange = {
+                            displayMode = if (displayMode == TimePickerDisplayMode.Scroll) {
+                                TimePickerDisplayMode.Input
+                            } else {
+                                TimePickerDisplayMode.Scroll
+                            }
+                        },
+                        displayMode = displayMode
+                    )
+                }
+            }
+        ) {
+            Text(
+                text = "Wall Connector Sync Time",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            if (displayMode == TimePickerDisplayMode.Scroll && supportsScrollMode) {
+                TimeScroll(
+                    state = timePickerState,
+                    shapes = TimePickerDefaults.shapes()
+                )
+            } else {
+                TimeInput(
+                    state = timePickerState,
+                    shapes = TimePickerDefaults.shapes()
+                )
+            }
+        }
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -762,7 +864,7 @@ fun SettingsTab(
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                "Poll odometer & Wall Connector charging at 11:00 PM",
+                                "Poll vehicle odometer at 11:00 PM",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -981,7 +1083,9 @@ fun SettingsTab(
                                     "Last sync $chargerSyncTimeText • $lastChargerSyncStatus"
                                 chargerSyncTimeText != null ->
                                     "Last sync $chargerSyncTimeText"
-                                else -> "Polls automatically at 11:00 PM & on manual sync"
+                                chargerSyncEnabled ->
+                                    "Scheduled automatically at $formattedChargerSyncTime daily"
+                                else -> "Auto-sync paused • Manual sync only"
                             }
                             Text(
                                 text = chargerStatusText,
@@ -1039,6 +1143,70 @@ fun SettingsTab(
                                 }
                             }
                         }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                "Daily Charging Auto-Sync",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                            FilterChip(
+                                selected = chargerSyncEnabled,
+                                onClick = { showChargerSyncTimePicker = true },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Schedule,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        if (chargerSyncEnabled) {
+                                            "Daily at $formattedChargerSyncTime"
+                                        } else {
+                                            "Paused ($formattedChargerSyncTime)"
+                                        }
+                                    )
+                                },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = "Edit Wall Connector sync time",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
+                        }
+                        Switch(
+                            checked = chargerSyncEnabled,
+                            modifier = Modifier.semantics { contentDescription = "Daily Charging Auto-Sync" },
+                            onCheckedChange = { isChecked ->
+                                coroutineScope.launch {
+                                    preferencesManager.setChargerSyncEnabled(isChecked)
+                                    if (isChecked) {
+                                        ChargerSyncScheduler.schedule(
+                                            context = context,
+                                            targetHour = chargerSyncHour,
+                                            targetMinute = chargerSyncMinute
+                                        )
+                                    } else {
+                                        ChargerSyncScheduler.cancel(context)
+                                    }
+                                }
+                            }
+                        )
                     }
                 }
             }

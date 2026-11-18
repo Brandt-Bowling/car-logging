@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.migration.FlutterDataMigrator
+import com.example.car_logger.services.ChargerSyncScheduler
 import com.example.car_logger.services.DailyPollScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +40,13 @@ class CarLoggerApplication : Application() {
             try {
                 if (preferencesManager.getDailyPollEnabled()) {
                     DailyPollScheduler.schedule(this@CarLoggerApplication)
+                }
+                if (preferencesManager.getChargerSyncEnabled()) {
+                    ChargerSyncScheduler.schedule(
+                        context = this@CarLoggerApplication,
+                        targetHour = preferencesManager.getChargerSyncHour(),
+                        targetMinute = preferencesManager.getChargerSyncMinute()
+                    )
                 }
             } catch (e: Exception) {
                 Log.e("CarLoggerApplication", "Scheduler init error: ${e.message}", e)

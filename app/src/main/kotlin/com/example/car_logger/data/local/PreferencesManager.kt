@@ -51,6 +51,9 @@ class PreferencesManager internal constructor(private val dataStore: DataStore<P
         val KEY_LAST_DAILY_POLL_STATUS = stringPreferencesKey("telemetry_last_daily_poll_status")
         val KEY_WALL_CONNECTOR_GEN3_CAR_ID = stringPreferencesKey("wall_connector_gen3_car_id")
         val KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID = stringPreferencesKey("wall_connector_universal_car_id")
+        val KEY_CHARGER_SYNC_ENABLED = booleanPreferencesKey("telemetry_charger_sync_enabled")
+        val KEY_CHARGER_SYNC_HOUR = intPreferencesKey("telemetry_charger_sync_hour")
+        val KEY_CHARGER_SYNC_MINUTE = intPreferencesKey("telemetry_charger_sync_minute")
         val KEY_LAST_CHARGER_SYNC_TIME = longPreferencesKey("telemetry_last_charger_sync_time")
         val KEY_LAST_CHARGER_SYNC_STATUS = stringPreferencesKey("telemetry_last_charger_sync_status")
 
@@ -76,6 +79,8 @@ class PreferencesManager internal constructor(private val dataStore: DataStore<P
 
         const val DEFAULT_GARAGE_NAME = "My Garage"
         const val DEFAULT_COOLDOWN_HOURS = 72
+        const val DEFAULT_CHARGER_SYNC_HOUR = 8
+        const val DEFAULT_CHARGER_SYNC_MINUTE = 0
         const val DEFAULT_GAS_PRICE = 3.65f
         const val DEFAULT_BASELINE_MPG = 28.0f
         const val DEFAULT_ELECTRICITY_RATE = 0.16f
@@ -256,6 +261,18 @@ class PreferencesManager internal constructor(private val dataStore: DataStore<P
         prefs[KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID]
     }
 
+    val chargerSyncEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_CHARGER_SYNC_ENABLED] ?: true
+    }
+
+    val chargerSyncHourFlow: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_CHARGER_SYNC_HOUR] ?: DEFAULT_CHARGER_SYNC_HOUR).coerceIn(0, 23)
+    }
+
+    val chargerSyncMinuteFlow: Flow<Int> = dataStore.data.map { prefs ->
+        (prefs[KEY_CHARGER_SYNC_MINUTE] ?: DEFAULT_CHARGER_SYNC_MINUTE).coerceIn(0, 59)
+    }
+
     val lastChargerSyncTimeFlow: Flow<Long> = dataStore.data.map { prefs ->
         prefs[KEY_LAST_CHARGER_SYNC_TIME] ?: 0L
     }
@@ -322,6 +339,25 @@ class PreferencesManager internal constructor(private val dataStore: DataStore<P
             } else {
                 prefs[KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID] = universalCarId.trim()
             }
+        }
+    }
+
+    suspend fun getChargerSyncEnabled(): Boolean = chargerSyncEnabledFlow.first()
+
+    suspend fun getChargerSyncHour(): Int = chargerSyncHourFlow.first()
+
+    suspend fun getChargerSyncMinute(): Int = chargerSyncMinuteFlow.first()
+
+    suspend fun setChargerSyncEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_CHARGER_SYNC_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setChargerSyncTime(hour: Int, minute: Int) {
+        dataStore.edit { prefs ->
+            prefs[KEY_CHARGER_SYNC_HOUR] = hour.coerceIn(0, 23)
+            prefs[KEY_CHARGER_SYNC_MINUTE] = minute.coerceIn(0, 59)
         }
     }
 
