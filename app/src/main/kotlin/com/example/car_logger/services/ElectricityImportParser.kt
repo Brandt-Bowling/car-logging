@@ -10,6 +10,14 @@ import java.util.Locale
 import java.util.regex.Pattern
 import kotlin.math.roundToLong
 
+data class ParsedBillLineItem(
+    val label: String,
+    val category: String,
+    val kwh: Double? = null,
+    val ratePerKwh: Double? = null,
+    val amount: Double? = null
+)
+
 data class ParsedUtilityBillDraft(
     val providerName: String,
     val startDateIso: String,
@@ -19,7 +27,14 @@ data class ParsedUtilityBillDraft(
     val fixedCharges: Double,
     val source: String = "manual",
     val fileName: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val isTouPlan: Boolean = false,
+    val offPeakSupplyRate: Double? = null,
+    val onPeakSupplyRate: Double? = null,
+    val distributionRatePerKwh: Double? = null,
+    val offPeakKwh: Double? = null,
+    val onPeakKwh: Double? = null,
+    val breakdownItems: List<ParsedBillLineItem> = emptyList()
 )
 
 data class ParsedChargingSessionDraft(
@@ -79,6 +94,15 @@ object ElectricityImportParser {
         if (totalKwh <= 0.0) return 0.0
         val volumetric = (totalAmount - fixedCharges).coerceAtLeast(0.0)
         return volumetric / totalKwh
+    }
+
+    fun calculateTouOffPeakRate(
+        offPeakSupplyRate: Double?,
+        distributionRatePerKwh: Double?
+    ): Double? {
+        val supply = offPeakSupplyRate?.takeIf { it > 0.0 } ?: return null
+        val distribution = (distributionRatePerKwh ?: 0.0).coerceAtLeast(0.0)
+        return supply + distribution
     }
 
     fun buildFingerprint(

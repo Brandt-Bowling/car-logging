@@ -72,6 +72,7 @@ class PreferencesManager internal constructor(private val dataStore: DataStore<P
         val KEY_GAS_PRICE = floatPreferencesKey("comparison_gas_price")
         val KEY_BASELINE_MPG = floatPreferencesKey("comparison_baseline_mpg")
         val KEY_DEFAULT_ELECTRICITY_RATE = floatPreferencesKey("default_electricity_rate")
+        val KEY_USE_CUSTOM_ELECTRICITY_RATE = booleanPreferencesKey("use_custom_electricity_rate")
 
         const val DEFAULT_GARAGE_NAME = "My Garage"
         const val DEFAULT_COOLDOWN_HOURS = 72
@@ -90,6 +91,10 @@ class PreferencesManager internal constructor(private val dataStore: DataStore<P
 
     val defaultElectricityRateFlow: Flow<Float> = dataStore.data.map { prefs ->
         prefs[KEY_DEFAULT_ELECTRICITY_RATE] ?: DEFAULT_ELECTRICITY_RATE
+    }
+
+    val useCustomElectricityRateFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_USE_CUSTOM_ELECTRICITY_RATE] ?: false
     }
 
     val garageNameFlow: Flow<String> = dataStore.data.map { prefs ->
@@ -475,6 +480,19 @@ class PreferencesManager internal constructor(private val dataStore: DataStore<P
     suspend fun setDefaultElectricityRate(rate: Float) {
         dataStore.edit { prefs ->
             prefs[KEY_DEFAULT_ELECTRICITY_RATE] = rate
+        }
+    }
+
+    suspend fun setCustomElectricityRate(rate: Float) {
+        dataStore.edit { prefs ->
+            prefs[KEY_DEFAULT_ELECTRICITY_RATE] = rate
+            prefs[KEY_USE_CUSTOM_ELECTRICITY_RATE] = true
+        }
+    }
+
+    suspend fun setUseCustomElectricityRate(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_USE_CUSTOM_ELECTRICITY_RATE] = enabled
         }
     }
 }

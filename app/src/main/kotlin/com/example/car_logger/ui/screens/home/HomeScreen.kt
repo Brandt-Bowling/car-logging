@@ -335,6 +335,7 @@ fun HomeScreen(
                                 onDeleteUtilityBill = { viewModel.deleteUtilityBill(it) },
                                 onDeleteChargingSession = { viewModel.deleteChargingSession(it) },
                                 onUpdateDefaultElectricityRate = { viewModel.updateDefaultElectricityRate(it) },
+                                onUseSavedBillRate = { viewModel.useSavedBillRate() },
                                 onSyncWallConnectors = { viewModel.syncWallConnectorCharging() }
                             )
                         }

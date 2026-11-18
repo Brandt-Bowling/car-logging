@@ -58,6 +58,7 @@ data class ElectricityCostData(
     val homeEffectiveRate: Double = 0.16,
     val homeRateSourceLabel: String = "Default rate",
     val homeIsEstimatedRate: Boolean = true,
+    val homeIsCustomRate: Boolean = false,
     val homeHasMatchedBill: Boolean = false,
     val homeCar1Cost: Double = 0.0,
     val homeCar1Kwh: Double = 0.0,
@@ -118,6 +119,7 @@ data class InsightsUiState(
     val periodOffset: Int = 0,
     val electricityCost: ElectricityCostData = ElectricityCostData(),
     val defaultElectricityRate: Float = 0.16f,
+    val useCustomElectricityRate: Boolean = false,
     val utilityBills: List<UtilityBillEntity> = emptyList(),
     val chargingSessions: List<ChargingSessionEntity> = emptyList()
 )
