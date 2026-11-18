@@ -34,7 +34,8 @@ object InsightsCalculationEngine {
         nowMs: Long = System.currentTimeMillis(),
         utilityBills: List<UtilityBillEntity> = emptyList(),
         chargingSessions: List<ChargingSessionEntity> = emptyList(),
-        defaultElectricityRate: Float = 0.16f
+        defaultElectricityRate: Float = 0.16f,
+        useCustomElectricityRate: Boolean = false
     ): InsightsUiState {
         val activeCars = cars.filter { !it.isArchived }.ifEmpty { cars }
         val sortedBills = utilityBills.sortedByDescending { it.endDateMs }
@@ -54,7 +55,8 @@ object InsightsCalculationEngine {
                 intervals = intervals,
                 utilityBills = utilityBills,
                 chargingSessions = chargingSessions,
-                defaultElectricityRate = defaultElectricityRate
+                defaultElectricityRate = defaultElectricityRate,
+                useCustomElectricityRate = useCustomElectricityRate
             )
             val earliestSessionMs = chargingSessions.minOfOrNull { it.startDateMs }
             val hasElectricityHistory = chargingSessions.isNotEmpty() || utilityBills.isNotEmpty()
@@ -74,6 +76,7 @@ object InsightsCalculationEngine {
                 periodOffset = periodOffset,
                 electricityCost = emptyTelemetryResult,
                 defaultElectricityRate = defaultElectricityRate,
+                useCustomElectricityRate = useCustomElectricityRate,
                 utilityBills = sortedBills,
                 chargingSessions = sortedSessions
             )
@@ -148,7 +151,8 @@ object InsightsCalculationEngine {
                 intervals = intervals,
                 utilityBills = utilityBills,
                 chargingSessions = chargingSessions,
-                defaultElectricityRate = defaultElectricityRate
+                defaultElectricityRate = defaultElectricityRate,
+                useCustomElectricityRate = useCustomElectricityRate
             )
             val earliestSessionMs = chargingSessions.minOfOrNull { it.startDateMs }
             val hasElectricityHistory = chargingSessions.isNotEmpty() || utilityBills.isNotEmpty()
@@ -168,6 +172,7 @@ object InsightsCalculationEngine {
                 periodOffset = periodOffset,
                 electricityCost = elecResult,
                 defaultElectricityRate = defaultElectricityRate,
+                useCustomElectricityRate = useCustomElectricityRate,
                 utilityBills = sortedBills,
                 chargingSessions = sortedSessions
             )
@@ -211,6 +216,7 @@ object InsightsCalculationEngine {
                 canGoNext = periodOffset < 0,
                 periodOffset = periodOffset,
                 defaultElectricityRate = defaultElectricityRate,
+                useCustomElectricityRate = useCustomElectricityRate,
                 utilityBills = sortedBills,
                 chargingSessions = sortedSessions
             )
@@ -311,6 +317,7 @@ object InsightsCalculationEngine {
             utilityBills = utilityBills,
             chargingSessions = chargingSessions,
             defaultElectricityRate = defaultElectricityRate,
+            useCustomElectricityRate = useCustomElectricityRate,
             evMilesByCarId = allEvMilesByCarId
         )
 
@@ -386,6 +393,7 @@ object InsightsCalculationEngine {
             periodOffset = periodOffset,
             electricityCost = electricityCost,
             defaultElectricityRate = defaultElectricityRate,
+            useCustomElectricityRate = useCustomElectricityRate,
             utilityBills = sortedBills,
             chargingSessions = sortedSessions
         )
@@ -432,8 +440,18 @@ object InsightsCalculationEngine {
     private fun resolveRateForTimestamp(
         targetMs: Long,
         utilityBills: List<UtilityBillEntity>,
-        defaultElectricityRate: Float
+        defaultElectricityRate: Float,
+        useCustomElectricityRate: Boolean = false
     ): ResolvedBillRate {
+        if (useCustomElectricityRate) {
+            return ResolvedBillRate(
+                rate = defaultElectricityRate.toDouble().coerceAtLeast(0.0),
+                isEstimated = false,
+                matchedInRange = false,
+                bill = null
+            )
+        }
+
         val targetDay = Instant.ofEpochMilli(targetMs).atZone(zoneId).toLocalDate()
         val matchingBills = utilityBills.filter { bill ->
             val billStart = Instant.ofEpochMilli(bill.startDateMs).atZone(zoneId).toLocalDate()
@@ -488,6 +506,7 @@ object InsightsCalculationEngine {
         utilityBills: List<UtilityBillEntity>,
         chargingSessions: List<ChargingSessionEntity>,
         defaultElectricityRate: Float,
+        useCustomElectricityRate: Boolean = false,
         evMilesByCarId: Map<String, Int> = emptyMap()
     ): ElectricityCostData {
         val latestBill = utilityBills.maxWithOrNull(compareBy<UtilityBillEntity> { it.endDateMs }.thenBy { it.uploadedAtMs })
@@ -500,8 +519,14 @@ object InsightsCalculationEngine {
         if (intervals.isEmpty()) {
             val defaultRateVal = defaultElectricityRate.toDouble().coerceAtLeast(0.0)
             return ElectricityCostData(
-                homeEffectiveRate = latestBill?.effectiveRate ?: defaultRateVal,
-                homeRateSourceLabel = latestBillLabel ?: "Default est. ($${String.format(Locale.US, "%.2f", defaultRateVal)}/kWh)",
+                homeEffectiveRate = if (useCustomElectricityRate) defaultRateVal else (latestBill?.effectiveRate ?: defaultRateVal),
+                homeRateSourceLabel = if (useCustomElectricityRate) {
+                    "Custom rate"
+                } else {
+                    latestBillLabel ?: "Default est. ($${String.format(Locale.US, "%.2f", defaultRateVal)}/kWh)"
+                },
+                homeIsEstimatedRate = !useCustomElectricityRate && latestBill == null,
+                homeIsCustomRate = useCustomElectricityRate,
                 latestBillEffectiveRate = latestBill?.effectiveRate,
                 latestBillLabel = latestBillLabel
             )
@@ -595,7 +620,12 @@ object InsightsCalculationEngine {
                         rawPeriodCost += dailyCost
                         publicSlices.add(EnergySlice(dailyKwh, dailyCost, session.carId, venue, null))
                     } else {
-                        val resolved = resolveRateForTimestamp(dayMidMs, utilityBills, defaultElectricityRate)
+                        val resolved = resolveRateForTimestamp(
+                            targetMs = dayMidMs,
+                            utilityBills = utilityBills,
+                            defaultElectricityRate = defaultElectricityRate,
+                            useCustomElectricityRate = useCustomElectricityRate
+                        )
                         val dayCost = dailyKwh * resolved.rate
                         rawPeriodCost += dayCost
                         if (resolved.isEstimated) anyDayEstimated = true
@@ -658,7 +688,12 @@ object InsightsCalculationEngine {
                     homeSessionCountAllCars++
                     if (session.carId == null || session.carId == car1?.id) homeSessionCountCar1++
                     if (session.carId == null || session.carId == car2?.id) homeSessionCountCar2++
-                    val resolved = resolveRateForTimestamp(midMs, utilityBills, defaultElectricityRate)
+                    val resolved = resolveRateForTimestamp(
+                        targetMs = midMs,
+                        utilityBills = utilityBills,
+                        defaultElectricityRate = defaultElectricityRate,
+                        useCustomElectricityRate = useCustomElectricityRate
+                    )
                     val rawCost = session.kwh * resolved.rate
                     homeSlices.add(EnergySlice(session.kwh, rawCost, session.carId, venue, resolved))
                     val attribution = attributionForSelectedCar(session.carId)
@@ -772,20 +807,40 @@ object InsightsCalculationEngine {
         }
         val matchedBills = relevantHomeSlices.mapNotNull { it.resolvedRate?.takeIf { r -> r.matchedInRange }?.bill }.distinctBy { it.id }
         val anyUnmatchedInPeriod = relevantHomeSlices.any { it.resolvedRate?.isEstimated == true }
-        val periodMidRate = resolveRateForTimestamp(windowMidMs, utilityBills, defaultElectricityRate)
+        val periodMidRate = resolveRateForTimestamp(
+            targetMs = windowMidMs,
+            utilityBills = utilityBills,
+            defaultElectricityRate = defaultElectricityRate,
+            useCustomElectricityRate = useCustomElectricityRate
+        )
 
-        val displayHomeRate = if (homeFilteredKwh > 0.0) {
+        val displayHomeRate = if (useCustomElectricityRate) {
+            defaultElectricityRate.toDouble().coerceAtLeast(0.0)
+        } else if (homeFilteredKwh > 0.0) {
             homeFilteredCost / homeFilteredKwh
         } else {
             periodMidRate.rate
         }
-        val homeIsEstimated = if (relevantHomeSlices.isNotEmpty()) anyUnmatchedInPeriod else periodMidRate.isEstimated
-        val homeHasMatchedBill = if (relevantHomeSlices.isNotEmpty()) matchedBills.isNotEmpty() else periodMidRate.matchedInRange
+        val homeIsEstimated = if (useCustomElectricityRate) {
+            false
+        } else if (relevantHomeSlices.isNotEmpty()) {
+            anyUnmatchedInPeriod
+        } else {
+            periodMidRate.isEstimated
+        }
+        val homeHasMatchedBill = if (useCustomElectricityRate) {
+            false
+        } else if (relevantHomeSlices.isNotEmpty()) {
+            matchedBills.isNotEmpty()
+        } else {
+            periodMidRate.matchedInRange
+        }
         val homeRateSourceLabel = buildHomeRateSourceLabel(
             matchedBills = matchedBills,
             anyEstimated = homeIsEstimated,
             periodFallbackRate = periodMidRate,
-            defaultElectricityRate = defaultElectricityRate
+            defaultElectricityRate = defaultElectricityRate,
+            useCustomElectricityRate = useCustomElectricityRate
         )
 
         val homeAllocatedKwhSum = homeAttr.car1Kwh + homeAttr.car2Kwh
@@ -822,6 +877,7 @@ object InsightsCalculationEngine {
             homeEffectiveRate = displayHomeRate,
             homeRateSourceLabel = homeRateSourceLabel,
             homeIsEstimatedRate = homeIsEstimated,
+            homeIsCustomRate = useCustomElectricityRate,
             homeHasMatchedBill = homeHasMatchedBill,
             homeCar1Cost = homeAttr.car1Cost,
             homeCar1Kwh = homeAttr.car1Kwh,
@@ -858,8 +914,12 @@ object InsightsCalculationEngine {
         matchedBills: List<UtilityBillEntity>,
         anyEstimated: Boolean,
         periodFallbackRate: ResolvedBillRate,
-        defaultElectricityRate: Float
+        defaultElectricityRate: Float,
+        useCustomElectricityRate: Boolean = false
     ): String {
+        if (useCustomElectricityRate) {
+            return "Custom rate"
+        }
         if (matchedBills.size == 1 && !anyEstimated) {
             val bill = matchedBills.first()
             val provider = bill.providerName.ifBlank { "Electric bill" }

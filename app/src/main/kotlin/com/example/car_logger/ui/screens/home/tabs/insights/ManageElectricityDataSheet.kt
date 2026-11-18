@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.ElectricBolt
@@ -47,7 +47,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,12 +80,13 @@ fun ManageElectricityDataSheet(
     onOpenAddCharger: () -> Unit,
     onDismiss: () -> Unit,
     initialShowSessionsTab: Boolean = false,
+    useCustomRate: Boolean = false,
+    onUseSavedBillRate: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-    val configuration = LocalConfiguration.current
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val maxSheetHeight = (configuration.screenHeightDp.dp - statusBarTop - 8.dp).coerceAtLeast(320.dp)
+    val topClearance = maxOf(statusBarTop + 8.dp, 72.dp)
     var selectedTab by remember(initialShowSessionsTab) {
         mutableStateOf(
             if (initialShowSessionsTab || (utilityBills.isEmpty() && chargingSessions.isNotEmpty())) {
@@ -113,7 +113,7 @@ fun ManageElectricityDataSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier.heightIn(max = maxSheetHeight)
+        modifier = modifier.padding(top = topClearance)
     ) {
         Column(
             modifier = Modifier
@@ -131,7 +131,7 @@ fun ManageElectricityDataSheet(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            // Default fallback electric rate editor
+            // Custom / fallback electric rate editor
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -142,12 +142,16 @@ fun ManageElectricityDataSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Default Fallback Rate",
+                        text = if (useCustomRate) "Custom Electric Rate (Active)" else "Home Electric Rate",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Used automatically for home charging when no electric bill is uploaded yet.",
+                        text = when {
+                            useCustomRate -> "Overrides saved electric bills as your source of truth. Saving a new bill updates this rate automatically."
+                            utilityBills.isNotEmpty() -> "Used when no bill matches a date. Applying a rate here switches to your custom rate."
+                            else -> "Used automatically for home charging when no electric bill is uploaded yet."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -180,6 +184,16 @@ fun ManageElectricityDataSheet(
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Text(if (rateSavedFeedback) "Saved" else "Apply")
+                        }
+                    }
+                    if (useCustomRate && utilityBills.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
+                                rateSavedFeedback = false
+                                onUseSavedBillRate()
+                            }
+                        ) {
+                            Text("Use saved electric bill rate instead")
                         }
                     }
                 }
@@ -299,6 +313,21 @@ fun ManageElectricityDataSheet(
                                     }
                                 }
                             }
+                        }
+                        OutlinedButton(
+                            onClick = onOpenAddBill,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .expressiveBounceClick()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Add Electric Bill")
                         }
                     }
                 }

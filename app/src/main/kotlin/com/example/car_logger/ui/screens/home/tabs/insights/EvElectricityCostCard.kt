@@ -9,9 +9,12 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -22,12 +25,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
-import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.DirectionsCar
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ElectricBolt
 import androidx.compose.material.icons.rounded.EvStation
 import androidx.compose.material.icons.rounded.Home
@@ -42,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,9 +57,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,14 +88,11 @@ fun EvElectricityCostCard(
     isParsingFile: Boolean,
     billCount: Int,
     sessionCount: Int,
-    onUploadUtilityBill: () -> Unit,
     onUploadChargerUsage: () -> Unit,
     onOpenManualChargerSheet: () -> Unit,
     onOpenManualBillSheet: () -> Unit,
     onOpenManageSheet: () -> Unit,
-    lastUploadCount: Int = 0,
-    onUndoLastChargerUpload: () -> Unit = {},
-    onUndoAndRetagLastChargerUpload: () -> Unit = {},
+    onSaveCustomRate: (Float) -> Unit = {},
     onSyncWallConnectors: () -> Unit = {},
     onOpenPeriodLogs: (ChargingVenue) -> Unit = {},
     modifier: Modifier = Modifier
@@ -190,7 +201,8 @@ fun EvElectricityCostCard(
                     EmptyVenueState(
                         isHome = isHome,
                         data = data,
-                        onOpenManualBillSheet = onOpenManualBillSheet
+                        onOpenManualBillSheet = onOpenManualBillSheet,
+                        onSaveCustomRate = onSaveCustomRate
                     )
                 } else {
                     PopulatedVenueContent(
@@ -202,7 +214,7 @@ fun EvElectricityCostCard(
                         car2Id = car2Id,
                         car2Name = car2Name,
                         onOpenManageSheet = onOpenManageSheet,
-                        onOpenManualBillSheet = onOpenManualBillSheet,
+                        onSaveCustomRate = onSaveCustomRate,
                         onOpenPeriodLogs = {
                             onOpenPeriodLogs(if (isHome) ChargingVenue.HOME else ChargingVenue.PUBLIC)
                         }
@@ -210,17 +222,11 @@ fun EvElectricityCostCard(
                 }
             }
 
-            // M3 Expressive Split Button (+ Add Charger Usage | Dropdown)
+            // M3 Expressive Split Button (+ Add Charging | Dropdown)
             ExpressiveChargingSplitButton(
                 onPrimaryAction = onOpenManualChargerSheet,
-                onUploadUtilityBill = onUploadUtilityBill,
                 onUploadChargerUsage = onUploadChargerUsage,
-                onOpenManualChargerSheet = onOpenManualChargerSheet,
                 onOpenManualBillSheet = onOpenManualBillSheet,
-                onOpenManageSheet = onOpenManageSheet,
-                lastUploadCount = lastUploadCount,
-                onUndoLastChargerUpload = onUndoLastChargerUpload,
-                onUndoAndRetagLastChargerUpload = onUndoAndRetagLastChargerUpload,
                 onSyncWallConnectors = onSyncWallConnectors
             )
         }
@@ -329,7 +335,8 @@ private fun VenueConnectedButtonGroup(
 private fun EmptyVenueState(
     isHome: Boolean,
     data: ElectricityCostData,
-    onOpenManualBillSheet: () -> Unit
+    onOpenManualBillSheet: () -> Unit,
+    onSaveCustomRate: (Float) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(
@@ -363,7 +370,7 @@ private fun EmptyVenueState(
                 }
                 Text(
                     text = when {
-                        !data.hasAnyData -> "Upload your electric bill and home charger log (or enter a monthly total) to see your real electric rate, mi/kWh, and how much you've saved vs. gas."
+                        !data.hasAnyData -> "Upload your electric bill, set your custom rate below, or log your home charger usage to see mi/kWh and savings vs. gas."
                         isHome -> "Upload a charger export CSV, PDF, screenshot, or enter your monthly kWh total for this period."
                         else -> "Upload Supercharger, Electrify America, or EVgo receipts to keep fast charging separate from your home electric bill."
                     },
@@ -378,9 +385,11 @@ private fun EmptyVenueState(
                 rateValue = data.homeEffectiveRate,
                 rateSourceLabel = data.homeRateSourceLabel,
                 isEstimated = data.homeIsEstimatedRate,
+                isEditable = true,
                 leftOverline = "ELECTRIC RATE",
                 rightOverline = "RATE SOURCE",
-                onLeftClick = onOpenManualBillSheet,
+                onSaveCustomRate = onSaveCustomRate,
+                onLeftClick = {},
                 onRightClick = onOpenManualBillSheet
             )
         }
@@ -397,7 +406,7 @@ private fun PopulatedVenueContent(
     car2Id: String?,
     car2Name: String,
     onOpenManageSheet: () -> Unit,
-    onOpenManualBillSheet: () -> Unit,
+    onSaveCustomRate: (Float) -> Unit,
     onOpenPeriodLogs: () -> Unit
 ) {
     val totalCost = if (isHome) data.homeTotalCost else data.publicTotalCost
@@ -487,14 +496,16 @@ private fun PopulatedVenueContent(
             }
         }
 
-        // 16.dp Tonal Source & Rate Parameter Chips
+        // 16.dp Tonal Source & Rate Parameter Chips (equal height)
         RateChipsRow(
             rateValue = if (isHome) data.homeEffectiveRate else data.publicEffectiveRate,
             rateSourceLabel = if (isHome) data.homeRateSourceLabel else data.publicRateSourceLabel,
             isEstimated = isHome && data.homeIsEstimatedRate,
+            isEditable = isHome,
             leftOverline = if (isHome) "ELECTRIC RATE" else "AVG PAID RATE",
             rightOverline = if (isHome) "RATE SOURCE" else "RECEIPTS",
-            onLeftClick = if (isHome) onOpenManualBillSheet else onOpenManageSheet,
+            onSaveCustomRate = onSaveCustomRate,
+            onLeftClick = onOpenManageSheet,
             onRightClick = onOpenManageSheet
         )
 
@@ -586,52 +597,196 @@ private fun RateChipsRow(
     rateValue: Double,
     rateSourceLabel: String,
     isEstimated: Boolean,
+    isEditable: Boolean,
     leftOverline: String,
     rightOverline: String,
+    onSaveCustomRate: (Float) -> Unit,
     onLeftClick: () -> Unit,
     onRightClick: () -> Unit
 ) {
+    var isEditing by remember(isEditable) { mutableStateOf(false) }
+    var rateDraft by remember(rateValue) {
+        mutableStateOf(String.format(Locale.US, "%.3f", rateValue))
+    }
+    var hasInputError by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(isEditing) {
+        if (isEditing) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+
+    fun commitRate() {
+        val parsed = rateDraft.trim().toFloatOrNull()
+        if (parsed != null && parsed >= 0f) {
+            hasInputError = false
+            isEditing = false
+            keyboardController?.hide()
+            onSaveCustomRate(parsed)
+        } else {
+            hasInputError = true
+        }
+    }
+
+    fun cancelEdit() {
+        hasInputError = false
+        rateDraft = String.format(Locale.US, "%.3f", rateValue)
+        isEditing = false
+        keyboardController?.hide()
+    }
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Max),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Surface(
             modifier = Modifier
                 .weight(1f)
-                .expressiveBounceClick { onLeftClick() },
+                .fillMaxHeight()
+                .then(
+                    if (isEditing) {
+                        Modifier
+                    } else {
+                        Modifier.expressiveBounceClick {
+                            if (isEditable) {
+                                rateDraft = String.format(Locale.US, "%.3f", rateValue)
+                                hasInputError = false
+                                isEditing = true
+                            } else {
+                                onLeftClick()
+                            }
+                        }
+                    }
+                ),
             shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh
+            color = if (isEditing) {
+                MaterialTheme.colorScheme.surfaceContainerHighest
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+            border = when {
+                isEditing && hasInputError -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.error)
+                isEditing -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                else -> null
+            }
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = leftOverline,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "$${String.format(Locale.US, "%.3f", rateValue)}/kWh",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = if (isEditing) "SET RATE ($/kWh)" else leftOverline,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isEditing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
-                    if (isEstimated) {
+                    if (isEditing) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Cancel editing rate",
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .clickable { cancelEdit() },
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else if (isEditable) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = "Edit electric rate",
+                            modifier = Modifier.size(13.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                if (isEditing) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "$",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        BasicTextField(
+                            value = rateDraft,
+                            onValueChange = {
+                                rateDraft = it
+                                hasInputError = false
+                            },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(onDone = { commitRate() }),
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester)
+                        )
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .expressiveBounceClick { commitRate() }
                         ) {
-                            Text(
-                                text = "Est.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = "Save electric rate",
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "$${String.format(Locale.US, "%.3f", rateValue)}/kWh",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (isEstimated) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest
+                            ) {
+                                Text(
+                                    text = "Est.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -641,12 +796,15 @@ private fun RateChipsRow(
         Surface(
             modifier = Modifier
                 .weight(1f)
+                .fillMaxHeight()
                 .expressiveBounceClick { onRightClick() },
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
@@ -711,14 +869,8 @@ private fun VehicleElectricitySubCard(
 @Composable
 private fun ExpressiveChargingSplitButton(
     onPrimaryAction: () -> Unit,
-    onUploadUtilityBill: () -> Unit,
     onUploadChargerUsage: () -> Unit,
-    onOpenManualChargerSheet: () -> Unit,
     onOpenManualBillSheet: () -> Unit,
-    onOpenManageSheet: () -> Unit,
-    lastUploadCount: Int = 0,
-    onUndoLastChargerUpload: () -> Unit = {},
-    onUndoAndRetagLastChargerUpload: () -> Unit = {},
     onSyncWallConnectors: () -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -770,7 +922,7 @@ private fun ExpressiveChargingSplitButton(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Add Charging or Bill",
+                        text = "Add Charging",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -796,7 +948,7 @@ private fun ExpressiveChargingSplitButton(
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Rounded.KeyboardArrowDown,
-                        contentDescription = "More upload and entry options",
+                        contentDescription = "More upload and sync options",
                         modifier = Modifier
                             .size(22.dp)
                             .graphicsLayer { rotationZ = chevronRotation }
@@ -819,65 +971,19 @@ private fun ExpressiveChargingSplitButton(
                 }
             )
             DropdownMenuItem(
-                text = { Text("Upload Electric Bill (PDF / Photo)") },
+                text = { Text("Add Electric Bill") },
                 leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null) },
-                onClick = {
-                    menuExpanded = false
-                    onUploadUtilityBill()
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("Upload Charger Log (CSV / PDF / Photo)") },
-                leadingIcon = { Icon(Icons.Rounded.UploadFile, contentDescription = null) },
-                onClick = {
-                    menuExpanded = false
-                    onUploadChargerUsage()
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("Enter Charger Usage Manually") },
-                leadingIcon = { Icon(Icons.Rounded.ElectricBolt, contentDescription = null) },
-                onClick = {
-                    menuExpanded = false
-                    onOpenManualChargerSheet()
-                }
-            )
-            DropdownMenuItem(
-                text = { Text("Enter Electric Bill Manually") },
-                leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null) },
                 onClick = {
                     menuExpanded = false
                     onOpenManualBillSheet()
                 }
             )
-            if (lastUploadCount > 0) {
-                DropdownMenuItem(
-                    text = {
-                        Text("Undo Last Charger Upload ($lastUploadCount ${if (lastUploadCount == 1) "log" else "logs"})")
-                    },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = null) },
-                    onClick = {
-                        menuExpanded = false
-                        onUndoLastChargerUpload()
-                    }
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text("Undo & Re-tag Last Upload ($lastUploadCount ${if (lastUploadCount == 1) "log" else "logs"})")
-                    },
-                    leadingIcon = { Icon(Icons.Rounded.DirectionsCar, contentDescription = null) },
-                    onClick = {
-                        menuExpanded = false
-                        onUndoAndRetagLastChargerUpload()
-                    }
-                )
-            }
             DropdownMenuItem(
-                text = { Text("Charging & Bills History") },
-                leadingIcon = { Icon(Icons.Rounded.Tune, contentDescription = null) },
+                text = { Text("Import Charger File") },
+                leadingIcon = { Icon(Icons.Rounded.UploadFile, contentDescription = null) },
                 onClick = {
                     menuExpanded = false
-                    onOpenManageSheet()
+                    onUploadChargerUsage()
                 }
             )
         }

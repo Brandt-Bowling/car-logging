@@ -102,6 +102,7 @@ fun InsightsTab(
     onDeleteUtilityBill: (String) -> Unit = {},
     onDeleteChargingSession: (String) -> Unit = {},
     onUpdateDefaultElectricityRate: (Float) -> Unit = {},
+    onUseSavedBillRate: () -> Unit = {},
     onSyncWallConnectors: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -287,14 +288,11 @@ fun InsightsTab(
                     isParsingFile = isParsingElectricityFile,
                     billCount = state.utilityBills.size,
                     sessionCount = state.chargingSessions.size,
-                    onUploadUtilityBill = launchBillPicker,
                     onUploadChargerUsage = launchChargerPicker,
                     onOpenManualChargerSheet = onOpenManualChargerUsageSheet,
                     onOpenManualBillSheet = onOpenManualUtilityBillSheet,
                     onOpenManageSheet = { showManageElectricitySheet = true },
-                    lastUploadCount = lastUploadBatch.size,
-                    onUndoLastChargerUpload = onUndoLastChargingUpload,
-                    onUndoAndRetagLastChargerUpload = onUndoAndRetagChargingUpload,
+                    onSaveCustomRate = onUpdateDefaultElectricityRate,
                     onSyncWallConnectors = onSyncWallConnectors,
                     onOpenPeriodLogs = { periodLogsVenue = it }
                 )
@@ -349,14 +347,11 @@ fun InsightsTab(
                     isParsingFile = isParsingElectricityFile,
                     billCount = state.utilityBills.size,
                     sessionCount = state.chargingSessions.size,
-                    onUploadUtilityBill = launchBillPicker,
                     onUploadChargerUsage = launchChargerPicker,
                     onOpenManualChargerSheet = onOpenManualChargerUsageSheet,
                     onOpenManualBillSheet = onOpenManualUtilityBillSheet,
                     onOpenManageSheet = { showManageElectricitySheet = true },
-                    lastUploadCount = lastUploadBatch.size,
-                    onUndoLastChargerUpload = onUndoLastChargingUpload,
-                    onUndoAndRetagLastChargerUpload = onUndoAndRetagChargingUpload,
+                    onSaveCustomRate = onUpdateDefaultElectricityRate,
                     onSyncWallConnectors = onSyncWallConnectors,
                     onOpenPeriodLogs = { periodLogsVenue = it }
                 )
@@ -483,7 +478,9 @@ fun InsightsTab(
                 showManageElectricitySheet = false
                 openManageSessionsDirectly = false
             },
-            initialShowSessionsTab = openManageSessionsDirectly
+            initialShowSessionsTab = openManageSessionsDirectly,
+            useCustomRate = state.useCustomElectricityRate,
+            onUseSavedBillRate = onUseSavedBillRate
         )
     }
 

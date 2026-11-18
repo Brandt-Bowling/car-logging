@@ -12,10 +12,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -81,6 +84,82 @@ class GeminiAiService(
                 }
                 else -> "Image generation failed: $rawErrorMsg"
             }
+        }
+
+        internal fun parseUtilityBillJsonResponse(
+            rawJson: String,
+            fileName: String
+        ): ParsedUtilityBillDraft {
+            val root = json.parseToJsonElement(rawJson).jsonObject
+            val fallback = ElectricityImportParser.fallbackBillDraftFromFilename(fileName)
+
+            val providerName = root["providerName"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                ?: fallback.providerName
+            val startDate = ElectricityImportParser.parseDateToLocalDate(
+                root["billingStartDate"]?.jsonPrimitive?.contentOrNull
+            )?.toString() ?: fallback.startDateIso
+            val endDate = ElectricityImportParser.parseDateToLocalDate(
+                root["billingEndDate"]?.jsonPrimitive?.contentOrNull
+            )?.toString() ?: fallback.endDateIso
+            val totalKwh = root["totalKwh"]?.jsonPrimitive?.doubleOrNull?.coerceAtLeast(0.0) ?: 0.0
+            val totalAmount = root["totalAmount"]?.jsonPrimitive?.doubleOrNull?.coerceAtLeast(0.0) ?: 0.0
+            val fixedCharges = root["fixedCharges"]?.jsonPrimitive?.doubleOrNull?.coerceAtLeast(0.0) ?: 0.0
+
+            val offPeakSupplyRate = (root["offPeakSupplyRate"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it > 0.0 }
+            val onPeakSupplyRate = (root["onPeakSupplyRate"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it > 0.0 }
+            val distributionRatePerKwh = (root["distributionRatePerKwh"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it >= 0.0 }
+            val offPeakKwh = (root["offPeakKwh"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it >= 0.0 }
+            val onPeakKwh = (root["onPeakKwh"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it >= 0.0 }
+            val isTouPlan = (root["isTouPlan"] as? JsonPrimitive)?.booleanOrNull
+                ?: (offPeakSupplyRate != null || onPeakSupplyRate != null)
+
+            val breakdownItems = (root["breakdownItems"] as? JsonArray)
+                ?.mapNotNull { element ->
+                    val obj = element as? JsonObject ?: return@mapNotNull null
+                    val label = (obj["label"] as? JsonPrimitive)?.contentOrNull?.trim()
+                        ?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                    val rawCategory = (obj["category"] as? JsonPrimitive)?.contentOrNull?.trim()
+                        ?.uppercase() ?: "TAX_OR_OTHER"
+                    val normalizedCategory = when (rawCategory) {
+                        "OFF_PEAK_SUPPLY", "ON_PEAK_SUPPLY", "DISTRIBUTION", "FIXED", "TAX_OR_OTHER" -> rawCategory
+                        else -> when {
+                            rawCategory.contains("OFF") && rawCategory.contains("SUPPLY") -> "OFF_PEAK_SUPPLY"
+                            rawCategory.contains("ON") && rawCategory.contains("SUPPLY") -> "ON_PEAK_SUPPLY"
+                            rawCategory.contains("DIST") || rawCategory.contains("DELIV") -> "DISTRIBUTION"
+                            rawCategory.contains("FIX") -> "FIXED"
+                            else -> "TAX_OR_OTHER"
+                        }
+                    }
+                    val itemKwh = (obj["kwh"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it >= 0.0 }
+                    val itemRate = (obj["ratePerKwh"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it >= 0.0 }
+                    val itemAmount = (obj["amount"] as? JsonPrimitive)?.doubleOrNull
+                    ParsedBillLineItem(
+                        label = label,
+                        category = normalizedCategory,
+                        kwh = itemKwh,
+                        ratePerKwh = itemRate,
+                        amount = itemAmount
+                    )
+                }
+                .orEmpty()
+
+            return ParsedUtilityBillDraft(
+                providerName = providerName,
+                startDateIso = startDate,
+                endDateIso = endDate,
+                totalKwh = totalKwh,
+                totalAmount = totalAmount,
+                fixedCharges = fixedCharges,
+                source = "gemini",
+                fileName = fileName,
+                isTouPlan = isTouPlan,
+                offPeakSupplyRate = offPeakSupplyRate,
+                onPeakSupplyRate = onPeakSupplyRate,
+                distributionRatePerKwh = distributionRatePerKwh,
+                offPeakKwh = offPeakKwh,
+                onPeakKwh = onPeakKwh,
+                breakdownItems = breakdownItems
+            )
         }
 
         fun parseFromFileName(fileName: String): ParsedReceiptResult {
@@ -380,13 +459,25 @@ class GeminiAiService(
         }
 
         val prompt = """
-            You are an expert utility bill analyzer. Analyze the attached residential electric utility bill (PDF or image) and extract the electricity usage and billing amounts as a JSON object:
-            1. providerName: Utility company name (e.g., "DTE Energy", "PG&E", "Con Edison").
+            You are an expert utility bill analyzer. Analyze the attached residential electric utility bill (PDF or image) and extract the electricity usage, billing amounts, Time-of-Use (TOU) rates, and supply vs. delivery/distribution charges as a JSON object:
+            1. providerName: Utility company name (e.g., "DTE Energy", "PG&E", "Consumers Energy", "Con Edison").
             2. billingStartDate: Billing period start date in YYYY-MM-DD format.
             3. billingEndDate: Billing period end date in YYYY-MM-DD format.
             4. totalKwh: Total billed electricity consumption in kWh as a number.
-            5. totalAmount: Total electric charges for this billing period in USD (excluding prior balance or late fees if shown) as a number.
-            6. fixedCharges: Total fixed monthly non-volumetric charges (such as customer charge, basic service fee, meter fee, connection fee) in USD as a number. Output 0.0 if none listed.
+            5. totalAmount: Total electric charges for this billing period in USD (excluding prior balance, late fees, or separate natural gas charges if combined bill) as a number.
+            6. fixedCharges: ONLY flat monthly non-volumetric charges that do NOT vary with kWh (such as customer charge, service availability fee, meter fee, connection fee) in USD as a number. Do NOT include per-kWh distribution/delivery charges here. Output 0.0 if none listed.
+            7. isTouPlan: true if the bill uses Time-of-Use (On-Peak / Off-Peak / Mid-Peak) energy or supply rates; false if it uses a flat or single rate.
+            8. offPeakSupplyRate: Off-peak per-kWh power supply / energy rate in USD/kWh as a number (include any per-kWh power supply cost recovery or fuel adjustment rider if itemized; null if not TOU or not listed).
+            9. onPeakSupplyRate: On-peak per-kWh power supply / energy rate in USD/kWh as a number (null if not TOU or not listed).
+            10. distributionRatePerKwh: Sum of ALL per-kWh volumetric distribution / delivery / transmission / energy waste reduction / volumetric surcharge rates in USD/kWh as a number. If the bill shows volumetric distribution/delivery dollars instead of a printed rate, divide volumetric distribution dollars by totalKwh. Output 0.0 if bundled into supply rate, or null if unknown.
+            11. offPeakKwh: Off-peak consumption in kWh as a number if listed, otherwise null.
+            12. onPeakKwh: On-peak consumption in kWh as a number if listed, otherwise null.
+            13. breakdownItems: An array of the itemized electric charges/credits shown on the bill so the user can see how the bill was broken down. Each item must have:
+                - label: Exact or concise line-item name from the bill (e.g., "Off-Peak Power Supply", "On-Peak Power Supply", "Power Supply Cost Recovery", "Distribution Charge", "Customer Charge", "State Sales Tax").
+                - category: One of "OFF_PEAK_SUPPLY", "ON_PEAK_SUPPLY", "DISTRIBUTION", "FIXED", or "TAX_OR_OTHER".
+                - kwh: Usage in kWh if volumetric, otherwise null.
+                - ratePerKwh: Rate in USD/kWh if printed or applicable, otherwise null.
+                - amount: Dollar total in USD for that line item as a number (negative if credit), otherwise null.
 
             Return ONLY a valid JSON object matching:
             {
@@ -395,37 +486,25 @@ class GeminiAiService(
               "billingEndDate": "YYYY-MM-DD",
               "totalKwh": 1250.0,
               "totalAmount": 195.40,
-              "fixedCharges": 12.50
+              "fixedCharges": 12.50,
+              "isTouPlan": true,
+              "offPeakSupplyRate": 0.082,
+              "onPeakSupplyRate": 0.185,
+              "distributionRatePerKwh": 0.068,
+              "offPeakKwh": 980.0,
+              "onPeakKwh": 270.0,
+              "breakdownItems": [
+                { "label": "Off-Peak Power Supply", "category": "OFF_PEAK_SUPPLY", "kwh": 980.0, "ratePerKwh": 0.082, "amount": 80.36 },
+                { "label": "On-Peak Power Supply", "category": "ON_PEAK_SUPPLY", "kwh": 270.0, "ratePerKwh": 0.185, "amount": 49.95 },
+                { "label": "Distribution Charge", "category": "DISTRIBUTION", "kwh": 1250.0, "ratePerKwh": 0.068, "amount": 85.00 },
+                { "label": "Customer Charge", "category": "FIXED", "kwh": null, "ratePerKwh": null, "amount": 12.50 }
+              ]
             }
         """.trimIndent()
 
         try {
             val rawJson = executeMultimodalJsonRequest(apiKey, prompt, mimeType, fileBytes)
-            val root = json.parseToJsonElement(rawJson).jsonObject
-            val fallback = ElectricityImportParser.fallbackBillDraftFromFilename(fileName)
-
-            val providerName = root["providerName"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                ?: fallback.providerName
-            val startDate = ElectricityImportParser.parseDateToLocalDate(
-                root["billingStartDate"]?.jsonPrimitive?.content
-            )?.toString() ?: fallback.startDateIso
-            val endDate = ElectricityImportParser.parseDateToLocalDate(
-                root["billingEndDate"]?.jsonPrimitive?.content
-            )?.toString() ?: fallback.endDateIso
-            val totalKwh = root["totalKwh"]?.jsonPrimitive?.doubleOrNull?.coerceAtLeast(0.0) ?: 0.0
-            val totalAmount = root["totalAmount"]?.jsonPrimitive?.doubleOrNull?.coerceAtLeast(0.0) ?: 0.0
-            val fixedCharges = root["fixedCharges"]?.jsonPrimitive?.doubleOrNull?.coerceAtLeast(0.0) ?: 0.0
-
-            return@withContext ParsedUtilityBillDraft(
-                providerName = providerName,
-                startDateIso = startDate,
-                endDateIso = endDate,
-                totalKwh = totalKwh,
-                totalAmount = totalAmount,
-                fixedCharges = fixedCharges,
-                source = "gemini",
-                fileName = fileName
-            )
+            return@withContext parseUtilityBillJsonResponse(rawJson, fileName)
         } catch (e: Exception) {
             Log.w(TAG, "Gemini utility bill parsing failed: ${e.message}")
             return@withContext ElectricityImportParser.fallbackBillDraftFromFilename(

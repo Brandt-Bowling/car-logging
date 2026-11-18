@@ -186,6 +186,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _showChargerUsageSheet = MutableStateFlow(false)
     val showChargerUsageSheet: StateFlow<Boolean> = _showChargerUsageSheet.asStateFlow()
 
+    private data class PricingPreferences(
+        val gasPrice: Float,
+        val baselineMpg: Float,
+        val defaultElectricityRate: Float,
+        val useCustomElectricityRate: Boolean
+    )
+
     val insightsUiState: StateFlow<InsightsUiState> = combine(
         cars,
         odometerLogDao.getAllLogs(),
@@ -194,21 +201,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             preferencesManager.gasPriceFlow,
             preferencesManager.baselineMpgFlow,
             preferencesManager.defaultElectricityRateFlow,
-            ::Triple
+            preferencesManager.useCustomElectricityRateFlow,
+            ::PricingPreferences
         ),
         combine(utilityBillDao.getAllBills(), chargingSessionDao.getAllSessions(), ::Pair)
-    ) { carList, logs, (gran, selectedCar, offset), (gasPrice, mpg, defaultElecRate), (bills, sessions) ->
+    ) { carList, logs, (gran, selectedCar, offset), pricing, (bills, sessions) ->
         InsightsCalculationEngine.computeUiState(
             cars = carList,
             allLogs = logs,
             granularity = gran,
             selectedCarId = selectedCar,
-            gasPrice = gasPrice,
-            baselineMpg = mpg,
+            gasPrice = pricing.gasPrice,
+            baselineMpg = pricing.baselineMpg,
             periodOffset = offset,
             utilityBills = bills,
             chargingSessions = sessions,
-            defaultElectricityRate = defaultElecRate
+            defaultElectricityRate = pricing.defaultElectricityRate,
+            useCustomElectricityRate = pricing.useCustomElectricityRate
         )
     }.stateIn(
         viewModelScope,
@@ -393,6 +402,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 )
             }
+            preferencesManager.setDefaultElectricityRate(effectiveRate.toFloat())
+            preferencesManager.setUseCustomElectricityRate(false)
             dismissUtilityBillSheet()
             _toastMessage.emit(
                 "Saved electric bill ($${String.format(Locale.US, "%.3f", effectiveRate)}/kWh)"
@@ -493,10 +504,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateDefaultElectricityRate(rate: Float) {
         viewModelScope.launch {
-            preferencesManager.setDefaultElectricityRate(rate)
+            preferencesManager.setCustomElectricityRate(rate)
             _toastMessage.emit(
-                "Default rate updated to $${String.format(Locale.US, "%.3f", rate)}/kWh"
+                "Electric rate updated to $${String.format(Locale.US, "%.3f", rate)}/kWh"
             )
+        }
+    }
+
+    fun useSavedBillRate() {
+        viewModelScope.launch {
+            preferencesManager.setUseCustomElectricityRate(false)
+            _toastMessage.emit("Switched back to saved electric bill rates")
         }
     }
 

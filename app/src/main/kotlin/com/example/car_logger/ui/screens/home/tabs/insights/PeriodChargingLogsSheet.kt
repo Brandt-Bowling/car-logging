@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -40,7 +39,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -78,9 +76,8 @@ fun PeriodChargingLogsSheet(
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-    val configuration = LocalConfiguration.current
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val maxSheetHeight = (configuration.screenHeightDp.dp - statusBarTop - 8.dp).coerceAtLeast(320.dp)
+    val topClearance = maxOf(statusBarTop + 8.dp, 72.dp)
     val isHome = venue == ChargingVenue.HOME
     val logs = if (isHome) data.homePeriodLogs else data.publicPeriodLogs
     val totalCost = if (isHome) data.homeTotalCost else data.publicTotalCost
@@ -112,7 +109,7 @@ fun PeriodChargingLogsSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier.heightIn(max = maxSheetHeight)
+        modifier = modifier.padding(top = topClearance)
     ) {
         Column(
             modifier = Modifier
