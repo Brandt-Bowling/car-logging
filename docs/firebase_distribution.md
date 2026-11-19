@@ -55,7 +55,7 @@ If you already built the release APK (`./gradlew assembleRelease`), you can skip
 An automated workflow is configured at `.github/workflows/firebase_app_distribution.yml`.
 
 ### How It Works:
-1. Every push to the `main` branch automatically triggers unit tests and an Android release build (`./gradlew testReleaseUnitTest assembleRelease`) and uploads it to Firebase App Distribution.
+1. Every push to the `main` branch automatically triggers unit tests and an Android release build (`./gradlew testDebugUnitTest assembleRelease`) and uploads it to Firebase App Distribution.
 2. The release build number (`versionCode`) strictly increments by 1 on every workflow run using `github.run_number` with an offset (`BUILD_OFFSET=86`) to maintain sequential numbering from existing releases.
 3. You can also manually trigger builds from the **Actions** tab in GitHub using the **Run workflow** button (which lets you input custom release notes).
 
