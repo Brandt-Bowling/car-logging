@@ -37,12 +37,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.car_logger.data.insights.InsightsTimeGranularity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.Tire
 import com.example.car_logger.ui.screens.vehicledetails.components.VehicleCostHistory
 import com.example.car_logger.ui.screens.vehicledetails.components.VehicleCostHistoryCard
 import com.example.car_logger.ui.screens.vehicledetails.components.VehicleHeroCard
+import com.example.car_logger.ui.screens.vehicledetails.components.VehicleInsightsBentoGrid
+import com.example.car_logger.ui.screens.vehicledetails.components.VehicleInsightsBentoState
 import com.example.car_logger.ui.screens.vehicledetails.components.VehicleTireHealthCard
 import com.example.car_logger.ui.theme.ExpressiveMotionTokens
 import com.example.car_logger.ui.theme.expressiveBounceClick
@@ -55,6 +58,9 @@ fun VehicleOverviewTab(
     records: List<MaintenanceRecord>,
     filteredRecords: List<MaintenanceRecord>,
     costHistory: VehicleCostHistory,
+    bentoState: VehicleInsightsBentoState,
+    bentoGranularity: InsightsTimeGranularity,
+    onSelectBentoGranularity: (InsightsTimeGranularity) -> Unit,
     activeTire: Tire?,
     searchQuery: String,
     selectedYear: Int?,
@@ -74,23 +80,36 @@ fun VehicleOverviewTab(
     val availableYears = remember(records) {
         records.mapNotNull { it.date.take(4).toIntOrNull() }.distinct().sortedDescending()
     }
+    val activePeriodMetrics = remember(bentoState, bentoGranularity) {
+        bentoState.metricsFor(bentoGranularity)
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 40.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Hero Vehicle Visual Card
+        // 1. Hero Vehicle Visual Card with Live Telemetry Ribbon
         item {
             VehicleHeroCard(
                 car = car,
                 onOpenPhotoCustomizer = onOpenPhotoCustomizer,
                 onEditVinClick = onEditVinClick,
-                onEditLicensePlateClick = onEditLicensePlateClick
+                onEditLicensePlateClick = onEditLicensePlateClick,
+                dailyRate = activePeriodMetrics.dailyRate.takeIf { activePeriodMetrics.hasOdometerData }
             )
         }
 
-        // 2. Combined Tires & Next Rotation Card
+        // 2. 2x2 Micro-Visual Bento Grid + Shared Docked Drawer (Concept C - Variation 1)
+        item {
+            VehicleInsightsBentoGrid(
+                state = bentoState,
+                granularity = bentoGranularity,
+                onSelectGranularity = onSelectBentoGranularity
+            )
+        }
+
+        // 3. Combined Tires & Next Rotation Card
         item {
             VehicleTireHealthCard(
                 car = car,

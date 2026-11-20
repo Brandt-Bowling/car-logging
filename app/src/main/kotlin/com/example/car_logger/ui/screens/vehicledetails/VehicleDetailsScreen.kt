@@ -98,6 +98,8 @@ fun VehicleDetailsScreen(
     val records by viewModel.records.collectAsState()
     val filteredRecords by viewModel.filteredRecords.collectAsState()
     val costHistory by viewModel.costHistory.collectAsState()
+    val bentoState by viewModel.vehicleBentoState.collectAsState()
+    val bentoGranularity by viewModel.bentoGranularity.collectAsState()
     val activeTire by viewModel.activeTire.collectAsState()
     val glovebox by viewModel.glovebox.collectAsState()
     val currentSubView by viewModel.currentSubView.collectAsState()
@@ -627,6 +629,9 @@ fun VehicleDetailsScreen(
                                 records = records,
                                 filteredRecords = filteredRecords,
                                 costHistory = costHistory,
+                                bentoState = bentoState,
+                                bentoGranularity = bentoGranularity,
+                                onSelectBentoGranularity = { viewModel.setBentoGranularity(it) },
                                 activeTire = activeTire,
                                 searchQuery = searchQuery,
                                 selectedYear = selectedYearFilter,
