@@ -57,6 +57,7 @@ fun VehicleHeroCard(
     onOpenPhotoCustomizer: () -> Unit,
     onEditVinClick: () -> Unit,
     onEditLicensePlateClick: () -> Unit,
+    dailyRate: Float? = null,
     modifier: Modifier = Modifier
 ) {
     val imageModel = car.localImagePath ?: car.imageUrl
@@ -188,6 +189,17 @@ fun VehicleHeroCard(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        if (dailyRate != null && dailyRate > 0f) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("•", color = Color.White.copy(alpha = 0.6f))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${String.format(Locale.US, "%.1f", dailyRate)} mi/d",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF9ECAFF)
                             )
                         }
                     }

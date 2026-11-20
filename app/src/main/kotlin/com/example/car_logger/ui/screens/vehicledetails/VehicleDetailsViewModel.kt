@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.car_logger.data.insights.InsightsTimeGranularity
 import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.entity.CarEntity
@@ -23,6 +24,8 @@ import com.example.car_logger.services.OdometerSyncResult
 import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.ui.components.VehicleSubView
 import com.example.car_logger.ui.screens.vehicledetails.components.VehicleCostHistory
+import com.example.car_logger.ui.screens.vehicledetails.components.VehicleInsightsBentoCalculator
+import com.example.car_logger.ui.screens.vehicledetails.components.VehicleInsightsBentoState
 import com.example.car_logger.ui.screens.vehicledetails.components.YearlyCostSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -45,6 +48,7 @@ class VehicleDetailsViewModel(
     private val tireDao = database.tireDao()
     private val gloveboxDao = database.gloveboxDao()
     private val odometerLogDao = database.odometerLogDao()
+    private val utilityBillDao = database.utilityBillDao()
     private val chargingSessionDao = database.chargingSessionDao()
     private val preferencesManager = PreferencesManager(application)
     val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao, chargingSessionDao)
@@ -58,6 +62,7 @@ class VehicleDetailsViewModel(
     )
 
     val currentSubView = MutableStateFlow(VehicleSubView.VEHICLE)
+    val bentoGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
 
     val searchQuery = MutableStateFlow("")
     val selectedYearFilter = MutableStateFlow<Int?>(null)
@@ -118,6 +123,53 @@ class VehicleDetailsViewModel(
         SharingStarted.WhileSubscribed(5000),
         VehicleCostHistory(0.0, null, emptyList(), 0.0)
     )
+
+    private data class BentoPricingPrefs(
+        val gasPrice: Float,
+        val baselineMpg: Float,
+        val defaultElectricityRate: Float,
+        val useCustomElectricityRate: Boolean
+    )
+
+    val vehicleBentoState: StateFlow<VehicleInsightsBentoState> = combine(
+        combine(
+            car,
+            carDao.getAllCars().map { list -> list.map { it.toModel() } },
+            odometerLogDao.getAllLogs(),
+            ::Triple
+        ),
+        combine(records, costHistory, ::Pair),
+        combine(utilityBillDao.getAllBills(), chargingSessionDao.getAllSessions(), ::Pair),
+        combine(
+            preferencesManager.gasPriceFlow,
+            preferencesManager.baselineMpgFlow,
+            preferencesManager.defaultElectricityRateFlow,
+            preferencesManager.useCustomElectricityRateFlow,
+            ::BentoPricingPrefs
+        )
+    ) { (targetCar, allCars, allLogs), (carRecords, carCostHistory), (bills, sessions), pricing ->
+        VehicleInsightsBentoCalculator.compute(
+            targetCar = targetCar,
+            allCars = allCars,
+            allLogs = allLogs,
+            records = carRecords,
+            costHistory = carCostHistory,
+            utilityBills = bills,
+            chargingSessions = sessions,
+            gasPrice = pricing.gasPrice,
+            baselineMpg = pricing.baselineMpg,
+            defaultElectricityRate = pricing.defaultElectricityRate,
+            useCustomElectricityRate = pricing.useCustomElectricityRate
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        VehicleInsightsBentoState()
+    )
+
+    fun setBentoGranularity(granularity: InsightsTimeGranularity) {
+        bentoGranularity.value = granularity
+    }
 
     val filteredRecords: StateFlow<List<MaintenanceRecord>> = combine(records, searchQuery, selectedYearFilter) { recs, query, year ->
         recs.filter { rec ->
