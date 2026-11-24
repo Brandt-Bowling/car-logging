@@ -58,6 +58,7 @@ import com.example.car_logger.ui.components.EnvelopedBodyCanvas
 import com.example.car_logger.ui.components.GarageNavigationBar
 import com.example.car_logger.ui.components.GarageNavigationTab
 import com.example.car_logger.ui.components.SpeedDialFab
+import com.example.car_logger.ui.components.VehicleCardBoundsRegistry
 import com.example.car_logger.ui.screens.home.tabs.ActivityTab
 import com.example.car_logger.ui.screens.home.tabs.GarageTab
 import com.example.car_logger.ui.screens.home.tabs.InsightsTab
@@ -70,11 +71,12 @@ import kotlinx.coroutines.CancellationException
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
-    onNavigateToCarDetails: (String) -> Unit,
+    onNavigateToCarDetails: (Car) -> Unit,
     onOpenAddCarSheet: () -> Unit,
     onOpenAddRecordDialog: (String?) -> Unit,
     onOpenRecordDialog: (MaintenanceRecord) -> Unit,
     onOpenAttachmentViewer: (MaintenanceRecord) -> Unit,
+    cardBoundsRegistry: VehicleCardBoundsRegistry? = null,
     modifier: Modifier = Modifier
 ) {
     val currentTab by viewModel.currentTab.collectAsState()
@@ -253,7 +255,7 @@ fun HomeScreen(
                             }
                             GarageTab(
                                 cars = displayedCars,
-                                onCarClick = { onNavigateToCarDetails(it.id) },
+                                onCarClick = { onNavigateToCarDetails(it) },
                                 onToggleArchive = { viewModel.toggleArchiveCar(it) },
                                 onDeleteCar = { viewModel.deleteCar(it) },
                                 onAddCarClick = onOpenAddCarSheet,
@@ -276,7 +278,8 @@ fun HomeScreen(
                                 },
                                 onResetVehicleImage = { car ->
                                     viewModel.resetVehicleImage(car)
-                                }
+                                },
+                                cardBoundsRegistry = cardBoundsRegistry
                             )
                         }
                         GarageNavigationTab.ACTIVITY -> {
