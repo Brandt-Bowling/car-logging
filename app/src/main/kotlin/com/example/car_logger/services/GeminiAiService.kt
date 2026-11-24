@@ -74,13 +74,13 @@ class GeminiAiService(
             return when {
                 rawErrorMsg.contains("free_tier_requests", ignoreCase = true) ||
                 (rawErrorMsg.contains("limit: 0") && rawErrorMsg.contains("quota", ignoreCase = true)) -> {
-                    "Gemini Image Generation requires a Google AI Studio project with billing enabled (Pay-As-You-Go). The Free Tier has a limit of 0 for image generation. Please enable billing in Google AI Studio or use 'Choose from Photo Library'."
+                    "Gemini image generation requires a Google AI Studio project with billing enabled. The Free Tier has a limit of 0. Enable billing in Google AI Studio or use 'Choose from Photos'."
                 }
                 statusCode == 429 -> {
-                    "Rate limit or quota exceeded. Note that image generation requires a Google AI Studio project with billing enabled."
+                    "Rate limit or quota exceeded. Image generation requires a Google AI Studio project with billing enabled."
                 }
                 statusCode == 403 || statusCode == 401 -> {
-                    "Invalid or unauthorized Gemini API key. Please verify your key in Settings."
+                    "Invalid or unauthorized Gemini API key. Check your key in Settings."
                 }
                 else -> "Image generation failed: $rawErrorMsg"
             }
@@ -337,7 +337,7 @@ class GeminiAiService(
         val apiKey = preferencesManager?.getGeminiApiKey()
         if (apiKey.isNullOrBlank()) {
             return@withContext Result.failure(
-                IllegalStateException("Gemini API key is not configured. Please add your Gemini API key in Settings.")
+                IllegalStateException("Add a Gemini API key in Settings to generate photos.")
             )
         }
 
@@ -453,7 +453,7 @@ class GeminiAiService(
             val hint = if (apiKey.isNullOrBlank()) {
                 "Add a Gemini API key in Settings to scan electric bills automatically."
             } else {
-                "Could not read bill file."
+                "Couldn't read bill file."
             }
             return@withContext ElectricityImportParser.fallbackBillDraftFromFilename(fileName, error = hint)
         }
@@ -509,7 +509,7 @@ class GeminiAiService(
             Log.w(TAG, "Gemini utility bill parsing failed: ${e.message}")
             return@withContext ElectricityImportParser.fallbackBillDraftFromFilename(
                 fileName = fileName,
-                error = "Could not scan bill automatically (${e.message ?: "unknown error"}). Please enter values manually."
+                error = "Couldn't scan bill. Enter the details manually."
             )
         }
     }
@@ -551,7 +551,7 @@ class GeminiAiService(
                 fileName = fileName,
                 source = "manual",
                 error = if (looksLikeCsv) {
-                    "Could not detect date and kWh columns in CSV. Add a Gemini API key in Settings or enter usage manually."
+                    "Couldn't detect date and kWh columns in CSV. Add a Gemini API key in Settings or enter usage manually."
                 } else {
                     "Add a Gemini API key in Settings to scan screenshots or PDFs automatically."
                 }
@@ -623,7 +623,7 @@ class GeminiAiService(
                 sessions = sessions,
                 fileName = fileName,
                 source = "gemini",
-                error = if (sessions.isEmpty()) "No charging sessions found in file. You can add them manually." else null
+                error = if (sessions.isEmpty()) "No charging sessions found. Enter them manually." else null
             )
         } catch (e: Exception) {
             Log.w(TAG, "Gemini charger usage parsing failed: ${e.message}")
@@ -631,7 +631,7 @@ class GeminiAiService(
                 sessions = emptyList(),
                 fileName = fileName,
                 source = "manual",
-                error = "Could not scan file (${e.message ?: "unknown error"}). You can enter usage manually."
+                error = "Couldn't scan file. Enter usage manually."
             )
         }
     }

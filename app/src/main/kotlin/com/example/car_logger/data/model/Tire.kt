@@ -49,8 +49,8 @@ object TireRotationCalculator {
     ): Tire = Tire(
         id = id,
         carId = carId,
-        manufacturer = "OEM / All Season",
-        model = "Standard Tires",
+        manufacturer = "Factory",
+        model = "tires",
         dateInstalled = date,
         odometerInstalled = 0,
         estimatedTreadLifeMiles = 50000,

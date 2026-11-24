@@ -244,7 +244,7 @@ class OdometerSyncServiceTest {
             OdometerSyncResult.Error("1", "No vehicle linked in Smartcar — tap Connect in Settings")
         )
         assertEquals(
-            "Sync failed for 2024 Chevrolet Blazer EV: No vehicle linked in Smartcar — tap Connect in Settings",
+            "Couldn't sync 2024 Chevrolet Blazer EV: No vehicle linked in Smartcar — tap Connect in Settings",
             errMsg
         )
     }
@@ -336,10 +336,10 @@ class OdometerSyncServiceTest {
             OdometerSyncResult.NotConfigured(car2.id)
         )
         val summaryUnconfigured = OdometerSyncService.formatDailyPollSummary(listOf(car1, car2), unconfiguredResults)
-        assertEquals("Blazer EV: not linked, Model 3: not linked", summaryUnconfigured)
+        assertEquals("Blazer EV: not connected, Model 3: not connected", summaryUnconfigured)
 
         val emptySummary = OdometerSyncService.formatDailyPollSummary(emptyList(), emptyList())
-        assertEquals("No vehicles configured", emptySummary)
+        assertEquals("No vehicles set up", emptySummary)
     }
 
     @Test

@@ -91,12 +91,12 @@ fun DriveAttachmentViewerSheet(
                                 pdfBitmap = bitmap
                             }
                         } catch (e: Exception) {
-                            errorMessage = "Failed to render PDF: ${e.message}"
+                            errorMessage = "Couldn't preview PDF"
                         }
                     }
                 }
             } else {
-                errorMessage = "Could not download attachment from Google Drive"
+                errorMessage = "Couldn't load file from Google Drive"
             }
             isLoading = false
         }
@@ -135,7 +135,7 @@ fun DriveAttachmentViewerSheet(
                 pdfBitmap != null -> {
                     Image(
                         bitmap = pdfBitmap!!.asImageBitmap(),
-                        contentDescription = "PDF Preview",
+                        contentDescription = "PDF preview",
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
@@ -146,7 +146,7 @@ fun DriveAttachmentViewerSheet(
                 !receiptUrl.isNullOrBlank() -> {
                     AsyncImage(
                         model = receiptUrl,
-                        contentDescription = "Receipt Image",
+                        contentDescription = "Receipt image",
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
@@ -162,7 +162,7 @@ fun DriveAttachmentViewerSheet(
                     if (bmp != null) {
                         Image(
                             bitmap = bmp.asImageBitmap(),
-                            contentDescription = "Attachment Image",
+                            contentDescription = "Attachment image",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp)),
@@ -180,14 +180,14 @@ fun DriveAttachmentViewerSheet(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Filled.Description, contentDescription = null, modifier = Modifier.size(48.dp))
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text("Document file attached", style = MaterialTheme.typography.bodyMedium)
+                                Text("Preview unavailable", style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
                 }
                 else -> {
                     Text(
-                        text = errorMessage ?: "No preview available",
+                        text = errorMessage ?: "Preview unavailable",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -107,16 +107,16 @@ fun SpeedDialFab(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Option 1: Add Service Record Pill
+                    // Option 1: Add record pill
                     GoogleSpeedDialPill(
-                        label = "Add Service Record",
+                        label = "Add record",
                         icon = Icons.Filled.Build,
                         onClick = onAddRecord
                     )
 
-                    // Option 2: Add Vehicle Pill
+                    // Option 2: Add vehicle pill
                     GoogleSpeedDialPill(
-                        label = "Add Vehicle",
+                        label = "Add vehicle",
                         icon = Icons.Filled.DirectionsCar,
                         onClick = onAddCar
                     )

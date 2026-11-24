@@ -83,7 +83,7 @@ fun VehicleCostHistoryCard(
             ) {
                 Column {
                     Text(
-                        text = "Cost History",
+                        text = "Cost history",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -106,7 +106,7 @@ fun VehicleCostHistoryCard(
                     }
                 }
 
-                // Pill Toggle [Per Year | Overall]
+                // Pill Toggle [By year | Overall]
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -122,7 +122,7 @@ fun VehicleCostHistoryCard(
                                 .clickable { viewMode = "yearly" }
                         ) {
                             Text(
-                                text = "Per Year",
+                                text = "By year",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isYearly) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -163,7 +163,7 @@ fun VehicleCostHistoryCard(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No maintenance records with costs logged yet.",
+                                text = "No costs logged yet",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -228,7 +228,7 @@ fun VehicleCostHistoryCard(
                                                 }
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(
-                                                    text = "${yearly.recordCount} logs",
+                                                    text = "${yearly.recordCount} ${if (yearly.recordCount == 1) "record" else "records"}",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -269,7 +269,7 @@ fun VehicleCostHistoryCard(
                             }
 
                             Text(
-                                text = "Tip: Tap a year to filter maintenance logs below",
+                                text = "Tap a year to filter",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.padding(start = 4.dp, top = 2.dp)
@@ -291,7 +291,7 @@ fun VehicleCostHistoryCard(
                             ) {
                                 Column(modifier = Modifier.padding(14.dp)) {
                                     Text(
-                                        text = "Cost Per Mile",
+                                        text = "Cost per mile",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -305,14 +305,14 @@ fun VehicleCostHistoryCard(
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                     Text(
-                                        text = "Odometer calibrated",
+                                        text = "Based on mileage",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
 
-                            // Avg Annual Spend
+                            // Avg per year
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
@@ -320,7 +320,7 @@ fun VehicleCostHistoryCard(
                             ) {
                                 Column(modifier = Modifier.padding(14.dp)) {
                                     Text(
-                                        text = "Avg Annual Spend",
+                                        text = "Avg per year",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -331,8 +331,9 @@ fun VehicleCostHistoryCard(
                                         fontWeight = FontWeight.ExtraBold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
+                                    val yearCount = costHistory.yearlyBreakdowns.size
                                     Text(
-                                        text = "Across ${costHistory.yearlyBreakdowns.size} year(s)",
+                                        text = "Across $yearCount ${if (yearCount == 1) "year" else "years"}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

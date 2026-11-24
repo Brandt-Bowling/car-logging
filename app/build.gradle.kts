@@ -27,8 +27,11 @@ android {
         applicationId = "com.example.car_logger"
         minSdk = 26
         targetSdk = 35
-        versionCode = project.findProperty("buildNumber")?.toString()?.toIntOrNull() ?: 1
-        versionName = "1.0.0"
+        val appVersionMajor = 1
+        val appVersionMinor = 1
+        val buildNumber = project.findProperty("buildNumber")?.toString()?.toIntOrNull()
+        versionCode = buildNumber ?: 1
+        versionName = "$appVersionMajor.$appVersionMinor.${buildNumber ?: 0}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appName"] = "Garage Journal"

@@ -74,13 +74,13 @@ fun FleetShareCard(
             ) {
                 Column {
                     Text(
-                        text = "Fleet Share",
+                        text = "Mileage split",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Mileage split over selected period",
+                        text = "Selected period",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

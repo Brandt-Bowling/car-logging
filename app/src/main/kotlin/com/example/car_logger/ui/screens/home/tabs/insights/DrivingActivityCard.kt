@@ -218,7 +218,7 @@ fun DrivingActivityCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "${String.format(Locale.US, "%.1f", dailyRate)} mi/day average",
+                        text = "${String.format(Locale.US, "%.1f", dailyRate)} mi/day avg",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -410,7 +410,7 @@ fun DrivingActivityCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No driving recorded in this period",
+                        text = "No miles recorded",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

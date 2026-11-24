@@ -9,13 +9,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,8 +71,8 @@ import java.util.Locale
 import java.util.UUID
 
 private enum class ManualEntryMode(val label: String) {
-    SINGLE_SESSION("Single Session"),
-    MONTHLY_TOTAL("Monthly Total")
+    SINGLE_SESSION("Single session"),
+    MONTHLY_TOTAL("Monthly total")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,7 +93,7 @@ fun ChargerUsageReviewSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val activeCars = remember(cars) { cars.filter { !it.isArchived }.ifEmpty { cars } }
 
-    // Default vehicle assignment: active filter carId if set, or single car id, or Both EVs (null)
+    // Default vehicle assignment: active filter carId if set, or single car id, or All (null)
     var selectedCarId by remember(activeCars, initialSelectedCarId) {
         val validInitial = initialSelectedCarId?.takeIf { id -> activeCars.any { it.id == id } }
         mutableStateOf(validInitial ?: if (activeCars.size == 1) activeCars.first().id else null)
@@ -134,14 +136,15 @@ fun ChargerUsageReviewSheet(
         }
     }
 
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val topClearance = maxOf(statusBarTop + 8.dp, 72.dp)
+    val topInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding()
+    val topClearance = maxOf(topInset + 8.dp, 72.dp)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
         modifier = modifier.padding(top = topClearance)
     ) {
         Column(
@@ -154,16 +157,16 @@ fun ChargerUsageReviewSheet(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(
-                text = if (isImportReviewMode) "Review Charger Usage" else "Add Charger Usage",
+                text = if (isImportReviewMode) "Review import" else "Add charging",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = if (isImportReviewMode) {
-                    "Loaded from ${initialImport?.fileName ?: "file"}. Pick which vehicle used this charger and confirm below."
+                    "From ${initialImport?.fileName ?: "file"}. Choose a vehicle and confirm."
                 } else {
-                    "Upload a charger CSV, PDF, or screenshot — or type a single session or monthly kWh total."
+                    "Import a file, or enter a session or monthly total."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -181,15 +184,20 @@ fun ChargerUsageReviewSheet(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Import CSV, PDF, or Screenshot")
+                    Text("Import file (CSV, PDF, image)")
                 }
 
                 if (lastUploadBatch.isNotEmpty()) {
                     val carNameById = remember(activeCars) {
                         activeCars.associate { it.id to it.model.ifBlank { it.displayName } }
                     }
-                    val lastVehicleLabel = lastUploadBatch.first().carId?.let { carNameById[it] } ?: "Both EVs"
+                    val lastVehicleLabel = lastUploadBatch.first().carId?.let { carNameById[it] } ?: "All vehicles"
                     val lastKwh = lastUploadBatch.sumOf { it.kwh }
+                    val formattedLastKwh = String.format(
+                        Locale.US,
+                        if (lastKwh >= 100.0) "%,.0f" else "%,.1f",
+                        lastKwh
+                    )
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
@@ -200,7 +208,7 @@ fun ChargerUsageReviewSheet(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Last upload: ${lastUploadBatch.size} ${if (lastUploadBatch.size == 1) "log" else "logs"} (${String.format(Locale.US, "%.1f", lastKwh)} kWh · $lastVehicleLabel)",
+                                text = "Last import · ${lastUploadBatch.size} ${if (lastUploadBatch.size == 1) "session" else "sessions"} ($formattedLastKwh kWh · $lastVehicleLabel)",
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
@@ -221,7 +229,7 @@ fun ChargerUsageReviewSheet(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Undo Upload", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("Undo", maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 FilledTonalButton(
                                     onClick = onUndoAndRetagLastUpload,
@@ -236,7 +244,7 @@ fun ChargerUsageReviewSheet(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Undo & Re-tag", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("Change vehicle", maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                         }
@@ -260,7 +268,7 @@ fun ChargerUsageReviewSheet(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Tap any row's Home/Public tag if a location needs adjusting.",
+                            text = "Tap Home or Public on any row to change it.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -298,7 +306,7 @@ fun ChargerUsageReviewSheet(
                     )
                     if (selectedCarId == null && activeCars.size > 1) {
                         Text(
-                            text = "Shared across your EVs proportionally by miles driven.",
+                            text = "Split across vehicles by miles driven.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -309,6 +317,11 @@ fun ChargerUsageReviewSheet(
             if (isImportReviewMode) {
                 val (newEntities, skippedCount) = importBuildResult
                 val totalImportKwh = newEntities.sumOf { it.kwh }
+                val formattedImportKwh = String.format(
+                    Locale.US,
+                    if (totalImportKwh >= 100.0) "%,.0f" else "%,.1f",
+                    totalImportKwh
+                )
 
                 // Summary & Duplicate Detection Pill
                 Surface(
@@ -322,16 +335,16 @@ fun ChargerUsageReviewSheet(
                     ) {
                         Text(
                             text = if (newEntities.size == 1) {
-                                "1 new entry ready (${String.format(Locale.US, "%.1f", totalImportKwh)} kWh)"
+                                "1 new session ready ($formattedImportKwh kWh)"
                             } else {
-                                "${newEntities.size} new entries ready (${String.format(Locale.US, "%.1f", totalImportKwh)} kWh total)"
+                                "${newEntities.size} new sessions ready ($formattedImportKwh kWh)"
                             },
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         if (skippedCount > 0) {
                             Text(
-                                text = "$skippedCount duplicate ${if (skippedCount == 1) "entry" else "entries"} already logged — will be skipped automatically.",
+                                text = "$skippedCount ${if (skippedCount == 1) "duplicate" else "duplicates"} already saved (will be skipped).",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AmberUrgent
                             )
@@ -415,7 +428,7 @@ fun ChargerUsageReviewSheet(
                     }
                     if (importDrafts.size > 15) {
                         Text(
-                            text = "+${importDrafts.size - 15} more entries included in this upload",
+                            text = "+${importDrafts.size - 15} more sessions included",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -439,7 +452,7 @@ fun ChargerUsageReviewSheet(
                     FilterChip(
                         selected = venue == "HOME",
                         onClick = { venue = "HOME" },
-                        label = { Text("Home Charger") },
+                        label = { Text("Home charger") },
                         leadingIcon = {
                             Icon(
                                 imageVector = if (venue == "HOME") Icons.Rounded.Check else Icons.Rounded.Home,
@@ -457,7 +470,7 @@ fun ChargerUsageReviewSheet(
                     FilterChip(
                         selected = venue == "PUBLIC",
                         onClick = { venue = "PUBLIC" },
-                        label = { Text("Public Charger") },
+                        label = { Text("Public charger") },
                         leadingIcon = {
                             Icon(
                                 imageVector = if (venue == "PUBLIC") Icons.Rounded.Check else Icons.Rounded.EvStation,
@@ -498,7 +511,7 @@ fun ChargerUsageReviewSheet(
                                 rangeStartText = it
                                 errorMessage = null
                             },
-                            label = { Text("Period Start") },
+                            label = { Text("Period start") },
                             placeholder = { Text("YYYY-MM-DD") },
                             singleLine = true,
                             shape = RoundedCornerShape(16.dp),
@@ -510,7 +523,7 @@ fun ChargerUsageReviewSheet(
                                 rangeEndText = it
                                 errorMessage = null
                             },
-                            label = { Text("Period End") },
+                            label = { Text("Period end") },
                             placeholder = { Text("YYYY-MM-DD") },
                             singleLine = true,
                             shape = RoundedCornerShape(16.dp),
@@ -518,7 +531,7 @@ fun ChargerUsageReviewSheet(
                         )
                     }
                     Text(
-                        text = "Monthly totals are spread evenly across these days so weekly and monthly views stay accurate.",
+                        text = "Spread evenly across these dates for weekly and monthly charts.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -534,7 +547,7 @@ fun ChargerUsageReviewSheet(
                             kwhText = it
                             errorMessage = null
                         },
-                        label = { Text("Energy Added (kWh)") },
+                        label = { Text("Energy added (kWh)") },
                         suffix = { Text("kWh") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
@@ -549,7 +562,7 @@ fun ChargerUsageReviewSheet(
                                 directCostText = it
                                 errorMessage = null
                             },
-                            label = { Text("Total Paid ($)") },
+                            label = { Text("Total paid ($)") },
                             prefix = { Text("$") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
@@ -561,7 +574,7 @@ fun ChargerUsageReviewSheet(
 
                 AnimatedVisibility(visible = venue == "HOME") {
                     Text(
-                        text = "Home cost automatically uses your electric bill rate (or $0.16/kWh fallback until a bill is uploaded).",
+                        text = "Uses your electric bill rate, or your default home rate.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -570,7 +583,7 @@ fun ChargerUsageReviewSheet(
                 OutlinedTextField(
                     value = chargerNameText,
                     onValueChange = { chargerNameText = it },
-                    label = { Text(if (venue == "HOME") "Charger Name (optional)" else "Station Name (optional)") },
+                    label = { Text(if (venue == "HOME") "Charger name (optional)" else "Station name (optional)") },
                     placeholder = { Text(if (venue == "HOME") "e.g., Garage Wall Connector" else "e.g., Supercharger") },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
@@ -615,7 +628,7 @@ fun ChargerUsageReviewSheet(
                             when {
                                 sMs == null || eMs == null -> errorMessage = "Enter valid dates (YYYY-MM-DD)."
                                 eMs < sMs -> errorMessage = "End date cannot be before start date."
-                                kwh == null || kwh <= 0.0 -> errorMessage = "Enter energy greater than 0 kWh."
+                                kwh == null || kwh <= 0.0 -> errorMessage = "Enter energy above 0 kWh."
                                 venue == "PUBLIC" && (parsedCost == null || parsedCost < 0.0) ->
                                     errorMessage = "Enter total paid ($) for public charging (0.00 if free)."
                                 else -> {
@@ -627,7 +640,7 @@ fun ChargerUsageReviewSheet(
                                         carId = selectedCarId
                                     )
                                     if (existingFingerprints.contains(fingerprint)) {
-                                        errorMessage = "This charging entry is already saved."
+                                        errorMessage = "This charging session is already saved."
                                     } else {
                                         val entity = ChargingSessionEntity(
                                             id = "chg_${UUID.randomUUID()}",
@@ -638,7 +651,7 @@ fun ChargerUsageReviewSheet(
                                             venue = venue,
                                             directCost = parsedCost,
                                             chargerName = chargerNameText.trim().ifBlank {
-                                                if (venue == "HOME") "Home Charger" else "Public Charger"
+                                                if (venue == "HOME") "Home charger" else "Public charger"
                                             },
                                             isSummary = isSummary,
                                             fingerprint = fingerprint
@@ -656,9 +669,9 @@ fun ChargerUsageReviewSheet(
                 ) {
                     val label = if (isImportReviewMode) {
                         val count = importBuildResult.first.size
-                        if (count == 0) "All Duplicates (Done)" else "Save $count ${if (count == 1) "Entry" else "Entries"}"
+                        if (count == 0) "Done" else "Save $count ${if (count == 1) "session" else "sessions"}"
                     } else {
-                        "Save Usage"
+                        "Save"
                     }
                     Text(label)
                 }
@@ -719,7 +732,7 @@ private fun VehicleAssignmentGroup(
     onSelectCarId: (String?) -> Unit
 ) {
     val options: List<Pair<String?, String>> = buildList {
-        if (cars.size > 1) add(null to "Both EVs")
+        if (cars.size > 1) add(null to "All")
         cars.take(2).forEach { car ->
             add(car.id to (car.model.ifBlank { car.displayName }))
         }

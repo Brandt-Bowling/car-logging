@@ -91,7 +91,7 @@ fun VehiclePhotoCustomizerSheet(
     var isCustomColor by remember { mutableStateOf(false) }
 
     var trimText by remember { mutableStateOf(car.trim ?: "") }
-    val envPresets = remember { listOf("Driveway", "Showroom", "Scenic Road") }
+    val envPresets = remember { listOf("Driveway", "Showroom", "Scenic road") }
     var selectedEnv by remember { mutableStateOf("Driveway") }
 
     var isGenerating by remember { mutableStateOf(false) }
@@ -142,7 +142,7 @@ fun VehiclePhotoCustomizerSheet(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Customize Photo",
+                        text = "Vehicle photo",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -176,7 +176,7 @@ fun VehiclePhotoCustomizerSheet(
                     if (bitmap != null) {
                         Image(
                             bitmap = bitmap.asImageBitmap(),
-                            contentDescription = "Generated Preview",
+                            contentDescription = "Generated preview",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
@@ -199,7 +199,7 @@ fun VehiclePhotoCustomizerSheet(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    "AI Preview",
+                                    "AI preview",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     fontWeight = FontWeight.Bold
@@ -253,7 +253,7 @@ fun VehiclePhotoCustomizerSheet(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("AI Generator", fontWeight = FontWeight.SemiBold)
+                            Text("Create with AI", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 )
@@ -276,7 +276,7 @@ fun VehiclePhotoCustomizerSheet(
                 0 -> {
                     // TAB 0: AI Generator (Gemini Flash Image)
                     Text(
-                        text = "Vehicle Paint Color",
+                        text = "Paint color",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -316,8 +316,8 @@ fun VehiclePhotoCustomizerSheet(
                         OutlinedTextField(
                             value = customColorText,
                             onValueChange = { customColorText = it },
-                            label = { Text("Custom Color Name") },
-                            placeholder = { Text("e.g. Summit White, Marina Blue") },
+                            label = { Text("Custom color name") },
+                            placeholder = { Text("e.g., Summit White, Marina Blue") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = RoundedCornerShape(14.dp)
@@ -329,8 +329,8 @@ fun VehiclePhotoCustomizerSheet(
                     OutlinedTextField(
                         value = trimText,
                         onValueChange = { trimText = it },
-                        label = { Text("Trim / Package (Optional)") },
-                        placeholder = { Text("e.g. RS, AWD, TRD Pro, Sport") },
+                        label = { Text("Trim / package (optional)") },
+                        placeholder = { Text("e.g., RS, AWD, TRD Pro, Sport") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp)
@@ -339,7 +339,7 @@ fun VehiclePhotoCustomizerSheet(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "Setting & Environment",
+                        text = "Background",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -388,7 +388,7 @@ fun VehiclePhotoCustomizerSheet(
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                "Generating photo with Gemini AI...",
+                                "Generating photo...",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -407,7 +407,7 @@ fun VehiclePhotoCustomizerSheet(
                                         val effectiveColor = if (isCustomColor) customColorText.ifBlank { "White" } else selectedColor
                                         val envDesc = when (selectedEnv) {
                                             "Showroom" -> "modern vehicle showroom floor"
-                                            "Scenic Road" -> "scenic winding mountain road"
+                                            "Scenic road" -> "scenic winding mountain road"
                                             else -> "clean paved residential driveway"
                                         }
                                         val result = onGenerateAiImage(effectiveColor, trimText.ifBlank { null }, envDesc)
@@ -415,7 +415,7 @@ fun VehiclePhotoCustomizerSheet(
                                         result.onSuccess { bytes ->
                                             generatedBytes = bytes
                                         }.onFailure { err ->
-                                            generationError = err.message ?: "Failed to generate image"
+                                            generationError = err.message ?: "Couldn't generate photo"
                                         }
                                     }
                                 },
@@ -439,7 +439,7 @@ fun VehiclePhotoCustomizerSheet(
                             ) {
                                 Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Save Photo")
+                                Text("Save photo")
                             }
                         }
                     } else {
@@ -451,7 +451,7 @@ fun VehiclePhotoCustomizerSheet(
                                     val effectiveColor = if (isCustomColor) customColorText.ifBlank { "White" } else selectedColor
                                     val envDesc = when (selectedEnv) {
                                         "Showroom" -> "modern vehicle showroom floor"
-                                        "Scenic Road" -> "scenic winding mountain road"
+                                        "Scenic road" -> "scenic winding mountain road"
                                         else -> "clean paved residential driveway"
                                     }
                                     val result = onGenerateAiImage(effectiveColor, trimText.ifBlank { null }, envDesc)
@@ -459,7 +459,7 @@ fun VehiclePhotoCustomizerSheet(
                                     result.onSuccess { bytes ->
                                         generatedBytes = bytes
                                     }.onFailure { err ->
-                                        generationError = err.message ?: "Failed to generate image"
+                                        generationError = err.message ?: "Couldn't generate photo"
                                     }
                                 }
                             },
@@ -470,7 +470,7 @@ fun VehiclePhotoCustomizerSheet(
                         ) {
                             Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Generate with Gemini AI", fontWeight = FontWeight.SemiBold)
+                            Text("Generate photo", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -492,7 +492,7 @@ fun VehiclePhotoCustomizerSheet(
                         ) {
                             Icon(Icons.Filled.Image, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Choose from Photo Library")
+                            Text("Choose from Photos")
                         }
                     }
                 }
@@ -502,7 +502,7 @@ fun VehiclePhotoCustomizerSheet(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Reset to Stock Option
+            // Reset to Default Option
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
@@ -521,7 +521,7 @@ fun VehiclePhotoCustomizerSheet(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        "Reset to Stock Photo",
+                        "Use default photo",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

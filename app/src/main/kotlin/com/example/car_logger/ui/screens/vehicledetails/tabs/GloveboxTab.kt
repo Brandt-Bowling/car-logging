@@ -94,7 +94,7 @@ fun GloveboxTab(
         var tempOdo by remember { mutableStateOf((car.odometer ?: 0).toString()) }
         AlertDialog(
             onDismissRequest = { showEditOdometerDialog = false },
-            title = { Text("Edit Vehicle Odometer") },
+            title = { Text("Edit odometer") },
             text = {
                 OutlinedTextField(
                     value = tempOdo,
@@ -154,11 +154,11 @@ fun GloveboxTab(
                         Icon(Icons.Filled.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("Current Odometer", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Odometer", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             val odoFormatted = if (car.odometer != null) {
                                 "${NumberFormat.getNumberInstance(Locale.US).format(car.odometer)} miles"
                             } else {
-                                "Not logged"
+                                "No mileage"
                             }
                             Text(odoFormatted, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             val syncRel = OdometerSyncService.formatRelativeTime(car.lastOdometerSyncTime)
@@ -172,7 +172,7 @@ fun GloveboxTab(
                         }
                     }
                     IconButton(onClick = { showEditOdometerDialog = true }) {
-                        Icon(Icons.Filled.Edit, contentDescription = "Edit Odometer")
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit odometer")
                     }
                 }
             }
@@ -196,13 +196,13 @@ fun GloveboxTab(
                             tint = if (currentUser != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text("Google Drive Sync", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Google Drive sync", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
                     if (currentUser != null) {
-                        val folderLabel = car.driveFolderName ?: "No sync folder selected"
+                        val folderLabel = car.driveFolderName ?: "No folder selected"
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "Folder: $folderLabel",
@@ -217,20 +217,20 @@ fun GloveboxTab(
                             FilledTonalButton(onClick = onOpenFolderPicker) {
                                 Icon(Icons.Filled.DriveFileMove, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Choose Folder")
+                                Text("Choose folder")
                             }
                             if (!car.driveFolderId.isNullOrBlank()) {
                                 OutlinedButton(
                                     onClick = onSyncDriveFolder,
                                     enabled = !isSyncingDrive
                                 ) {
-                                    Text(if (isSyncingDrive) "Syncing..." else "Sync Now")
+                                    Text(if (isSyncingDrive) "Syncing..." else "Sync now")
                                 }
                             }
                         }
                     } else {
                         Text(
-                            text = "Sign in to Google Drive in Settings to choose a sync folder and import maintenance receipts for this vehicle.",
+                            text = "Sign in to Google Drive in Settings to import receipts automatically.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -242,7 +242,7 @@ fun GloveboxTab(
         // Glovebox Documents Header
         item {
             Text(
-                text = "Vehicle Documents",
+                text = "Vehicle documents",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 8.dp)
@@ -252,7 +252,7 @@ fun GloveboxTab(
         // Registration Card
         item {
             DocumentCard(
-                title = "Vehicle Registration",
+                title = "Vehicle registration",
                 icon = Icons.Filled.Description,
                 documentUri = glovebox?.registrationUrl,
                 onUploadClick = { regPicker.launch(arrayOf("application/pdf", "image/*")) },
@@ -269,7 +269,7 @@ fun GloveboxTab(
         // Insurance Card
         item {
             DocumentCard(
-                title = "Insurance Card",
+                title = "Insurance card",
                 icon = Icons.Filled.HealthAndSafety,
                 documentUri = glovebox?.insuranceUrl,
                 onUploadClick = { insPicker.launch(arrayOf("application/pdf", "image/*")) },
@@ -286,7 +286,7 @@ fun GloveboxTab(
         // Owner's Manual Card
         item {
             DocumentCard(
-                title = "Owner's Manual",
+                title = "Owner's manual",
                 icon = Icons.Filled.MenuBook,
                 documentUri = glovebox?.manualUrl,
                 onUploadClick = { manPicker.launch(arrayOf("application/pdf")) },
@@ -345,7 +345,7 @@ fun DocumentCard(
                 Column {
                     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
-                        text = if (isPresent) "Document stored locally" else "No document uploaded",
+                        text = if (isPresent) "Saved on device" else "Not added",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -358,7 +358,7 @@ fun DocumentCard(
                 }
             }
             IconButton(onClick = onUploadClick) {
-                Icon(Icons.Filled.UploadFile, contentDescription = "Upload Document")
+                Icon(Icons.Filled.UploadFile, contentDescription = "Upload document")
             }
         }
     }

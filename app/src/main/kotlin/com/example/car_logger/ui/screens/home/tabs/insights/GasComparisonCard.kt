@@ -71,13 +71,13 @@ fun GasComparisonCard(
             // Header
             Column {
                 Text(
-                    text = "Gas Comparison",
+                    text = "Gas comparison",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Cost if driven in a gasoline vehicle",
+                    text = "Estimated cost in a gas car",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -98,7 +98,7 @@ fun GasComparisonCard(
                 ) {
                     Column {
                         Text(
-                            text = "COST IN GAS VEHICLES",
+                            text = "ESTIMATED GAS COST",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = AmberUrgent,
@@ -120,7 +120,7 @@ fun GasComparisonCard(
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = "CO₂ Avoided",
+                            text = "CO₂ avoided",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -188,7 +188,7 @@ fun GasComparisonCard(
                                     tint = bannerAccent
                                 )
                                 Text(
-                                    text = if (isPositive) "SAVED VS. GAS" else "EXTRA VS. GAS",
+                                    text = if (isPositive) "NET SAVINGS" else "OVER GAS COST",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = FontWeight.Bold,
                                         letterSpacing = 0.8.sp
@@ -197,7 +197,7 @@ fun GasComparisonCard(
                                 )
                             }
                             Text(
-                                text = "After $${String.format(Locale.US, "%.2f", gasComparison.electricityTotalCost)} total EV charging",
+                                text = "After $${String.format(Locale.US, "%.2f", gasComparison.electricityTotalCost)} in charging",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = bannerValueColor.copy(alpha = 0.85f)
                             )
@@ -212,10 +212,10 @@ fun GasComparisonCard(
                 }
             }
 
-            // Editable Chips: Gas Price & Baseline MPG
+            // Editable Chips: Gas price & Gas MPG
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "Comparison Parameters (Tap to Edit)",
+                    text = "Assumptions",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -241,7 +241,7 @@ fun GasComparisonCard(
                         ) {
                             Column {
                                 Text(
-                                    text = "Gas Price",
+                                    text = "Gas price",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 11.sp
@@ -254,7 +254,7 @@ fun GasComparisonCard(
                             }
                             Icon(
                                 imageVector = Icons.Filled.Edit,
-                                contentDescription = "Edit Gas Price",
+                                contentDescription = "Edit gas price",
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
@@ -277,7 +277,7 @@ fun GasComparisonCard(
                         ) {
                             Column {
                                 Text(
-                                    text = "Gas Baseline",
+                                    text = "Gas MPG",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 11.sp

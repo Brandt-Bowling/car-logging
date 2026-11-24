@@ -60,17 +60,17 @@ fun MaintenanceRecordDialog(
     var description by remember { mutableStateOf(record?.description ?: "") }
 
     val suggestions = listOf(
-        "Oil & Filter Change",
-        "Tire Rotation",
-        "Brake Pad Replacement",
-        "State Inspection",
-        "Cabin Air Filter",
-        "Battery Replacement"
+        "Oil & filter change",
+        "Tire rotation",
+        "Brake pad replacement",
+        "State inspection",
+        "Cabin air filter",
+        "Battery replacement"
     )
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        title = { Text(if (isEditing) "Edit Service Record" else "Add Service Record") },
+        title = { Text(if (isEditing) "Edit record" else "Add record") },
         text = {
             Column(
                 modifier = Modifier
@@ -88,7 +88,7 @@ fun MaintenanceRecordDialog(
                         onExpandedChange = { carDropdownExpanded = it }
                     ) {
                         OutlinedTextField(
-                            value = selectedCar?.displayName ?: "Select Vehicle",
+                            value = selectedCar?.displayName ?: "Select vehicle",
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Vehicle") },
@@ -121,8 +121,8 @@ fun MaintenanceRecordDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Service Title") },
-                    placeholder = { Text("e.g. Oil Change") },
+                    label = { Text("Service") },
+                    placeholder = { Text("e.g., Oil change") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -163,7 +163,7 @@ fun MaintenanceRecordDialog(
                 OutlinedTextField(
                     value = cost,
                     onValueChange = { cost = it },
-                    label = { Text("Total Cost ($)") },
+                    label = { Text("Total cost ($)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -172,7 +172,7 @@ fun MaintenanceRecordDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Description / Notes") },
+                    label = { Text("Notes") },
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )

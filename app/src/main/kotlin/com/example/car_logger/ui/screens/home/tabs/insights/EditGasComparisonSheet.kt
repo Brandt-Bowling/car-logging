@@ -71,14 +71,14 @@ fun EditGasComparisonSheet(
                 .padding(bottom = 24.dp)
         ) {
             Text(
-                text = "Gas Comparison Settings",
+                text = "Gas comparison",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Configure baseline fuel economy and regional gas prices to see how much fuel and cost your electric miles saved compared to a gas vehicle.",
+                text = "Set a gas price and MPG to estimate how much you save driving electric.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -92,7 +92,7 @@ fun EditGasComparisonSheet(
                     gasPriceText = it
                     gasPriceError = null
                 },
-                label = { Text("Average Gas Price") },
+                label = { Text("Gas price") },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Outlined.AttachMoney,
@@ -125,7 +125,7 @@ fun EditGasComparisonSheet(
                     baselineMpgText = it
                     baselineMpgError = null
                 },
-                label = { Text("Baseline Gas Efficiency") },
+                label = { Text("Baseline MPG") },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Outlined.LocalGasStation,
@@ -173,11 +173,11 @@ fun EditGasComparisonSheet(
 
                         var valid = true
                         if (parsedPrice == null || parsedPrice <= 0f) {
-                            gasPriceError = "Please enter a valid price greater than 0"
+                            gasPriceError = "Enter a price above $0"
                             valid = false
                         }
                         if (parsedMpg == null || parsedMpg <= 0f) {
-                            baselineMpgError = "Please enter MPG greater than 0"
+                            baselineMpgError = "Enter MPG above 0"
                             valid = false
                         }
 

@@ -161,12 +161,12 @@ fun InsightsTab(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
                 Text(
-                    text = "No vehicles in garage",
+                    text = "No vehicles yet",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Add a vehicle to your garage to track driving analytics and insights.",
+                    text = "Add a vehicle to see mileage and charging insights.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -184,7 +184,7 @@ fun InsightsTab(
         // Vehicle Selection Controls (M3 Expressive Connected Button Group)
         if (activeCars.size > 1) {
             item {
-                val vehicleOptions = listOf("Both" to null) + activeCars.map {
+                val vehicleOptions = listOf("All" to null) + activeCars.map {
                     (it.model.ifBlank { it.displayName }) to it.id
                 }
 
@@ -386,13 +386,13 @@ fun InsightsTab(
                             }
                         }
                         Text(
-                            text = "More Odometer Readings Needed",
+                            text = "Waiting for more mileage data",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Driving insights and gas comparison charts are calculated using verified odometer telemetry over time. As your vehicle syncs, weekly, monthly, and YTD charts will populate automatically.",
+                            text = "Charts appear automatically after a few odometer updates.",
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

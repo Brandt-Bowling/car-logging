@@ -7,13 +7,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -91,8 +93,8 @@ fun UtilityBillReviewSheet(
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val topClearance = maxOf(statusBarTop + 8.dp, 72.dp)
+    val topInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding()
+    val topClearance = maxOf(topInset + 8.dp, 72.dp)
     val defaultMonth = remember { YearMonth.now() }
     val defaultStart = remember { defaultMonth.atDay(1).toString() }
     val defaultEnd = remember { defaultMonth.atEndOfMonth().toString() }
@@ -183,6 +185,7 @@ fun UtilityBillReviewSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
         modifier = modifier.padding(top = topClearance)
     ) {
         Column(
@@ -201,13 +204,13 @@ fun UtilityBillReviewSheet(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (initialDraft != null) "Review Electric Bill" else "Add Electric Bill",
+                        text = if (initialDraft != null) "Review electric bill" else "Add electric bill",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "We subtract flat monthly fees or combine off-peak supply + distribution for your true $/kWh.",
+                        text = "Excludes flat fees or uses off-peak rates to find your real $/kWh.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -234,7 +237,7 @@ fun UtilityBillReviewSheet(
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = "Details filled from ${initialDraft.fileName ?: "your bill"} — double-check before saving.",
+                                text = "Filled from ${initialDraft.fileName ?: "your bill"}. Review before saving.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -245,7 +248,7 @@ fun UtilityBillReviewSheet(
                                         append(" · Off-peak supply $${formatRateForInput(it)}")
                                     }
                                     initialDraft.distributionRatePerKwh?.let {
-                                        append(" + Dist. $${formatRateForInput(it)}")
+                                        append(" + Delivery $${formatRateForInput(it)}")
                                     }
                                     initialDraft.onPeakSupplyRate?.let {
                                         append(" (On-peak $${formatRateForInput(it)})")
@@ -272,7 +275,7 @@ fun UtilityBillReviewSheet(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Upload Electric Bill (PDF or Photo)")
+                    Text("Upload electric bill (PDF or photo)")
                 }
             }
 
@@ -297,7 +300,7 @@ fun UtilityBillReviewSheet(
                     providerText = it
                     errorMessage = null
                 },
-                label = { Text("Electric Provider (e.g., PG&E)") },
+                label = { Text("Electric provider (e.g., PG&E)") },
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -313,7 +316,7 @@ fun UtilityBillReviewSheet(
                         startDateText = it
                         errorMessage = null
                     },
-                    label = { Text("Bill Start") },
+                    label = { Text("Bill start") },
                     placeholder = { Text("YYYY-MM-DD") },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
@@ -325,7 +328,7 @@ fun UtilityBillReviewSheet(
                         endDateText = it
                         errorMessage = null
                     },
-                    label = { Text("Bill End") },
+                    label = { Text("Bill end") },
                     placeholder = { Text("YYYY-MM-DD") },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
@@ -343,7 +346,7 @@ fun UtilityBillReviewSheet(
                         totalAmountText = it
                         errorMessage = null
                     },
-                    label = { Text("Total Bill ($)") },
+                    label = { Text("Total bill ($)") },
                     prefix = { Text("$") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
@@ -356,7 +359,7 @@ fun UtilityBillReviewSheet(
                         fixedChargesText = it
                         errorMessage = null
                     },
-                    label = { Text("Fixed Fees ($)") },
+                    label = { Text("Fixed fees ($)") },
                     prefix = { Text("$") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
@@ -371,7 +374,7 @@ fun UtilityBillReviewSheet(
                     totalKwhText = it
                     errorMessage = null
                 },
-                label = { Text("Total Billed Usage (kWh)") },
+                label = { Text("Total billed usage (kWh)") },
                 suffix = { Text("kWh") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
@@ -400,7 +403,7 @@ fun UtilityBillReviewSheet(
                             text = if (useOverrideRate && parsedOverride != null) {
                                 "OFF-PEAK EV RATE"
                             } else {
-                                "YOUR EFFECTIVE RATE"
+                                "EFFECTIVE RATE"
                             },
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.Bold,
@@ -412,11 +415,11 @@ fun UtilityBillReviewSheet(
                             text = when {
                                 useOverrideRate && parsedSupplyComponent != null -> {
                                     val dist = parsedDistComponent ?: 0.0
-                                    "Supply $${formatRateForInput(parsedSupplyComponent)} + Dist. $${formatRateForInput(dist)}"
+                                    "Supply $${formatRateForInput(parsedSupplyComponent)} + Delivery $${formatRateForInput(dist)}"
                                 }
-                                useOverrideRate -> "Custom TOU / off-peak override"
+                                useOverrideRate -> "Custom off-peak rate"
                                 parsedKwh > 0.0 ->
-                                    "Usage charges: $${String.format(Locale.US, "%.2f", volumetricCharges)} ÷ ${String.format(Locale.US, "%.0f", parsedKwh)} kWh"
+                                    "$${String.format(Locale.US, "%.2f", volumetricCharges)} ÷ ${String.format(Locale.US, "%,.0f", parsedKwh)} kWh"
                                 else -> "Enter total bill & kWh to calculate"
                             },
                             style = MaterialTheme.typography.bodySmall,
@@ -461,12 +464,12 @@ fun UtilityBillReviewSheet(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Use off-peak / TOU EV rate",
+                                text = "Use off-peak rate",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Combine off-peak power supply + volumetric distribution fees",
+                                text = "Combine off-peak supply and delivery per kWh",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -499,7 +502,7 @@ fun UtilityBillReviewSheet(
                                             overrideRateText = formatRateForInput(s + d.coerceAtLeast(0.0))
                                         }
                                     },
-                                    label = { Text("Off-Peak Supply") },
+                                    label = { Text("Off-peak supply") },
                                     prefix = { Text("$") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     singleLine = true,
@@ -519,7 +522,7 @@ fun UtilityBillReviewSheet(
                                             overrideRateText = formatRateForInput(s.coerceAtLeast(0.0))
                                         }
                                     },
-                                    label = { Text("Distribution / kWh") },
+                                    label = { Text("Delivery / kWh") },
                                     prefix = { Text("$") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     singleLine = true,
@@ -534,7 +537,7 @@ fun UtilityBillReviewSheet(
                                     overrideRateText = it
                                     errorMessage = null
                                 },
-                                label = { Text("Effective Off-Peak Rate ($/kWh)") },
+                                label = { Text("Effective off-peak rate ($/kWh)") },
                                 prefix = { Text("$") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 singleLine = true,
@@ -564,7 +567,11 @@ fun UtilityBillReviewSheet(
                             tint = AmberUrgent
                         )
                         Text(
-                            text = "You already have a saved bill (${exactMatchingBill.providerName}) for these exact dates. Saving will replace it.",
+                            text = if (exactMatchingBill.providerName.isNotBlank()) {
+                                "Replaces your saved ${exactMatchingBill.providerName} bill for these dates."
+                            } else {
+                                "Replaces your saved bill for these dates."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -602,12 +609,12 @@ fun UtilityBillReviewSheet(
                         when {
                             sMs == null || eMs == null -> errorMessage = "Enter valid start and end dates (YYYY-MM-DD)."
                             eMs < sMs -> errorMessage = "End date cannot be before start date."
-                            kwh == null || kwh <= 0.0 -> errorMessage = "Enter total billed usage greater than 0 kWh."
-                            amount == null || amount <= 0.0 -> errorMessage = "Enter total bill amount greater than $0."
+                            kwh == null || kwh <= 0.0 -> errorMessage = "Enter billed usage above 0 kWh."
+                            amount == null || amount <= 0.0 -> errorMessage = "Enter a bill amount above $0."
                             useOverrideRate && (custom == null || custom <= 0.0) ->
-                                errorMessage = "Enter a valid custom rate greater than $0."
+                                errorMessage = "Enter a custom rate above $0."
                             else -> onSave(
-                                providerText.trim().ifBlank { "Electric Utility" },
+                                providerText.trim().ifBlank { "Electric bill" },
                                 sMs,
                                 eMs,
                                 kwh,
@@ -623,7 +630,7 @@ fun UtilityBillReviewSheet(
                         .weight(1.4f)
                         .expressiveBounceClick()
                 ) {
-                    Text(if (exactMatchingBill != null) "Save & Replace Bill" else "Save Electric Bill")
+                    Text(if (exactMatchingBill != null) "Replace bill" else "Save bill")
                 }
             }
         }
@@ -657,7 +664,7 @@ private fun BillBreakdownCard(
         if (breakdownItems.isNotEmpty()) {
             append("${breakdownItems.size} ${if (breakdownItems.size == 1) "line item" else "line items"}")
         } else {
-            append("Rate & charge math")
+            append("Rate calculation")
         }
         if (offPeakSharePct != null) {
             append(" · $offPeakSharePct% off-peak")
@@ -803,13 +810,13 @@ private fun BillBreakdownCard(
                         if (useTouRate && offPeakSupplyRate != null) {
                             val dist = (distributionRatePerKwh ?: 0.0).coerceAtLeast(0.0)
                             Text(
-                                text = "TOU EV Rate: $${formatRateForInput(offPeakSupplyRate)} off-peak supply + $${formatRateForInput(dist)} distribution = $${formatRateForInput(offPeakSupplyRate + dist)}/kWh",
+                                text = "Off-peak EV rate: $${formatRateForInput(offPeakSupplyRate)} supply + $${formatRateForInput(dist)} delivery = $${formatRateForInput(offPeakSupplyRate + dist)}/kWh",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
                             onPeakSupplyRate?.let { onPeak ->
                                 Text(
-                                    text = "On-peak supply (excluded from off-peak EV rate): $${formatRateForInput(onPeak)}/kWh",
+                                    text = "On-peak supply (excluded): $${formatRateForInput(onPeak)}/kWh",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -819,7 +826,7 @@ private fun BillBreakdownCard(
                         val usageAmount = (totalAmount - fixedCharges).coerceAtLeast(0.0)
                         if (totalAmount > 0.0 && totalKwh > 0.0) {
                             Text(
-                                text = "Blended math: ($${String.format(Locale.US, "%.2f", totalAmount)} total − $${String.format(Locale.US, "%.2f", fixedCharges)} fixed = $${String.format(Locale.US, "%.2f", usageAmount)}) ÷ ${String.format(Locale.US, "%.1f", totalKwh)} kWh = $${formatRateForInput(calculatedBlendedRate)}/kWh",
+                                text = "Blended rate: ($${String.format(Locale.US, "%.2f", totalAmount)} − $${String.format(Locale.US, "%.2f", fixedCharges)} fixed = $${String.format(Locale.US, "%.2f", usageAmount)}) ÷ ${String.format(Locale.US, "%,.1f", totalKwh)} kWh = $${formatRateForInput(calculatedBlendedRate)}/kWh",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -832,9 +839,9 @@ private fun BillBreakdownCard(
 }
 
 private fun breakdownCategoryLabel(category: String): String = when (category) {
-    "OFF_PEAK_SUPPLY" -> "Off-Peak Supply"
-    "ON_PEAK_SUPPLY" -> "On-Peak Supply"
-    "DISTRIBUTION" -> "Distribution"
-    "FIXED" -> "Fixed Fee"
-    else -> "Tax / Other"
+    "OFF_PEAK_SUPPLY" -> "Off-peak supply"
+    "ON_PEAK_SUPPLY" -> "On-peak supply"
+    "DISTRIBUTION" -> "Delivery"
+    "FIXED" -> "Fixed fee"
+    else -> "Tax / other"
 }

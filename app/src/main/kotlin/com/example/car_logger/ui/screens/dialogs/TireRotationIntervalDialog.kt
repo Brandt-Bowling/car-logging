@@ -38,11 +38,11 @@ fun TireRotationIntervalDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Tire Rotation Interval") },
+        title = { Text("Tire rotation interval") },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Set the mileage interval between scheduled tire rotations.",
+                    text = "How often to rotate tires.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -87,7 +87,7 @@ fun TireRotationIntervalDialog(
                 onClick = {
                     val parsed = textValue.replace(",", "").trim().toIntOrNull()
                     if (parsed == null || parsed <= 0) {
-                        errorText = "Please enter a valid positive number"
+                        errorText = "Enter a number above 0"
                     } else {
                         onConfirm(parsed)
                         onDismiss()

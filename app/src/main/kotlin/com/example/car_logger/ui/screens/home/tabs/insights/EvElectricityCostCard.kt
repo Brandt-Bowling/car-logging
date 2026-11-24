@@ -116,15 +116,15 @@ fun EvElectricityCostCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Charging Costs",
+                        text = "Charging costs",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = if (selectedVenue == ChargingVenue.HOME) {
-                            "Home charger costs & electric rate"
+                            "Home charging & electric rate"
                         } else {
-                            "Public fast chargers & away from home"
+                            "Public & fast charging"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -144,7 +144,7 @@ fun EvElectricityCostCard(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Tune,
-                            contentDescription = "Manage bills and logs",
+                            contentDescription = "Manage bills and sessions",
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -158,7 +158,7 @@ fun EvElectricityCostCard(
                 }
             }
 
-            // M3 Expressive Connected Button Group (Home Charging | Public Charging)
+            // M3 Expressive Connected Button Group (Home charging | Public charging)
             VenueConnectedButtonGroup(
                 selectedVenue = selectedVenue,
                 onSelectVenue = onSelectVenue
@@ -222,7 +222,7 @@ fun EvElectricityCostCard(
                 }
             }
 
-            // M3 Expressive Split Button (+ Add Charging | Dropdown)
+            // M3 Expressive Split Button (+ Add charging | Dropdown)
             ExpressiveChargingSplitButton(
                 onPrimaryAction = onOpenManualChargerSheet,
                 onUploadChargerUsage = onUploadChargerUsage,
@@ -360,7 +360,7 @@ private fun EmptyVenueState(
                     )
                     Text(
                         text = when {
-                            !data.hasAnyData -> "Track your EV charging costs"
+                            !data.hasAnyData -> "Track charging costs"
                             isHome -> "No home charging in this period"
                             else -> "No public charging in this period"
                         },
@@ -370,9 +370,9 @@ private fun EmptyVenueState(
                 }
                 Text(
                     text = when {
-                        !data.hasAnyData -> "Upload your electric bill, set your custom rate below, or log your home charger usage to see mi/kWh and savings vs. gas."
-                        isHome -> "Upload a charger export CSV, PDF, screenshot, or enter your monthly kWh total for this period."
-                        else -> "Upload Supercharger, Electrify America, or EVgo receipts to keep fast charging separate from your home electric bill."
+                        !data.hasAnyData -> "Add an electric bill or charging session to see efficiency and savings."
+                        isHome -> "Import a charger file or add a session for this period."
+                        else -> "Add public charging receipts to track them separately from home charging."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -387,7 +387,7 @@ private fun EmptyVenueState(
                 isEstimated = data.homeIsEstimatedRate,
                 isEditable = true,
                 leftOverline = "ELECTRIC RATE",
-                rightOverline = "RATE SOURCE",
+                rightOverline = "SOURCE",
                 onSaveCustomRate = onSaveCustomRate,
                 onLeftClick = {},
                 onRightClick = onOpenManualBillSheet
@@ -423,7 +423,7 @@ private fun PopulatedVenueContent(
     val heroAccent = if (isHome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // 20.dp Hero Tonal Highlight Container (tappable to view logs for active period)
+        // 20.dp Hero Tonal Highlight Container (tappable to view sessions for active period)
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = heroBg,
@@ -453,7 +453,7 @@ private fun PopulatedVenueContent(
                         )
                         Icon(
                             imageVector = Icons.Rounded.ChevronRight,
-                            contentDescription = "View logs for period",
+                            contentDescription = "View sessions for period",
                             modifier = Modifier.size(14.dp),
                             tint = heroAccent
                         )
@@ -464,7 +464,7 @@ private fun PopulatedVenueContent(
                         style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    val sessionLabel = if (sessionCount == 1) "1 log" else "$sessionCount logs"
+                    val sessionLabel = if (sessionCount == 1) "1 session" else "$sessionCount sessions"
                     Text(
                         text = "${formatKwh(totalKwh)} kWh · $sessionLabel",
                         style = MaterialTheme.typography.bodySmall,
@@ -488,7 +488,7 @@ private fun PopulatedVenueContent(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = costPerMile?.let { String.format(Locale.US, "$%.3f / mi", it) } ?: "Sync odometer",
+                        text = costPerMile?.let { String.format(Locale.US, "$%.3f / mi", it) } ?: "Needs mileage",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -502,14 +502,14 @@ private fun PopulatedVenueContent(
             rateSourceLabel = if (isHome) data.homeRateSourceLabel else data.publicRateSourceLabel,
             isEstimated = isHome && data.homeIsEstimatedRate,
             isEditable = isHome,
-            leftOverline = if (isHome) "ELECTRIC RATE" else "AVG PAID RATE",
-            rightOverline = if (isHome) "RATE SOURCE" else "RECEIPTS",
+            leftOverline = if (isHome) "ELECTRIC RATE" else "AVG RATE",
+            rightOverline = if (isHome) "SOURCE" else "RECEIPTS",
             onSaveCustomRate = onSaveCustomRate,
             onLeftClick = onOpenManageSheet,
             onRightClick = onOpenManageSheet
         )
 
-        // Cost by Vehicle Breakdown (when Both selected and both cars exist)
+        // Cost by Vehicle Breakdown (when All selected and both cars exist)
         val c1Cost = if (isHome) data.homeCar1Cost else data.publicCar1Cost
         val c1Kwh = if (isHome) data.homeCar1Kwh else data.publicCar1Kwh
         val c1Pct = if (isHome) data.homeCar1SharePct else data.publicCar1SharePct
@@ -525,7 +525,7 @@ private fun PopulatedVenueContent(
         if (showBreakdown) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Cost by Vehicle",
+                    text = "Cost by vehicle",
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -922,7 +922,7 @@ private fun ExpressiveChargingSplitButton(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Add Charging",
+                        text = "Add charging",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -963,7 +963,7 @@ private fun ExpressiveChargingSplitButton(
             shape = RoundedCornerShape(20.dp)
         ) {
             DropdownMenuItem(
-                text = { Text("Sync Tesla Wall Connectors") },
+                text = { Text("Sync Wall Connectors") },
                 leadingIcon = { Icon(Icons.Rounded.EvStation, contentDescription = null) },
                 onClick = {
                     menuExpanded = false
@@ -971,7 +971,7 @@ private fun ExpressiveChargingSplitButton(
                 }
             )
             DropdownMenuItem(
-                text = { Text("Add Electric Bill") },
+                text = { Text("Add electric bill") },
                 leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null) },
                 onClick = {
                     menuExpanded = false
@@ -979,7 +979,7 @@ private fun ExpressiveChargingSplitButton(
                 }
             )
             DropdownMenuItem(
-                text = { Text("Import Charger File") },
+                text = { Text("Import file") },
                 leadingIcon = { Icon(Icons.Rounded.UploadFile, contentDescription = null) },
                 onClick = {
                     menuExpanded = false
