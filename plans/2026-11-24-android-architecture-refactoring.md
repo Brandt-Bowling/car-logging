@@ -1,20 +1,22 @@
-# Android Architecture Modernization & Large-File Refactoring Implementation Plan
+# Android Architecture Modernization, Large-File Refactoring & Modularity Gates Plan
 
-> **For agentic workers:** Execute this plan task-by-task on a dedicated feature branch or git worktree (never directly on `main`). Steps use checkbox (`- [ ]`) syntax for tracking. Run `./gradlew testDebugUnitTest assembleDebug` after every task before committing.
+> **For agentic workers:** Execute this plan task-by-task on a dedicated feature branch or git worktree (never directly on `main`). Steps use checkbox (`- [ ]`) syntax for tracking. Run `./gradlew testDebugUnitTest lintDebug assembleDebug` after every task before committing.
 
-**Goal:** Align **Garage Journal** (`com.example.car_logger`) with official [Android Architecture Recommendations](https://developer.android.com/topic/architecture/recommendations) and [Jetpack Compose UI Architecture](https://developer.android.com/develop/ui/compose/architecture) best practices, eliminate all >1,000-line production files (Phase 1) and 700–950-line second-tier files (Phase 2), and target **< 450 lines per production Kotlin file** with zero behavioral or data regressions.
+**Goal:** Align **Garage Journal** (`com.example.car_logger`) with official [Android Architecture Recommendations](https://developer.android.com/topic/architecture/recommendations) and [Jetpack Compose UI Architecture](https://developer.android.com/develop/ui/compose/architecture) best practices, eliminate all >1,000-line production files (Phase 1) and 700–950-line second-tier files (Phase 2) targeting **< 450 lines per production Kotlin file**, and install automated lint rules and CI gates (Phase 3) so future features stay small, modular, and architecture-compliant.
 
 **Architecture:**
 - **Manual DI via `AppContainer`** owned by `CarLoggerApplication` (zero new Gradle plugins/dependencies): shares a single `OkHttpClient`, `AppDatabase`, `PreferencesManager`, `OdometerSyncService`, `GeminiAiService`, `GoogleDriveService`, `VehicleImageRepository`, and `AutoDevService` across ViewModels and WorkManager workers, removing `AndroidViewModel`.
 - **Lifecycle-aware UDF**: Migrate all 79 `collectAsState()` calls to `collectAsStateWithLifecycle()`, encapsulate all public `MutableStateFlow`s, replace manual `LifecycleEventObserver` with `LifecycleResumeEffect`, introduce `SettingsViewModel` + `SettingsUiState`, and extract plain Compose state holders for complex bottom sheets.
 - **Modular decomposition behind stable facades**: Split `OdometerSyncService` (4,020 lines) into focused collaborators under `services/telemetry/`, `InsightsCalculationEngine` (1,267 lines) into pure calculators under `data/insights/`, `PreferencesManager` (790 lines) into domain preference stores under `data/local/prefs/`, and `GeminiAiService` (720 lines) into focused services under `services/ai/` while removing the deprecated `com.google.ai.client.generativeai` SDK.
+- **Preventive lint & CI gates (Phase 3)**: Four-layer enforcement combining a fast file-size & architecture check (`checkArchitectureGates`), hardened Android Lint + `com.slack.lint.compose:compose-lint-checks:1.6.1`, Detekt complexity rules + `io.nlopez.compose.rules:detekt:0.6.8`, and CI / `AGENTS.md` guardrails.
 
-**Tech Stack:** Kotlin 2.2.20, Jetpack Compose (BOM 2026.09.00, Material 3 Expressive 1.5.0-rc01), Lifecycle Runtime Compose, Room v6, DataStore Preferences, OkHttp 4, Kotlinx Serialization, WorkManager 2.10, JUnit4, Kotlinx Coroutines Test.
+**Tech Stack:** Kotlin 2.2.20, AGP 9.1.1 (built-in Kotlin), Jetpack Compose (BOM 2026.09.00, Material 3 Expressive 1.5.0-rc01), Lifecycle Runtime Compose, Room v6, DataStore Preferences, OkHttp 4, Kotlinx Serialization, WorkManager 2.10, JUnit4, Kotlinx Coroutines Test.
 
 **Related ADRs & Rules:**
 - `docs/adr/0001-variable-blended-utility-rate-and-historical-bill-matching.md`
 - `docs/adr/0002-hybrid-vehicle-attribution-for-shared-ev-chargers.md`
 - `AGENTS.md` (worktree setup via `./scripts/setup_worktree.sh`; verify with `./gradlew testDebugUnitTest assembleDebug`)
+- `.github/workflows/ci.yml` (currently runs `./gradlew testDebugUnitTest lintDebug` on PRs & pushes to `main`)
 
 ---
 
@@ -415,13 +417,161 @@ flowchart TD
 
 ---
 
+## Phase 3: Automated Lint Rules & Modularity Gates (Preventing Future Bloat)
+
+To ensure new features cannot grow back into 1,000+ line files or reintroduce architecture anti-patterns, install a **4-layer defense-in-depth gate stack** wired directly into Gradle and `.github/workflows/ci.yml`.
+
+### Task 15: Architecture & File-Size Gate Script + Gradle Task (`checkArchitectureGates`)
+
+**Files:**
+- Create: `scripts/check_architecture_gates.sh`
+- Create: `config/architecture-gates-allowlist.txt` (empty by default; documents temporary exceptions only with PR rationale)
+- Modify: `build.gradle.kts` (register `checkArchitectureGates` Gradle `Exec` task and attach to `check`)
+
+**Enforced Hard Limits & Architectural Invariants:**
+1. **Production Kotlin file size ceiling**: Fail build if any file under `app/src/main/kotlin/**/*.kt` exceeds **450 lines** (warn at **350 lines**). *(Note: also check any remaining 500–650 line files like `VehicleContainerTransformHost.kt`, `GarageTab.kt`, `PeriodChargingLogsSheet.kt`, `ManageElectricityDataSheet.kt`, `DrivingActivityCard.kt`, `VehiclePhotoCustomizerSheet.kt` — either split them or record their exact current line counts as non-growing watermarks in `config/architecture-gates-allowlist.txt` so they can shrink but never grow!)*
+2. **Test Kotlin file size ceiling**: Fail build if any file under `app/src/test/kotlin/**/*.kt` exceeds **650 lines**.
+3. **Lifecycle-aware Flow collection**: Fail if `\.collectAsState\(` appears anywhere in `app/src/main/kotlin/`.
+4. **No `AndroidViewModel`**: Fail if `AndroidViewModel` appears anywhere in `app/src/main/kotlin/`.
+5. **UDF ViewModel encapsulation**: Fail if public `val <name> = MutableStateFlow(` appears under `app/src/main/kotlin/.../ui/`.
+6. **Single shared `OkHttpClient`**: Fail if `OkHttpClient.Builder()` appears in `app/src/main/kotlin/` outside `di/AppContainer.kt` (except optional constructor defaults for tests, or enforce injection-only in production code).
+7. **No legacy Gemini SDK**: Fail if `com.google.ai.client.generativeai` appears in `app/` or `gradle/`.
+8. **Centralized theme tokens**: Fail if duplicated savings/work hex colors (`0xFF0F4020`, `0xFFD3F5DC`, `0xFF81E6A1`, `0xFF0B5F2A`, `0xFFC6F7D4`, `0xFF072711`) appear outside `ui/theme/`.
+
+**Steps:**
+- [ ] Write `scripts/check_architecture_gates.sh` (POSIX/Bash, `chmod +x`, prints clear file path + line count + remediation guidance on failure).
+- [ ] Add `config/architecture-gates-allowlist.txt` supporting per-file max-line ratchet entries (`path/to/File.kt=MAX_LINES`) for any untouched 450–650 line legacy files so they can never grow by even 1 line while every new/refactored file adheres strictly to `<= 450` lines.
+- [ ] Register `tasks.register<Exec>("checkArchitectureGates")` in root `build.gradle.kts`.
+- [ ] Verify: `./gradlew checkArchitectureGates`.
+
+---
+
+### Task 16: Harden Android Lint (`lintDebug`) + Add Slack `compose-lint-checks`
+
+Android Lint already runs on every PR in `.github/workflows/ci.yml` (`./gradlew testDebugUnitTest lintDebug`) and natively supports AGP 9.1.1 / Kotlin 2.2 with zero Gradle plugin friction.
+
+**Files:**
+- Create: `app/lint.xml`
+- Modify: `gradle/libs.versions.toml` (add `composeLintChecks = "1.6.1"` → `com.slack.lint.compose:compose-lint-checks`)
+- Modify: `app/build.gradle.kts` (add `lintChecks(libs.compose.lint.checks)` and configure `android { lint { ... } }`)
+
+**Key Lint Rules Promoted to `error` in `app/lint.xml`:**
+- **Built-in Jetpack Compose & Lifecycle checks**:
+  - `FlowOperatorInvokedInComposition` — prevents creating Flow operators on every recomposition
+  - `StateFlowValueCalledInComposition` — prevents reading `.value` directly instead of collecting state
+  - `CoroutineCreationDuringComposition` — prevents launching untracked coroutines during composition
+  - `UnrememberedMutableState` / `RememberReturnType` / `ProduceStateDoesNotAssignValue`
+  - `MutableCollectionMutableState`
+  - `UnusedMaterial3ScaffoldPaddingParameter`
+- **Slack Compose Lint Checks (`com.slack.lint.compose:compose-lint-checks:1.6.1`)**:
+  - `ComposeViewModelForwarding` — stops ViewModels from being passed down into child/reusable composables
+  - `ComposeViewModelInjection` — keeps ViewModel injection strictly at screen/route entry points
+  - `ComposeMultipleContentEmitters` — forces composables to have a single layout responsibility
+  - `ComposeMutableParameters` — forbids passing `MutableState`/`MutableList` down into child composables
+  - `ComposeModifierMissing` / `ComposeModifierReused` / `ComposeParameterOrder`
+  - `ComposeNaming` / `ComposePreviewPublic`
+  - `ComposeM2Api` (prevents accidentally importing Material 2 instead of Material 3)
+
+**Steps:**
+- [ ] Add `com.slack.lint.compose:compose-lint-checks:1.6.1` to `gradle/libs.versions.toml` and `lintChecks(...)` in `app/build.gradle.kts`.
+- [ ] Add `android { lint { abortOnError = true; lintConfig = file("lint.xml"); baseline = file("lint-baseline.xml") /* only if needed for unrelated legacy warnings */ } }` in `app/build.gradle.kts`.
+- [ ] Create `app/lint.xml` enforcing the Compose & Lifecycle rules above as `error`.
+- [ ] Fix any newly surfaced Compose lint errors across the refactored files (avoid suppressing unless genuinely justified).
+- [ ] Verify: `./gradlew lintDebug`.
+
+---
+
+### Task 17: Add Detekt Structural Complexity Rules + Wire CI & `AGENTS.md` Guardrails
+
+Even inside a 450-line file, structural rules prevent 200-line mega-functions, 20-parameter composables, and deeply nested logic.
+
+**Files:**
+- Create: `config/detekt/detekt.yml`
+- Modify: `gradle/libs.versions.toml` & `build.gradle.kts` / `app/build.gradle.kts` (configure Detekt + `io.nlopez.compose.rules:detekt:0.6.8`)
+- Modify: `.github/workflows/ci.yml`
+- Modify: `AGENTS.md`
+
+**Recommended `config/detekt/detekt.yml` Modularity Thresholds:**
+```yaml
+complexity:
+  active: true
+  LargeClass:
+    active: true
+    threshold: 350
+  LongMethod:
+    active: true
+    threshold: 60
+    ignoreAnnotated:
+      - Composable
+  LongParameterList:
+    active: true
+    functionThreshold: 7
+    constructorThreshold: 8
+    ignoreDefaultParameters: true
+    ignoreDataClasses: true
+    ignoreAnnotated:
+      - Composable
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 15
+    thresholdInClasses: 15
+    thresholdInObjects: 15
+    ignorePrivate: false
+    ignoreDeprecated: true
+    ignoreOverridden: true
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 15
+  NestedBlockDepth:
+    active: true
+    threshold: 4
+
+style:
+  MaxLineLength:
+    active: true
+    maxLineLength: 140
+    excludeCommentStatements: true
+    excludeImportStatements: true
+
+Compose:
+  ComposableParamOrder:
+    active: true
+  MultipleEmitters:
+    active: true
+  ViewModelForwarding:
+    active: true
+  ViewModelInjection:
+    active: true
+  MutableParams:
+    active: true
+  ModifierMissing:
+    active: true
+```
+
+> **AGP 9.1 Compatibility Note:** Because this project uses AGP 9.1.1 with built-in Kotlin (without applying `kotlin-android`), Detekt 1.23.x's Android-variant hooks do not support AGP 9 built-in Kotlin directly. Configure Detekt using either **Detekt 2.0 (`dev.detekt`, `2.0.0-alpha.3+`)** (native AGP 9 built-in Kotlin support) OR a standalone source-only Detekt Gradle task (`source.setFrom("app/src/main/kotlin")`) verified to resolve cleanly with Gradle 9 + AGP 9.1.1. Also add a composable-specific method-length cap (e.g., max **120 lines** per `@Composable` function) in `scripts/check_architecture_gates.sh` so UI functions stay modular even though `LongMethod` exempts `@Composable` from the 60-line business-logic cap.
+
+**Steps:**
+- [ ] Add `config/detekt/detekt.yml` and wire Detekt + `io.nlopez.compose.rules:detekt:0.6.8` cleanly against AGP 9.1.1 (with baseline only for untouched pre-existing non-modularity warnings, zero baseline exemptions for refactored files).
+- [ ] Add a max **120-line `@Composable` function length** check to `scripts/check_architecture_gates.sh`.
+- [ ] Update `.github/workflows/ci.yml` step `Run Unit Tests and Lint` to run:
+  ```bash
+  ./gradlew testDebugUnitTest lintDebug checkArchitectureGates detekt
+  ```
+- [ ] Update `AGENTS.md` with a concise **Modularity & Architecture Guardrails** section documenting:
+  - Hard limits (`<= 450` lines/file production, `<= 650` lines/file tests, `<= 120` lines per `@Composable`, `<= 60` lines per logic function, `<= 7` params before grouping into an `@Immutable` state/actions class).
+  - Architecture rules: inject via `AppContainer` (no `AndroidViewModel`, no ad-hoc `OkHttpClient.Builder()`), expose immutable `StateFlow`s, always use `collectAsStateWithLifecycle()`, place pure math in `data/` or domain calculators, and keep theme colors in `ExpressiveThemeTokens`.
+  - Required pre-PR verification command: `./gradlew testDebugUnitTest lintDebug checkArchitectureGates detekt assembleDebug`.
+- [ ] Verify: `./gradlew testDebugUnitTest lintDebug checkArchitectureGates detekt assembleDebug`.
+
+---
+
 ## Final Verification Checklist
 
-- [ ] Full test suite & debug APK build passes:
+- [ ] Full verification suite passes cleanly:
   ```bash
-  ./gradlew testDebugUnitTest assembleDebug
+  ./gradlew testDebugUnitTest lintDebug checkArchitectureGates detekt assembleDebug
   ```
-- [ ] File-size audit confirms no production `.kt` file exceeds ~450 lines:
+- [ ] File-size audit confirms every refactored production `.kt` file is `<= 450` lines:
   ```bash
   find app/src/main/kotlin -name '*.kt' -exec wc -l {} + | sort -rn | head -n 20
   ```
