@@ -63,7 +63,7 @@ fun VehicleHeroCard(
     val imageModel = car.localImagePath ?: car.imageUrl
     val formattedOdo = car.odometer?.let {
         "${NumberFormat.getNumberInstance(Locale.US).format(it)} mi"
-    } ?: "No Odometer"
+    } ?: "No mileage"
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse_telemetry")
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -220,7 +220,7 @@ fun VehicleHeroCard(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Filled.AutoAwesome,
-                            contentDescription = "Customize Photo",
+                            contentDescription = "Change photo",
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -318,7 +318,7 @@ fun VehicleHeroCard(
                             )
                             Icon(
                                 imageVector = Icons.Filled.Edit,
-                                contentDescription = "Edit Plate",
+                                contentDescription = "Edit plate",
                                 tint = maizeYellow.copy(alpha = 0.8f),
                                 modifier = Modifier.size(10.dp)
                             )

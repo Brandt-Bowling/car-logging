@@ -5,12 +5,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -76,8 +78,8 @@ fun PeriodChargingLogsSheet(
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val topClearance = maxOf(statusBarTop + 8.dp, 72.dp)
+    val topInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding()
+    val topClearance = maxOf(topInset + 8.dp, 72.dp)
     val isHome = venue == ChargingVenue.HOME
     val logs = if (isHome) data.homePeriodLogs else data.publicPeriodLogs
     val totalCost = if (isHome) data.homeTotalCost else data.publicTotalCost
@@ -109,6 +111,7 @@ fun PeriodChargingLogsSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
         modifier = modifier.padding(top = topClearance)
     ) {
         Column(
@@ -141,13 +144,13 @@ fun PeriodChargingLogsSheet(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isHome) "Home Charging Logs" else "Public Charging Logs",
+                        text = if (isHome) "Home charging" else "Public charging",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Filtered for $selectedVehicleLabel",
+                        text = selectedVehicleLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -228,7 +231,7 @@ fun PeriodChargingLogsSheet(
                             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        val countLabel = if (sessionCount == 1) "1 log" else "$sessionCount logs"
+                        val countLabel = if (sessionCount == 1) "1 session" else "$sessionCount sessions"
                         Text(
                             text = "${formatSheetKwh(totalKwh)} kWh · $countLabel",
                             style = MaterialTheme.typography.bodySmall,
@@ -261,7 +264,7 @@ fun PeriodChargingLogsSheet(
                 }
             }
 
-            // Filtered Charging Logs List or Empty State
+            // Filtered Charging Sessions List or Empty State
             if (logs.isEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(18.dp),
@@ -273,15 +276,15 @@ fun PeriodChargingLogsSheet(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "No ${if (isHome) "home" else "public"} charging logs in $periodText",
+                            text = "No ${if (isHome) "home" else "public"} charging in $periodText",
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = if (selectedCarId != null) {
-                                "Try switching the period above, selecting Both vehicles, or viewing all charging history."
+                                "Try another period, switch vehicles, or view all history."
                             } else {
-                                "Try switching the period above, logging usage, or viewing all charging history."
+                                "Try another period, add a session, or view all history."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -297,7 +300,7 @@ fun PeriodChargingLogsSheet(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Add Charger Usage")
+                            Text("Add charging")
                         }
                     }
                 }
@@ -334,7 +337,7 @@ fun PeriodChargingLogsSheet(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "All History",
+                        text = "All history",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -366,8 +369,8 @@ private fun PeriodChargingLogRow(
         formatLogTimestamp(session)
     }
     val vehicleLabel = when {
-        session.carId == null && item.isSharedSplit -> "Both EVs (split)"
-        session.carId == null -> "Both EVs"
+        session.carId == null && item.isSharedSplit -> "All vehicles (split)"
+        session.carId == null -> "All vehicles"
         else -> carNameById[session.carId] ?: "Vehicle"
     }
     val sourceTag = when {
@@ -444,7 +447,7 @@ private fun PeriodChargingLogRow(
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Rounded.DeleteOutline,
-                    contentDescription = "Delete charging log",
+                    contentDescription = "Delete charging session",
                     tint = MaterialTheme.colorScheme.error
                 )
             }

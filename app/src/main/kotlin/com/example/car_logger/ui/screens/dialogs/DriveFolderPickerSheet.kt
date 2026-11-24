@@ -155,12 +155,12 @@ fun DriveFolderPickerSheet(
             if (navState.isAtRoot) {
                 Column(modifier = Modifier.padding(bottom = 12.dp)) {
                     Text(
-                        text = "Select Sync Folder",
+                        text = "Choose Drive folder",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Choose or browse a Google Drive folder",
+                        text = "Browse folders in Google Drive",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -240,7 +240,7 @@ fun DriveFolderPickerSheet(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search folders in Drive...") },
+                placeholder = { Text("Search folders") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = if (searchQuery.isNotEmpty()) {
                     {
@@ -274,9 +274,9 @@ fun DriveFolderPickerSheet(
                 ) {
                     Text(
                         text = when {
-                            searchQuery.isNotBlank() -> "No folders found matching \"$searchQuery\""
-                            navState.isAtRoot -> "No folders found in Google Drive"
-                            else -> "No subfolders found in \"${navState.currentFolder.name}\""
+                            searchQuery.isNotBlank() -> "No matching folders"
+                            navState.isAtRoot -> "No folders in Google Drive"
+                            else -> "No subfolders in \"${navState.currentFolder.name}\""
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

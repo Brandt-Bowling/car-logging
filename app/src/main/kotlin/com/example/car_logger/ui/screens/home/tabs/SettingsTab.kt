@@ -85,6 +85,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.car_logger.BuildConfig
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.WakeProtectionPolicy
 import com.example.car_logger.data.model.Car
@@ -187,12 +188,12 @@ fun SettingsTab(
         var tempName by remember { mutableStateOf(garageName) }
         AlertDialog(
             onDismissRequest = { showGarageNameDialog = false },
-            title = { Text("Rename Garage") },
+            title = { Text("Rename garage") },
             text = {
                 OutlinedTextField(
                     value = tempName,
                     onValueChange = { tempName = it },
-                    label = { Text("Garage Name") },
+                    label = { Text("Garage name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -222,24 +223,24 @@ fun SettingsTab(
         var tempKey by remember { mutableStateOf(geminiKey ?: "") }
         AlertDialog(
             onDismissRequest = { showGeminiKeyDialog = false },
-            title = { Text("Gemini API Key") },
+            title = { Text("Gemini API key") },
             text = {
                 Column {
                     Text(
-                        "Enter your Google AI Studio API key to enable automated receipt parsing using Gemini 2.5 Flash.",
+                        "Add a Google AI Studio key to scan receipts and electric bills automatically.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     DashboardLinkButton(
-                        label = "Get API Key (Google AI Studio)",
+                        label = "Open Google AI Studio",
                         url = DeveloperDashboardUrls.GEMINI
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = tempKey,
                         onValueChange = { tempKey = it },
-                        label = { Text("API Key") },
+                        label = { Text("API key") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -270,24 +271,24 @@ fun SettingsTab(
         var tempKey by remember { mutableStateOf(autoDevKey ?: "") }
         AlertDialog(
             onDismissRequest = { showAutoDevKeyDialog = false },
-            title = { Text("Auto.dev API Key") },
+            title = { Text("Auto.dev API key") },
             text = {
                 Column {
                     Text(
-                        "Enter your custom auto.dev API key for automotive VIN decoding and vehicle photos. If blank, the bundled key is used.",
+                        "Optional key for VIN lookup and stock photos. Leave blank to use the default.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     DashboardLinkButton(
-                        label = "Get API Key (Auto.dev Dashboard)",
+                        label = "Open Auto.dev",
                         url = DeveloperDashboardUrls.AUTO_DEV
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = tempKey,
                         onValueChange = { tempKey = it },
-                        label = { Text("API Key") },
+                        label = { Text("API key") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -330,11 +331,11 @@ fun SettingsTab(
 
         AlertDialog(
             onDismissRequest = { showSmartcarDialog = false },
-            title = { Text("Smartcar (GM / Blazer EV)") },
+            title = { Text("Smartcar (Blazer EV)") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     DashboardLinkButton(
-                        label = "Open Smartcar Dashboard",
+                        label = "Open Smartcar dashboard",
                         url = DeveloperDashboardUrls.SMARTCAR
                     )
                     OutlinedTextField(
@@ -347,14 +348,14 @@ fun SettingsTab(
                     OutlinedTextField(
                         value = clientSecret,
                         onValueChange = { clientSecret = it },
-                        label = { Text("Client Secret") },
+                        label = { Text("Client secret") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = accessToken,
                         onValueChange = { accessToken = it },
-                        label = { Text("Access Token (Optional)") },
+                        label = { Text("Access token (optional)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -371,7 +372,7 @@ fun SettingsTab(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(if (smartcarConnected) "Reconnect Smartcar" else "Sign In with Smartcar")
+                            Text(if (smartcarConnected) "Reconnect Smartcar" else "Sign in with Smartcar")
                         }
                     }
                     if (smartcarConnected) {
@@ -427,11 +428,11 @@ fun SettingsTab(
 
         AlertDialog(
             onDismissRequest = { showTeslaDialog = false },
-            title = { Text("Tesla Fleet API") },
+            title = { Text("Tesla Fleet (Model 3)") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     DashboardLinkButton(
-                        label = "Open Tesla Developer Portal",
+                        label = "Open Tesla developer portal",
                         url = DeveloperDashboardUrls.TESLA
                     )
                     OutlinedTextField(
@@ -444,14 +445,14 @@ fun SettingsTab(
                     OutlinedTextField(
                         value = clientSecret,
                         onValueChange = { clientSecret = it },
-                        label = { Text("Client Secret") },
+                        label = { Text("Client secret") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = accessToken,
                         onValueChange = { accessToken = it },
-                        label = { Text("Access Token (Optional)") },
+                        label = { Text("Access token (optional)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -467,7 +468,7 @@ fun SettingsTab(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(if (teslaConnected) "Reconnect Tesla" else "Sign In with Tesla")
+                            Text(if (teslaConnected) "Reconnect Tesla" else "Sign in with Tesla")
                         }
                     }
                     if (teslaConnected) {
@@ -526,11 +527,11 @@ fun SettingsTab(
 
         AlertDialog(
             onDismissRequest = { showWallConnectorMappingDialog = false },
-            title = { Text("Wall Connector Vehicle Mapping") },
+            title = { Text("Assign Wall Connectors") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Assign which vehicle charges on each Tesla Wall Connector during automated daily and manual polls.",
+                        "Choose which vehicle uses each charger.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -574,7 +575,7 @@ fun SettingsTab(
                         coroutineScope.launch {
                             preferencesManager.setWallConnectorCarMapping(selectedGen3Id, selectedUniversalId)
                             showWallConnectorMappingDialog = false
-                            Toast.makeText(context, "Wall Connector mapping saved", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Wall Connector assignment saved", Toast.LENGTH_SHORT).show()
                         }
                     }
                 ) {
@@ -594,9 +595,9 @@ fun SettingsTab(
         val targetCar = carPendingForceWake!!
         AlertDialog(
             onDismissRequest = { carPendingForceWake = null },
-            title = { Text("Wake Vehicle?") },
+            title = { Text("Wake vehicle?") },
             text = {
-                Text("Waking ${targetCar.displayName} draws battery power. Poll odometer now?")
+                Text("Waking ${targetCar.displayName} uses a small amount of battery. Sync odometer now?")
             },
             confirmButton = {
                 TextButton(
@@ -605,7 +606,7 @@ fun SettingsTab(
                         carPendingForceWake = null
                         Toast.makeText(
                             context,
-                            "Polling ${carToSync.displayName} odometer...",
+                            "Syncing ${carToSync.displayName} odometer...",
                             Toast.LENGTH_SHORT
                         ).show()
                         coroutineScope.launch {
@@ -619,7 +620,7 @@ fun SettingsTab(
                         }
                     }
                 ) {
-                    Text("Wake & Poll", color = MaterialTheme.colorScheme.error)
+                    Text("Wake & sync", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -684,7 +685,7 @@ fun SettingsTab(
             }
         ) {
             Text(
-                text = "Wall Connector Sync Time",
+                text = "Charging sync time",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -708,30 +709,30 @@ fun SettingsTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // GENERAL Section
+        // General section
         item {
-            SettingsSectionHeader(title = "GENERAL")
+            SettingsSectionHeader(title = "General")
             Spacer(modifier = Modifier.height(6.dp))
             SettingsGroupCard {
                 SettingsRowItem(
                     icon = Icons.Filled.DirectionsCar,
                     iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
                     iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    title = "Garage Name",
+                    title = "Garage name",
                     subtitle = garageName,
                     onClick = { showGarageNameDialog = true },
                     trailing = {
                         IconButton(onClick = { showGarageNameDialog = true }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Edit Garage Name")
+                            Icon(Icons.Filled.Edit, contentDescription = "Edit garage name")
                         }
                     }
                 )
             }
         }
 
-        // CLOUD & BACKUP Section
+        // Backup section
         item {
-            SettingsSectionHeader(title = "CLOUD & BACKUP")
+            SettingsSectionHeader(title = "Backup")
             Spacer(modifier = Modifier.height(6.dp))
             SettingsGroupCard {
                 val isConnected = currentUser != null
@@ -739,8 +740,8 @@ fun SettingsTab(
                     icon = if (isConnected) Icons.Filled.CloudDone else Icons.Filled.CloudOff,
                     iconContainerColor = if (isConnected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                     iconTint = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                    title = "Google Drive Sync",
-                    subtitle = if (isConnected) "Connected: ${currentUser?.email}" else "Auto-scan & import receipts and documents",
+                    title = "Google Drive sync",
+                    subtitle = if (isConnected) currentUser?.email.orEmpty() else "Back up and import service receipts",
                     trailing = {
                         if (isConnected) {
                             OutlinedButton(
@@ -758,7 +759,7 @@ fun SettingsTab(
                                     signInLauncher.launch(googleDriveService.getSignInIntent())
                                 }
                             ) {
-                                Text("Sign In")
+                                Text("Sign in")
                             }
                         }
                     }
@@ -766,12 +767,12 @@ fun SettingsTab(
             }
         }
 
-        // VEHICLE TELEMETRY Section
+        // Vehicle sync section
         item {
             val gmCar = cars.firstOrNull { OdometerSyncService.resolveProviderForCar(it) == OdometerSyncService.PROVIDER_SMARTCAR }
             val teslaCar = cars.firstOrNull { OdometerSyncService.resolveProviderForCar(it) == OdometerSyncService.PROVIDER_TESLA }
 
-            SettingsSectionHeader(title = "VEHICLE TELEMETRY")
+            SettingsSectionHeader(title = "Vehicle sync")
             Spacer(modifier = Modifier.height(6.dp))
             SettingsGroupCard {
                 Column(
@@ -797,22 +798,22 @@ fun SettingsTab(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column {
                             Text(
-                                text = "Odometer Sync & Policies",
+                                text = "Odometer & charging sync",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "Battery-safe vehicle polling controls",
+                                text = "Automatic mileage and charger updates",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    // Wake Protection Mode
+                    // Sleep protection mode
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            "Wake Guard",
+                            "Sleep protection",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -829,15 +830,15 @@ fun SettingsTab(
                         }
                     }
 
-                    // Poll Cooldown
+                    // Minimum wait
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            "Min Cooldown",
+                            "Minimum wait",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(24 to "24h", 72 to "72h", 168 to "7d").forEach { (hours, label) ->
+                            listOf(24 to "24 hr", 72 to "3 days", 168 to "7 days").forEach { (hours, label) ->
                                 FilterChip(
                                     selected = cooldownHours == hours,
                                     onClick = {
@@ -851,7 +852,7 @@ fun SettingsTab(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
-                    // Nightly End-of-Day Polling
+                    // Nightly mileage check
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -859,12 +860,12 @@ fun SettingsTab(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Nightly Mileage Snapshot",
+                                "Nightly mileage check",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                "Poll vehicle odometer at 11:00 PM",
+                                "Sync odometer daily at 11:00 PM",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -886,7 +887,7 @@ fun SettingsTab(
                         }
                         Switch(
                             checked = dailyPollEnabled,
-                            modifier = Modifier.semantics { contentDescription = "Nightly Mileage Snapshot" },
+                            modifier = Modifier.semantics { contentDescription = "Nightly mileage check" },
                             onCheckedChange = { isChecked ->
                                 coroutineScope.launch {
                                     preferencesManager.setDailyPollEnabled(isChecked)
@@ -916,9 +917,9 @@ fun SettingsTab(
                                 fontWeight = FontWeight.SemiBold
                             )
                             val gmSub = when {
-                                !smartcarConnected && gmSyncTimeText == null -> "Not linked"
+                                !smartcarConnected && gmSyncTimeText == null -> "Not connected"
                                 gmSyncTimeText != null && gmCar != null && OdometerSyncService.isCooldownActive(gmCar.lastOdometerSyncTime, cooldownHours) ->
-                                    "Synced $gmSyncTimeText • Cooldown (${OdometerSyncService.remainingCooldownHours(gmCar.lastOdometerSyncTime, cooldownHours)}h)"
+                                    "Synced $gmSyncTimeText • Next auto-sync in ${OdometerSyncService.remainingCooldownHours(gmCar.lastOdometerSyncTime, cooldownHours)}h"
                                 gmSyncTimeText != null ->
                                     "Synced $gmSyncTimeText"
                                 else -> "Connected • Not yet synced"
@@ -949,7 +950,7 @@ fun SettingsTab(
                             }
                             if (gmCar != null && odometerSyncService != null) {
                                 TextButton(onClick = { carPendingForceWake = gmCar }) {
-                                    Text("Poll")
+                                    Text("Sync")
                                 }
                             }
                         }
@@ -971,10 +972,10 @@ fun SettingsTab(
                             )
                             val teslaSyncTimeText = OdometerSyncService.formatRelativeTime(teslaCar?.lastOdometerSyncTime)
                             val teslaSub = when {
-                                !teslaConnected -> "Not linked"
+                                !teslaConnected -> "Not connected"
                                 teslaCar?.telemetryStatus == "Asleep" && teslaSyncTimeText != null ->
-                                    "Synced $teslaSyncTimeText • Asleep (No wake)"
-                                teslaCar?.telemetryStatus == "Asleep" -> "Asleep (No wake)"
+                                    "Synced $teslaSyncTimeText • Asleep"
+                                teslaCar?.telemetryStatus == "Asleep" -> "Asleep"
                                 teslaSyncTimeText != null ->
                                     "Synced $teslaSyncTimeText"
                                 else -> "Connected • Not yet synced"
@@ -1003,28 +1004,8 @@ fun SettingsTab(
                                     Text("Connect")
                                 }
                             } else if (teslaConnected && teslaCar != null && odometerSyncService != null) {
-                                TextButton(
-                                    onClick = {
-                                        Toast.makeText(
-                                            context,
-                                            "Checking ${teslaCar.displayName} status...",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                        coroutineScope.launch {
-                                            val result = odometerSyncService.syncVehicle(teslaCar, isManual = true, forceWake = false)
-                                            Toast.makeText(
-                                                context,
-                                                OdometerSyncService.formatSyncResultMessage(teslaCar, result),
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                            odometerSyncService.syncWallConnectorCharging(cars)
-                                        }
-                                    }
-                                ) {
-                                    Text("Check")
-                                }
                                 TextButton(onClick = { carPendingForceWake = teslaCar }) {
-                                    Text("Wake")
+                                    Text("Sync")
                                 }
                             }
                         }
@@ -1068,7 +1049,7 @@ fun SettingsTab(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Wall Connectors (Gen 3 & Universal)",
+                                "Wall Connectors",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -1078,14 +1059,14 @@ fun SettingsTab(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             val chargerStatusText = when {
-                                !teslaConnected -> "Connect Tesla Fleet API to sync home charging"
+                                !teslaConnected -> "Connect Tesla to sync home charging"
                                 chargerSyncTimeText != null && !lastChargerSyncStatus.isNullOrBlank() ->
                                     "Last sync $chargerSyncTimeText • $lastChargerSyncStatus"
                                 chargerSyncTimeText != null ->
                                     "Last sync $chargerSyncTimeText"
                                 chargerSyncEnabled ->
-                                    "Scheduled automatically at $formattedChargerSyncTime daily"
-                                else -> "Auto-sync paused • Manual sync only"
+                                    "Syncs daily at $formattedChargerSyncTime"
+                                else -> "Auto-sync off"
                             }
                             Text(
                                 text = chargerStatusText,
@@ -1126,7 +1107,7 @@ fun SettingsTab(
                                     onClick = {
                                         Toast.makeText(
                                             context,
-                                            "Syncing Tesla Wall Connectors...",
+                                            "Syncing Wall Connectors...",
                                             Toast.LENGTH_SHORT
                                         ).show()
                                         coroutineScope.launch {
@@ -1157,7 +1138,7 @@ fun SettingsTab(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                "Daily Charging Auto-Sync",
+                                "Daily charging sync",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium
                             )
@@ -1183,7 +1164,7 @@ fun SettingsTab(
                                 trailingIcon = {
                                     Icon(
                                         imageVector = Icons.Filled.Edit,
-                                        contentDescription = "Edit Wall Connector sync time",
+                                        contentDescription = "Edit charging sync time",
                                         modifier = Modifier.size(14.dp)
                                     )
                                 }
@@ -1191,7 +1172,7 @@ fun SettingsTab(
                         }
                         Switch(
                             checked = chargerSyncEnabled,
-                            modifier = Modifier.semantics { contentDescription = "Daily Charging Auto-Sync" },
+                            modifier = Modifier.semantics { contentDescription = "Daily charging sync" },
                             onCheckedChange = { isChecked ->
                                 coroutineScope.launch {
                                     preferencesManager.setChargerSyncEnabled(isChecked)
@@ -1212,49 +1193,49 @@ fun SettingsTab(
             }
         }
 
-        // API KEYS & INTEGRATIONS Section
+        // API keys section
         item {
-            SettingsSectionHeader(title = "API KEYS & INTEGRATIONS")
+            SettingsSectionHeader(title = "API keys")
             Spacer(modifier = Modifier.height(6.dp))
             SettingsGroupCard {
-                // Gemini AI (Receipt Parsing)
+                // Gemini AI (Receipt scanning)
                 val geminiStatus = if (!geminiKey.isNullOrBlank()) {
-                    "Active (Gemini 2.5 Flash)"
+                    "Gemini AI enabled"
                 } else {
-                    "Smart regex fallback (No custom API key)"
+                    "Basic (filename only)"
                 }
                 SettingsRowItem(
                     icon = Icons.Filled.AutoAwesome,
                     iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "Receipt AI Parsing",
+                    title = "Receipt scanning",
                     subtitle = geminiStatus,
                     onClick = { showGeminiKeyDialog = true },
                     trailing = {
                         IconButton(onClick = { showGeminiKeyDialog = true }) {
-                            Icon(Icons.Filled.Key, contentDescription = "Configure Gemini Key")
+                            Icon(Icons.Filled.Key, contentDescription = "Configure Gemini key")
                         }
                     }
                 )
 
                 SettingsItemDivider()
 
-                // Auto.dev (Vehicle Specs & Photos)
+                // Auto.dev (VIN lookup & photos)
                 val autoDevStatus = if (!autoDevKey.isNullOrBlank()) {
-                    "Custom auto.dev API key configured"
+                    "Custom key"
                 } else {
-                    "Default bundled auto.dev API key"
+                    "Default key"
                 }
                 SettingsRowItem(
                     icon = Icons.Filled.DirectionsCar,
                     iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                     iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    title = "Vehicle Specs API",
+                    title = "VIN lookup",
                     subtitle = autoDevStatus,
                     onClick = { showAutoDevKeyDialog = true },
                     trailing = {
                         IconButton(onClick = { showAutoDevKeyDialog = true }) {
-                            Icon(Icons.Filled.Key, contentDescription = "Configure Auto.dev Key")
+                            Icon(Icons.Filled.Key, contentDescription = "Configure Auto.dev key")
                         }
                     }
                 )
@@ -1263,20 +1244,20 @@ fun SettingsTab(
 
                 // Smartcar Developer Credentials
                 val smartcarStatus = if (smartcarConnected) {
-                    "Linked & configured (Tap to edit credentials)"
+                    "Connected"
                 } else {
-                    "Client ID & Client Secret (Tap to configure)"
+                    "Not set up"
                 }
                 SettingsRowItem(
                     icon = Icons.Filled.Key,
                     iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                    title = "Smartcar API (GM / Blazer EV)",
+                    title = "Smartcar (Blazer EV)",
                     subtitle = smartcarStatus,
                     onClick = { showSmartcarDialog = true },
                     trailing = {
                         IconButton(onClick = { showSmartcarDialog = true }) {
-                            Icon(Icons.Filled.Key, contentDescription = "Configure Smartcar Credentials")
+                            Icon(Icons.Filled.Key, contentDescription = "Configure Smartcar credentials")
                         }
                     }
                 )
@@ -1285,29 +1266,29 @@ fun SettingsTab(
 
                 // Tesla Fleet Developer Credentials
                 val teslaStatus = if (teslaConnected) {
-                    "Linked & configured (Tap to edit credentials)"
+                    "Connected"
                 } else {
-                    "Client ID & Client Secret (Tap to configure)"
+                    "Not set up"
                 }
                 SettingsRowItem(
                     icon = Icons.Filled.Key,
                     iconContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "Tesla Fleet API (Model 3)",
+                    title = "Tesla Fleet (Model 3)",
                     subtitle = teslaStatus,
                     onClick = { showTeslaDialog = true },
                     trailing = {
                         IconButton(onClick = { showTeslaDialog = true }) {
-                            Icon(Icons.Filled.Key, contentDescription = "Configure Tesla Credentials")
+                            Icon(Icons.Filled.Key, contentDescription = "Configure Tesla credentials")
                         }
                     }
                 )
             }
         }
 
-        // ABOUT Section
+        // About section
         item {
-            SettingsSectionHeader(title = "ABOUT")
+            SettingsSectionHeader(title = "About")
             Spacer(modifier = Modifier.height(6.dp))
             SettingsGroupCard {
                 SettingsRowItem(
@@ -1315,7 +1296,7 @@ fun SettingsTab(
                     iconContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                     iconTint = MaterialTheme.colorScheme.primary,
                     title = "Garage Journal",
-                    subtitle = "Version 1.0.0 • Native Jetpack Compose"
+                    subtitle = "Version ${BuildConfig.VERSION_NAME}"
                 )
             }
         }

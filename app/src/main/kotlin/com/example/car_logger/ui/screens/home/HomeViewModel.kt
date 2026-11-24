@@ -275,7 +275,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 fixedCharges = 0.0,
                 source = "manual",
                 fileName = fileName,
-                error = "Could not open file $fileName. You can enter the bill totals manually below."
+                error = "Couldn't open $fileName. Enter the bill details manually."
             )
 
         return geminiAiService.parseUtilityBill(
@@ -306,7 +306,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 sessions = emptyList(),
                 fileName = fileName,
                 source = "manual",
-                error = "Could not open $fileName. Enter sessions or monthly totals manually below."
+                error = "Couldn't open $fileName. Enter sessions or monthly totals manually."
             )
 
         val isCsv = fileName.endsWith(".csv", ignoreCase = true) ||
@@ -328,7 +328,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     sessions = emptyList(),
                     fileName = fileName,
                     source = "csv",
-                    error = "Could not detect date and kWh columns in $fileName. Try a screenshot/PDF or enter a total below."
+                    error = "Couldn't detect date and kWh columns in $fileName. Try a screenshot or PDF, or enter it manually."
                 )
             }
         }
@@ -440,12 +440,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             dismissChargerUsageSheet()
             val msg = when {
                 insertedCount > 0 && totalSkipped > 0 ->
-                    "Added $insertedCount charging ${if (insertedCount == 1) "entry" else "entries"} ($totalSkipped duplicates skipped)"
+                    "Added $insertedCount charging ${if (insertedCount == 1) "session" else "sessions"} ($totalSkipped ${if (totalSkipped == 1) "duplicate" else "duplicates"} skipped)"
                 insertedCount > 0 ->
-                    "Added $insertedCount charging ${if (insertedCount == 1) "entry" else "entries"}"
+                    "Added $insertedCount charging ${if (insertedCount == 1) "session" else "sessions"}"
                 totalSkipped > 0 ->
-                    "All $totalSkipped entries were already saved"
-                else -> "No charging entries saved"
+                    "All $totalSkipped sessions were already saved"
+                else -> "No charging sessions saved"
             }
             _toastMessage.emit(msg)
         }
@@ -464,21 +464,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 batch
             }
             if (lastBatch.isEmpty()) {
-                _toastMessage.emit("No charging upload to undo")
+                _toastMessage.emit("No charging import to undo")
                 return@launch
             }
             if (reopenForRetag) {
                 _pendingChargerImport.value = ElectricityImportParser.sessionsToImportResult(
                     sessions = lastBatch,
-                    fileName = "last upload"
+                    fileName = "last import"
                 )
                 _showChargerUsageSheet.value = true
                 _toastMessage.emit(
-                    "Undid last upload (${lastBatch.size} ${if (lastBatch.size == 1) "entry" else "entries"}) — pick a vehicle to re-save"
+                    "Removed ${lastBatch.size} ${if (lastBatch.size == 1) "session" else "sessions"} — choose a vehicle to save again"
                 )
             } else {
                 _toastMessage.emit(
-                    "Undid last upload (${lastBatch.size} charging ${if (lastBatch.size == 1) "entry" else "entries"} removed)"
+                    "Removed ${lastBatch.size} charging ${if (lastBatch.size == 1) "session" else "sessions"}"
                 )
             }
         }
@@ -498,7 +498,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.IO) {
                 chargingSessionDao.deleteSessionById(sessionId)
             }
-            _toastMessage.emit("Deleted charging entry")
+            _toastMessage.emit("Deleted charging session")
         }
     }
 
@@ -506,7 +506,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             preferencesManager.setCustomElectricityRate(rate)
             _toastMessage.emit(
-                "Electric rate updated to $${String.format(Locale.US, "%.3f", rate)}/kWh"
+                "Home rate set to $${String.format(Locale.US, "%.3f", rate)}/kWh"
             )
         }
     }
@@ -514,7 +514,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun useSavedBillRate() {
         viewModelScope.launch {
             preferencesManager.setUseCustomElectricityRate(false)
-            _toastMessage.emit("Switched back to saved electric bill rates")
+            _toastMessage.emit("Using rates from saved bills")
         }
     }
 
@@ -661,7 +661,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val providerLabel = if (isSmartcar) "Smartcar" else "Tesla"
             val connected = odometerSyncService.handleOAuthCallback(uri)
             if (connected) {
-                _toastMessage.tryEmit("$providerLabel connected! Syncing odometer...")
+                _toastMessage.tryEmit("$providerLabel connected. Syncing odometer...")
                 val targetProvider = if (isSmartcar) {
                     OdometerSyncService.PROVIDER_SMARTCAR
                 } else {
@@ -693,7 +693,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else {
                 val detail = odometerSyncService.lastSyncMessage.value
-                _toastMessage.tryEmit(detail ?: "Failed to connect $providerLabel")
+                _toastMessage.tryEmit(detail ?: "Couldn't connect $providerLabel")
             }
         }
     }
@@ -724,7 +724,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _toastMessage.emit("Updated photo for ${car.displayName}")
                 onComplete?.invoke(updatedCar)
             }.onFailure { err ->
-                _toastMessage.emit("Failed to save image: ${err.message}")
+                _toastMessage.emit("Couldn't save photo")
             }
         }
     }
@@ -736,7 +736,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _toastMessage.emit("Updated photo for ${car.displayName}")
                 onComplete?.invoke(updatedCar)
             }.onFailure { err ->
-                _toastMessage.emit("Failed to import photo: ${err.message}")
+                _toastMessage.emit("Couldn't import photo")
             }
         }
     }
@@ -748,7 +748,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _toastMessage.emit("Reset photo for ${car.displayName}")
                 onComplete?.invoke(updatedCar)
             }.onFailure { err ->
-                _toastMessage.emit("Failed to reset photo: ${err.message}")
+                _toastMessage.emit("Couldn't reset photo")
             }
         }
     }

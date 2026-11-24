@@ -135,7 +135,7 @@ fun VehicleOverviewTab(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchQueryChange,
-                placeholder = { Text("Search maintenance logs...") },
+                placeholder = { Text("Search service history") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -160,7 +160,7 @@ fun VehicleOverviewTab(
                         FilterChip(
                             selected = selectedYear == null,
                             onClick = { onSelectYear(null) },
-                            label = { Text("All Years") }
+                            label = { Text("All years") }
                         )
                     }
                     items(availableYears) { year ->
@@ -182,7 +182,7 @@ fun VehicleOverviewTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (selectedYear != null) "$selectedYear Maintenance Records" else "Maintenance Records",
+                    text = if (selectedYear != null) "$selectedYear service history" else "Service history",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -213,7 +213,7 @@ fun VehicleOverviewTab(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = if (records.isEmpty()) "No maintenance logged yet" else "No matching records",
+                            text = if (records.isEmpty()) "No service records yet" else "No matching records",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -294,7 +294,7 @@ fun VehicleOverviewTab(
                             IconButton(onClick = { onAttachmentClick(record) }) {
                                 Icon(
                                     Icons.Filled.AttachFile,
-                                    contentDescription = "View Attachment",
+                                    contentDescription = "View receipt",
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             }

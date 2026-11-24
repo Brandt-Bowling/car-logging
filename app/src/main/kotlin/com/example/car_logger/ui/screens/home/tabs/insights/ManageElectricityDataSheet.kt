@@ -8,13 +8,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,8 +62,8 @@ import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.util.Locale
 
 private enum class HistoryTab(val label: String) {
-    BILLS("Electric Bills"),
-    SESSIONS("Charging Logs")
+    BILLS("Bills"),
+    SESSIONS("Sessions")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,8 +87,8 @@ fun ManageElectricityDataSheet(
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val topClearance = maxOf(statusBarTop + 8.dp, 72.dp)
+    val topInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding()
+    val topClearance = maxOf(topInset + 8.dp, 72.dp)
     var selectedTab by remember(initialShowSessionsTab) {
         mutableStateOf(
             if (initialShowSessionsTab || (utilityBills.isEmpty() && chargingSessions.isNotEmpty())) {
@@ -113,6 +115,7 @@ fun ManageElectricityDataSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
         modifier = modifier.padding(top = topClearance)
     ) {
         Column(
@@ -125,7 +128,7 @@ fun ManageElectricityDataSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Charging & Bills History",
+                text = "Charging & bills",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -142,15 +145,15 @@ fun ManageElectricityDataSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = if (useCustomRate) "Custom Electric Rate (Active)" else "Home Electric Rate",
+                        text = if (useCustomRate) "Custom rate" else "Home electric rate",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = when {
-                            useCustomRate -> "Overrides saved electric bills as your source of truth. Saving a new bill updates this rate automatically."
-                            utilityBills.isNotEmpty() -> "Used when no bill matches a date. Applying a rate here switches to your custom rate."
-                            else -> "Used automatically for home charging when no electric bill is uploaded yet."
+                            useCustomRate -> "Overrides rates from saved bills. Adding a new bill switches back automatically."
+                            utilityBills.isNotEmpty() -> "Fallback when no bill matches a date. Applying a rate overrides saved bills."
+                            else -> "Used for home charging until you add a bill."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -193,13 +196,13 @@ fun ManageElectricityDataSheet(
                                 onUseSavedBillRate()
                             }
                         ) {
-                            Text("Use saved electric bill rate instead")
+                            Text("Use bill rates")
                         }
                     }
                 }
             }
 
-            // Connected Button Group: Electric Bills | Charging Logs
+            // Connected Button Group: Bills | Sessions
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -268,9 +271,9 @@ fun ManageElectricityDataSheet(
             if (selectedTab == HistoryTab.BILLS) {
                 if (utilityBills.isEmpty()) {
                     EmptyHistoryBox(
-                        title = "No electric bills saved",
-                        subtitle = "Upload a utility PDF/photo or enter your bill totals so we can calculate your true electric rate.",
-                        buttonLabel = "Add Electric Bill",
+                        title = "No bills yet",
+                        subtitle = "Add a bill PDF, photo, or total to calculate your electric rate.",
+                        buttonLabel = "Add bill",
                         onClick = onOpenAddBill
                     )
                 } else {
@@ -293,12 +296,12 @@ fun ManageElectricityDataSheet(
                                         verticalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
                                         Text(
-                                            text = "${bill.providerName.ifBlank { "Electric Bill" }} · ${ElectricityImportParser.formatPeriodShort(bill.startDateMs, bill.endDateMs)}",
+                                            text = "${bill.providerName.ifBlank { "Electric bill" }} · ${ElectricityImportParser.formatPeriodShort(bill.startDateMs, bill.endDateMs)}",
                                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            text = "$${String.format(Locale.US, "%.3f", bill.effectiveRate)}/kWh · ${String.format(Locale.US, "%.0f", bill.totalKwh)} kWh · $${String.format(Locale.US, "%.2f", bill.totalAmount)}" +
+                                            text = "$${String.format(Locale.US, "%.3f", bill.effectiveRate)}/kWh · ${String.format(Locale.US, "%,.0f", bill.totalKwh)} kWh · $${String.format(Locale.US, "%.2f", bill.totalAmount)}" +
                                                 if (bill.overrideRate != null) " (Custom)" else "",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -327,23 +330,28 @@ fun ManageElectricityDataSheet(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Add Electric Bill")
+                            Text("Add bill")
                         }
                     }
                 }
             } else {
                 if (chargingSessions.isEmpty()) {
                     EmptyHistoryBox(
-                        title = "No charging logs saved",
-                        subtitle = "Upload a charger CSV/PDF/screenshot or enter a session or monthly kWh total.",
-                        buttonLabel = "Add Charger Usage",
+                        title = "No charging sessions",
+                        subtitle = "Import a charger file or log a session manually.",
+                        buttonLabel = "Add charging",
                         onClick = onOpenAddCharger
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (lastUploadBatch.isNotEmpty()) {
                             val batchKwh = lastUploadBatch.sumOf { it.kwh }
-                            val batchVehicleLabel = lastUploadBatch.first().carId?.let { carNameById[it] } ?: "Both EVs"
+                            val formattedBatchKwh = String.format(
+                                Locale.US,
+                                if (batchKwh >= 100.0) "%,.0f" else "%,.1f",
+                                batchKwh
+                            )
+                            val batchVehicleLabel = lastUploadBatch.first().carId?.let { carNameById[it] } ?: "All vehicles"
                             val minStart = lastUploadBatch.minOf { it.startDateMs }
                             val maxEnd = lastUploadBatch.maxOf { it.endDateMs }
                             val batchDateLabel = ElectricityImportParser.formatPeriodShort(minStart, maxEnd)
@@ -359,12 +367,12 @@ fun ManageElectricityDataSheet(
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                         Text(
-                                            text = "Last Upload · ${lastUploadBatch.size} ${if (lastUploadBatch.size == 1) "log" else "logs"} (${String.format(Locale.US, "%.1f", batchKwh)} kWh)",
+                                            text = "Last import · ${lastUploadBatch.size} ${if (lastUploadBatch.size == 1) "session" else "sessions"} ($formattedBatchKwh kWh)",
                                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                             color = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                         Text(
-                                            text = "Tagged to $batchVehicleLabel · $batchDateLabel",
+                                            text = "Assigned to $batchVehicleLabel · $batchDateLabel",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
                                         )
@@ -388,7 +396,7 @@ fun ManageElectricityDataSheet(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "Undo Upload",
+                                                text = "Undo",
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -408,7 +416,7 @@ fun ManageElectricityDataSheet(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "Undo & Re-tag",
+                                                text = "Change vehicle",
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -420,7 +428,7 @@ fun ManageElectricityDataSheet(
 
                         chargingSessions.forEach { session ->
                             val isPublic = session.venue.equals("PUBLIC", ignoreCase = true)
-                            val vehicleLabel = session.carId?.let { carNameById[it] } ?: "Both EVs"
+                            val vehicleLabel = session.carId?.let { carNameById[it] } ?: "All vehicles"
                             val dateLabel = ElectricityImportParser.formatPeriodShort(session.startDateMs, session.endDateMs)
                             Surface(
                                 shape = RoundedCornerShape(18.dp),
@@ -468,7 +476,7 @@ fun ManageElectricityDataSheet(
                                     IconButton(onClick = { onDeleteSession(session.id) }) {
                                         Icon(
                                             imageVector = Icons.Rounded.DeleteOutline,
-                                            contentDescription = "Delete charging log",
+                                            contentDescription = "Delete charging session",
                                             tint = MaterialTheme.colorScheme.error
                                         )
                                     }

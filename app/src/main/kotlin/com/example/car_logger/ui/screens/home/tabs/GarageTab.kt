@@ -130,9 +130,9 @@ fun GarageTab(
         AlertDialog(
             onDismissRequest = { carToDelete = null },
             icon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Remove Vehicle") },
+            title = { Text("Remove ${car.year} ${car.make} ${car.model}?") },
             text = {
-                Text("Are you sure you want to remove your ${car.year} ${car.make} ${car.model}? This will also delete associated records.")
+                Text("This also deletes its service history and saved documents.")
             },
             confirmButton = {
                 TextButton(
@@ -168,19 +168,19 @@ fun GarageTab(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "No vehicles in your garage",
+                    text = "No vehicles yet",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Add a vehicle using your VIN or select make and model manually.",
+                    text = "Add a vehicle with a VIN or enter it manually.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 FilledTonalButton(onClick = onAddCarClick) {
-                    Text("Add Vehicle")
+                    Text("Add vehicle")
                 }
             }
         }
@@ -345,18 +345,18 @@ fun VehicleCard(
                                 tonalElevation = 6.dp,
                                 shadowElevation = 10.dp
                             ) {
-                                // 1. Featured Action: Vehicle Photo Customization
+                                // 1. Featured Action: Change photo
                                 if (onOpenPhotoPicker != null) {
                                     DropdownMenuItem(
                                         text = {
                                             Column {
                                                 Text(
-                                                    text = "Vehicle Photo",
+                                                    text = "Change photo",
                                                     style = MaterialTheme.typography.titleSmall,
                                                     fontWeight = FontWeight.SemiBold
                                                 )
                                                 Text(
-                                                    text = "Generate with AI or upload",
+                                                    text = "AI or gallery",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -395,7 +395,7 @@ fun VehicleCard(
                                     DropdownMenuItem(
                                         text = {
                                             Text(
-                                                "Rotation Interval",
+                                                "Tire rotation interval",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Medium
                                             )
@@ -447,7 +447,7 @@ fun VehicleCard(
                                 DropdownMenuItem(
                                     text = {
                                         Text(
-                                            "Delete Vehicle",
+                                            "Remove vehicle",
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.error
@@ -512,7 +512,7 @@ fun VehicleCard(
                         val formattedOdo = if (car.odometer != null) {
                             "${NumberFormat.getNumberInstance(Locale.US).format(car.odometer)} mi"
                         } else {
-                            "No mileage logged"
+                            "No mileage"
                         }
                         Text(
                             text = formattedOdo,

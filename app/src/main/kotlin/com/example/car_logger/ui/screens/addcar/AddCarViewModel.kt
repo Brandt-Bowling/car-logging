@@ -41,7 +41,7 @@ class AddCarViewModel(application: Application) : AndroidViewModel(application) 
     fun decodeVin() {
         val vin = vinInput.value.trim()
         if (vin.length < 11) {
-            vinError.value = "Please enter a valid 17-character VIN"
+            vinError.value = "Enter a 17-character VIN"
             return
         }
 
@@ -59,7 +59,7 @@ class AddCarViewModel(application: Application) : AndroidViewModel(application) 
                 isEv.value = result.isEv
                 selectedImageUrl.value = result.photoUrl
             } else {
-                vinError.value = result.errorMessage ?: "Failed to decode VIN"
+                vinError.value = result.errorMessage ?: "Couldn't look up VIN"
             }
         }
     }

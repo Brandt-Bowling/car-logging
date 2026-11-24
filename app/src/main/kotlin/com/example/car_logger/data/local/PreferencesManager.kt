@@ -16,8 +16,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 enum class WakeProtectionPolicy(val key: String, val label: String) {
-    AWAKE_ONLY("awake_only", "Awake-Only"),
-    POST_DRIVE("post_drive", "Post-Drive"),
+    AWAKE_ONLY("awake_only", "When awake"),
+    POST_DRIVE("post_drive", "After driving"),
     MANUAL_ONLY("manual_only", "Manual");
 
     companion object {

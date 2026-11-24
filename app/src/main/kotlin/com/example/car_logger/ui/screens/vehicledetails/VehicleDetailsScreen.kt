@@ -159,15 +159,15 @@ fun VehicleDetailsScreen(
     if (showWakeConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showWakeConfirmDialog = false },
-            title = { Text("Wake Vehicle?") },
-            text = { Text("Waking ${carItem.displayName} draws battery power. Poll odometer now?") },
+            title = { Text("Wake vehicle?") },
+            text = { Text("Waking ${carItem.displayName} uses a small amount of battery. Sync odometer now?") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showWakeConfirmDialog = false
                         Toast.makeText(
                             context,
-                            "Polling ${carItem.displayName} odometer...",
+                            "Syncing ${carItem.displayName}...",
                             Toast.LENGTH_SHORT
                         ).show()
                         viewModel.syncLiveOdometer(forceWake = true) { result ->
@@ -179,7 +179,7 @@ fun VehicleDetailsScreen(
                         }
                     }
                 ) {
-                    Text("Wake & Poll", color = MaterialTheme.colorScheme.error)
+                    Text("Wake & sync", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -205,12 +205,12 @@ fun VehicleDetailsScreen(
             },
             onPickImageUri = { uri ->
                 viewModel.saveVehicleImageFromUri(uri) {
-                    Toast.makeText(context, "Imported photo for ${carItem.displayName}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Updated photo for ${carItem.displayName}", Toast.LENGTH_SHORT).show()
                 }
             },
             onResetToStock = {
                 viewModel.resetVehicleImage {
-                    Toast.makeText(context, "Reset photo to stock", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Reset to default photo", Toast.LENGTH_SHORT).show()
                 }
             },
             onDismissRequest = { showPhotoCustomizerSheet = false }
@@ -237,20 +237,20 @@ fun VehicleDetailsScreen(
 
         AlertDialog(
             onDismissRequest = { showRotationDialog = false },
-            title = { Text("Log Tire Rotation") },
+            title = { Text("Log tire rotation") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = rotDate,
                         onValueChange = { rotDate = it },
-                        label = { Text("Rotation Date (YYYY-MM-DD)") },
+                        label = { Text("Rotation date (YYYY-MM-DD)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = rotOdo,
                         onValueChange = { rotOdo = it },
-                        label = { Text("Odometer at Rotation") },
+                        label = { Text("Odometer at rotation") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -265,7 +265,7 @@ fun VehicleDetailsScreen(
                         Toast.makeText(context, "Logged tire rotation at $odoInt mi", Toast.LENGTH_SHORT).show()
                     }
                 ) {
-                    Text("Save Rotation")
+                    Text("Save")
                 }
             },
             dismissButton = {
@@ -276,7 +276,7 @@ fun VehicleDetailsScreen(
         )
     }
 
-    // Install New Tire Set Dialog
+    // New Tire Set Dialog
     if (showNewTireDialog) {
         var mfg by remember { mutableStateOf("") }
         var model by remember { mutableStateOf("") }
@@ -286,41 +286,41 @@ fun VehicleDetailsScreen(
 
         AlertDialog(
             onDismissRequest = { showNewTireDialog = false },
-            title = { Text("Install New Tire Set") },
+            title = { Text("New tire set") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = mfg,
                         onValueChange = { mfg = it },
-                        label = { Text("Manufacturer (e.g. Michelin)") },
+                        label = { Text("Manufacturer (e.g., Michelin)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = model,
                         onValueChange = { model = it },
-                        label = { Text("Model (e.g. Defender)") },
+                        label = { Text("Model (e.g., Defender)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = installDate,
                         onValueChange = { installDate = it },
-                        label = { Text("Install Date (YYYY-MM-DD)") },
+                        label = { Text("Install date (YYYY-MM-DD)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = installOdo,
                         onValueChange = { installOdo = it },
-                        label = { Text("Odometer Installed") },
+                        label = { Text("Odometer installed") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = treadLife,
                         onValueChange = { treadLife = it },
-                        label = { Text("Estimated Tread Life (miles)") },
+                        label = { Text("Estimated tread life (miles)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -341,11 +341,11 @@ fun VehicleDetailsScreen(
                             )
                             viewModel.installNewTireSet(newTire)
                             showNewTireDialog = false
-                            Toast.makeText(context, "Installed ${newTire.manufacturer} ${newTire.model}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Saved ${newTire.manufacturer} ${newTire.model}", Toast.LENGTH_SHORT).show()
                         }
                     }
                 ) {
-                    Text("Install Set")
+                    Text("Save")
                 }
             },
             dismissButton = {
@@ -356,7 +356,7 @@ fun VehicleDetailsScreen(
         )
     }
 
-    // Edit Vehicle Name / Details Dialog
+    // Edit Vehicle Details Dialog
     if (showEditVehicleNameDialog) {
         var yearText by remember { mutableStateOf(carItem.year.toString()) }
         var makeText by remember { mutableStateOf(carItem.make) }
@@ -366,7 +366,7 @@ fun VehicleDetailsScreen(
 
         AlertDialog(
             onDismissRequest = { showEditVehicleNameDialog = false },
-            title = { Text("Edit Vehicle Details") },
+            title = { Text("Edit vehicle") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
@@ -377,28 +377,28 @@ fun VehicleDetailsScreen(
                         },
                         label = { Text("Year") },
                         isError = yearError,
-                        supportingText = if (yearError) { { Text("Enter a valid 4-digit year") } } else null,
+                        supportingText = if (yearError) { { Text("Enter a 4-digit year") } } else null,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = makeText,
                         onValueChange = { makeText = it },
-                        label = { Text("Make (e.g. Tesla)") },
+                        label = { Text("Make (e.g., Tesla)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = modelText,
                         onValueChange = { modelText = it },
-                        label = { Text("Model (e.g. Model 3)") },
+                        label = { Text("Model (e.g., Model 3)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = trimText,
                         onValueChange = { trimText = it },
-                        label = { Text("Trim (optional, e.g. Long Range)") },
+                        label = { Text("Trim (optional, e.g., Long Range)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -439,12 +439,12 @@ fun VehicleDetailsScreen(
 
         AlertDialog(
             onDismissRequest = { showEditVinDialog = false },
-            title = { Text("Edit Vehicle VIN") },
+            title = { Text("Edit VIN") },
             text = {
                 OutlinedTextField(
                     value = vinText,
                     onValueChange = { vinText = it.uppercase() },
-                    label = { Text("17-Character VIN") },
+                    label = { Text("17-character VIN") },
                     placeholder = { Text("Enter VIN") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -476,13 +476,13 @@ fun VehicleDetailsScreen(
 
         AlertDialog(
             onDismissRequest = { showEditLicensePlateDialog = false },
-            title = { Text("Edit License Plate") },
+            title = { Text("Edit license plate") },
             text = {
                 OutlinedTextField(
                     value = plateText,
                     onValueChange = { plateText = it.uppercase() },
-                    label = { Text("License Plate Number") },
-                    placeholder = { Text("e.g. 7XYZ89") },
+                    label = { Text("License plate number") },
+                    placeholder = { Text("e.g., 7XYZ89") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -532,7 +532,7 @@ fun VehicleDetailsScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.Filled.Edit,
-                            contentDescription = "Edit Vehicle Name",
+                            contentDescription = "Edit vehicle name",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
@@ -556,7 +556,7 @@ fun VehicleDetailsScreen(
                                 } else {
                                     Toast.makeText(
                                         context,
-                                        "Syncing ${carItem.displayName} odometer...",
+                                        "Syncing ${carItem.displayName}...",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                     viewModel.syncLiveOdometer(forceWake = false) { result ->
@@ -575,7 +575,7 @@ fun VehicleDetailsScreen(
                                     strokeWidth = 2.dp
                                 )
                             } else {
-                                Icon(Icons.Filled.Sync, contentDescription = "Sync Odometer")
+                                Icon(Icons.Filled.Sync, contentDescription = "Sync odometer")
                             }
                         }
                     }
@@ -710,8 +710,8 @@ fun VehicleDetailsScreen(
                 },
                 fabIcon = fabIcon,
                 fabContentDescription = when (currentSubView) {
-                    VehicleSubView.VEHICLE -> "Add Maintenance"
-                    VehicleSubView.GLOVEBOX -> "Upload Document"
+                    VehicleSubView.VEHICLE -> "Add record"
+                    VehicleSubView.GLOVEBOX -> "Upload document"
                 },
                 expanded = isToolbarExpanded,
                 modifier = Modifier.align(Alignment.BottomCenter)

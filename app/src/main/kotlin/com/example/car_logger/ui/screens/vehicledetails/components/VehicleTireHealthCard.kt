@@ -59,8 +59,8 @@ fun VehicleTireHealthCard(
         Tire(
             id = "default_${car.id}",
             carId = car.id,
-            manufacturer = "OEM / All Season",
-            model = "Standard Tires",
+            manufacturer = "Factory",
+            model = "tires",
             dateInstalled = "",
             odometerInstalled = 0,
             estimatedTreadLifeMiles = 50000,
@@ -99,7 +99,7 @@ fun VehicleTireHealthCard(
         tire.odometerInstalled > 0 ->
             "Installed at ${numberFormat.format(tire.odometerInstalled)} mi"
         else ->
-            "No rotation logged yet"
+            "No rotations logged"
     }
 
     val statusBadgeText = when {
@@ -238,7 +238,7 @@ fun VehicleTireHealthCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Leading primary connected button: + Rotate
+                // Leading primary connected button: Log rotation
                 Surface(
                     shape = RoundedCornerShape(
                         topStart = 16.dp,
@@ -265,7 +265,7 @@ fun VehicleTireHealthCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "+ Rotate",
+                            text = "Log rotation",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
@@ -302,7 +302,7 @@ fun VehicleTireHealthCard(
                     }
                 }
 
-                // Trailing connected button: New Tires
+                // Trailing connected button: New tires
                 Surface(
                     shape = RoundedCornerShape(
                         topStart = 6.dp,
@@ -333,7 +333,7 @@ fun VehicleTireHealthCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "New Tires",
+                            text = "New tires",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center,

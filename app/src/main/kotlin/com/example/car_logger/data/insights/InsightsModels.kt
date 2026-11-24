@@ -10,8 +10,8 @@ enum class InsightsTimeGranularity(val label: String) {
 }
 
 enum class ChargingVenue(val label: String) {
-    HOME("Home Charging"),
-    PUBLIC("Public Charging")
+    HOME("Home charging"),
+    PUBLIC("Public charging")
 }
 
 data class DrivingActivityBar(
@@ -74,7 +74,7 @@ data class ElectricityCostData(
     val publicMilesPerKwh: Double? = null,
     val publicCostPerMile: Double? = null,
     val publicEffectiveRate: Double = 0.0,
-    val publicRateSourceLabel: String = "Receipt totals",
+    val publicRateSourceLabel: String = "Receipts",
     val publicCar1Cost: Double = 0.0,
     val publicCar1Kwh: Double = 0.0,
     val publicCar1SharePct: Int = 0,

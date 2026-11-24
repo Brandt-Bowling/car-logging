@@ -117,12 +117,12 @@ fun HomeScreen(
         var tempName by remember { mutableStateOf(garageName) }
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
-            title = { Text("Rename Garage") },
+            title = { Text("Rename garage") },
             text = {
                 OutlinedTextField(
                     value = tempName,
                     onValueChange = { tempName = it },
-                    label = { Text("Garage Name") },
+                    label = { Text("Garage name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -178,7 +178,7 @@ fun HomeScreen(
                                 IconButton(onClick = { showArchivedOnly = !showArchivedOnly }) {
                                     Icon(
                                         imageVector = if (showArchivedOnly) Icons.Filled.Unarchive else Icons.Filled.Archive,
-                                        contentDescription = if (showArchivedOnly) "Show All Vehicles" else "Filter Archived Only",
+                                        contentDescription = if (showArchivedOnly) "Show all vehicles" else "Show archived only",
                                         tint = if (showArchivedOnly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }

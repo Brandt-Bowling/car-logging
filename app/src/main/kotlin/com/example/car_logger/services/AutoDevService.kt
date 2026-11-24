@@ -138,9 +138,9 @@ class AutoDevService(
                 } else {
                     val code = response.code
                     val errorMsg = if (code == 401) {
-                        "Authentication required. Please check your auto.dev API key."
+                        "Invalid Auto.dev API key. Check Settings."
                     } else {
-                        "Error $code: Failed to decode VIN"
+                        "Couldn't look up VIN (error $code)"
                     }
                     return@withContext AutoDevVehicleInfo(vin = vin, vinValid = false, errorMessage = errorMsg)
                 }
@@ -150,7 +150,7 @@ class AutoDevService(
             return@withContext AutoDevVehicleInfo(
                 vin = vin,
                 vinValid = false,
-                errorMessage = "Failed to connect to auto.dev: ${e.message}"
+                errorMessage = "Couldn't reach Auto.dev. Check your connection."
             )
         }
     }

@@ -88,7 +88,7 @@ fun ActivityTab(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Search services...") },
+            placeholder = { Text("Search service history") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
@@ -114,7 +114,7 @@ fun ActivityTab(
                 FilterChip(
                     selected = selectedYear == null,
                     onClick = { selectedYear = null },
-                    label = { Text("All Years") }
+                    label = { Text("All years") }
                 )
             }
             items(availableYears) { year ->
@@ -128,7 +128,7 @@ fun ActivityTab(
                 FilterChip(
                     selected = onlyAttachments,
                     onClick = { onlyAttachments = !onlyAttachments },
-                    label = { Text("Attachments") },
+                    label = { Text("With receipt") },
                     leadingIcon = {
                         Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp))
                     }
@@ -279,7 +279,7 @@ fun RecordListItem(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Filled.AttachFile,
-                            contentDescription = "View Attachment",
+                            contentDescription = "View receipt",
                             modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )

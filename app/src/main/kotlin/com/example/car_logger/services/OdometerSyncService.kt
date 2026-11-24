@@ -446,15 +446,15 @@ class OdometerSyncService(
                     "Synced $name: $formatted mi"
                 }
                 is OdometerSyncResult.SkippedAsleep ->
-                    "$name is asleep (wake skipped)"
+                    "$name is asleep"
                 is OdometerSyncResult.SkippedCooldown ->
-                    "$name is in cooldown (${result.hoursRemaining}h remaining)"
+                    "$name synced recently (${result.hoursRemaining}h cooldown)"
                 is OdometerSyncResult.SkippedPolicy ->
-                    "$name sync skipped (${result.policy.label} mode)"
+                    "$name sync skipped (${result.policy.label})"
                 is OdometerSyncResult.NotConfigured ->
-                    "$name telemetry not linked — connect in Settings"
+                    "$name isn't connected — set up in Settings"
                 is OdometerSyncResult.Error ->
-                    "Sync failed for $name: ${result.message}"
+                    "Couldn't sync $name: ${result.message}"
             }
         }
 
@@ -464,7 +464,7 @@ class OdometerSyncService(
             chargerResult: WallConnectorSyncResult? = null
         ): String {
             if (cars.isEmpty() && results.isEmpty()) {
-                return "No vehicles configured"
+                return "No vehicles set up"
             }
             val updatedCount = results.count { it is OdometerSyncResult.Updated }
             val baseSummary = if (updatedCount == results.size && updatedCount > 0) {
@@ -475,7 +475,7 @@ class OdometerSyncService(
                     when (res) {
                         is OdometerSyncResult.Updated -> carMap[res.carId]?.model?.let { "$it: synced" }
                         is OdometerSyncResult.SkippedAsleep -> carMap[res.carId]?.model?.let { "$it: asleep" }
-                        is OdometerSyncResult.NotConfigured -> carMap[res.carId]?.model?.let { "$it: not linked" }
+                        is OdometerSyncResult.NotConfigured -> carMap[res.carId]?.model?.let { "$it: not connected" }
                         is OdometerSyncResult.Error -> carMap[res.carId]?.model?.let { "$it: error" }
                         else -> null
                     }
@@ -508,7 +508,7 @@ class OdometerSyncService(
                     }
                 }
                 is WallConnectorSyncResult.NotConfigured ->
-                    "Tesla Fleet API not linked — connect in Settings"
+                    "Tesla isn't connected — set up in Settings"
                 is WallConnectorSyncResult.NoDevices ->
                     result.message
                 is WallConnectorSyncResult.MissingScope ->

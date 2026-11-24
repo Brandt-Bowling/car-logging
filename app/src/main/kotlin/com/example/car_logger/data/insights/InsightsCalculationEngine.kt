@@ -523,7 +523,7 @@ object InsightsCalculationEngine {
                 homeRateSourceLabel = if (useCustomElectricityRate) {
                     "Custom rate"
                 } else {
-                    latestBillLabel ?: "Default est. ($${String.format(Locale.US, "%.2f", defaultRateVal)}/kWh)"
+                    latestBillLabel ?: "Default rate"
                 },
                 homeIsEstimatedRate = !useCustomElectricityRate && latestBill == null,
                 homeIsCustomRate = useCustomElectricityRate,
@@ -892,7 +892,7 @@ object InsightsCalculationEngine {
             publicMilesPerKwh = publicMilesPerKwh,
             publicCostPerMile = publicCostPerMile,
             publicEffectiveRate = publicEffectiveRate,
-            publicRateSourceLabel = if (effectivePublicSessionCount == 1) "1 receipt total" else "$effectivePublicSessionCount receipt totals",
+            publicRateSourceLabel = if (effectivePublicSessionCount == 1) "1 receipt" else "$effectivePublicSessionCount receipts",
             publicCar1Cost = publicAttr.car1Cost,
             publicCar1Kwh = publicAttr.car1Kwh,
             publicCar1SharePct = publicC1Pct,
@@ -927,7 +927,7 @@ object InsightsCalculationEngine {
             return "$provider · $period"
         }
         if (matchedBills.size > 1 && !anyEstimated) {
-            return "Matched to ${matchedBills.size} electric bills"
+            return "${matchedBills.size} bills"
         }
         if (matchedBills.isNotEmpty()) {
             val primary = matchedBills.maxByOrNull { it.endDateMs }!!
@@ -942,9 +942,9 @@ object InsightsCalculationEngine {
         }
         if (periodFallbackRate.bill != null) {
             val provider = periodFallbackRate.bill.providerName.ifBlank { "Latest bill" }
-            return "Latest bill ($provider est.)"
+            return "$provider (est.)"
         }
-        return "Default est. ($${String.format(Locale.US, "%.2f", defaultElectricityRate)}/kWh)"
+        return "Default rate"
     }
 
     private fun computeNetFuelSavings(

@@ -102,7 +102,7 @@ fun AddCarModalSheet(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                text = "Add Vehicle",
+                text = "Add vehicle",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -112,12 +112,12 @@ fun AddCarModalSheet(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("VIN Auto-Detect") }
+                    text = { Text("By VIN") }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Manual Selection") }
+                    text = { Text("Manual") }
                 )
             }
 
@@ -128,7 +128,7 @@ fun AddCarModalSheet(
                 OutlinedTextField(
                     value = vinInput,
                     onValueChange = { viewModel.onVinChange(it) },
-                    label = { Text("Vehicle Identification Number (VIN)") },
+                    label = { Text("VIN") },
                     placeholder = { Text("17 characters") },
                     leadingIcon = { Icon(Icons.Filled.Numbers, contentDescription = null) },
                     isError = vinError != null,
@@ -147,11 +147,11 @@ fun AddCarModalSheet(
                     if (isLoadingVin) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Decoding VIN...")
+                        Text("Looking up VIN...")
                     } else {
                         Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Decode Vehicle Details")
+                        Text("Look up VIN")
                     }
                 }
 
@@ -188,7 +188,7 @@ fun AddCarModalSheet(
                     // Photo Carousel Picker
                     if (info.photoUrls.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Select Vehicle Photo", style = MaterialTheme.typography.labelLarge)
+                        Text("Select vehicle photo", style = MaterialTheme.typography.labelLarge)
                         Spacer(modifier = Modifier.height(8.dp))
 
                         LazyRow(
@@ -327,7 +327,7 @@ fun AddCarModalSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Common fields (Odometer, License Plate, EV Toggle)
+            // Common fields (Odometer, License plate, EV toggle)
             var odoText by remember { mutableStateOf("") }
             OutlinedTextField(
                 value = odoText,
@@ -335,7 +335,7 @@ fun AddCarModalSheet(
                     odoText = it
                     viewModel.selectedOdometer.value = it.toIntOrNull()
                 },
-                label = { Text("Current Odometer (miles)") },
+                label = { Text("Current odometer (miles)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -349,7 +349,7 @@ fun AddCarModalSheet(
                     plateText = it
                     viewModel.licensePlate.value = it
                 },
-                label = { Text("License Plate (optional)") },
+                label = { Text("License plate (optional)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -362,9 +362,9 @@ fun AddCarModalSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Electric Vehicle (EV)", style = MaterialTheme.typography.bodyMedium)
+                    Text("Electric vehicle", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "Disables oil change reminders",
+                        "Hides oil change reminders",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -386,7 +386,7 @@ fun AddCarModalSheet(
                         intervalText = it
                         viewModel.tireRotationInterval.value = it.replace(",", "").trim().toIntOrNull() ?: 7500
                     },
-                    label = { Text("Tire Rotation Interval (miles)") },
+                    label = { Text("Tire rotation interval (miles)") },
                     suffix = { Text("mi") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -407,7 +407,7 @@ fun AddCarModalSheet(
                 enabled = selectedMake != null && selectedModel != null,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Add Vehicle to Garage")
+                Text("Add vehicle")
             }
         }
     }
