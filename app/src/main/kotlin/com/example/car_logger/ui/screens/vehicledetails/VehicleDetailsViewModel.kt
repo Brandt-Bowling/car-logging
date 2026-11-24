@@ -39,7 +39,8 @@ import java.util.UUID
 
 class VehicleDetailsViewModel(
     application: Application,
-    val carId: String
+    val carId: String,
+    initialCar: Car? = null
 ) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getInstance(application)
@@ -73,7 +74,7 @@ class VehicleDetailsViewModel(
     val car: StateFlow<Car?> = carDao.observeCarById(carId).map { it?.toModel() }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        null
+        initialCar
     )
 
     val records: StateFlow<List<MaintenanceRecord>> = recordDao.getRecordsForCar(carId).map { list ->

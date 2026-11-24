@@ -1,5 +1,7 @@
 package com.example.car_logger.ui.theme
 
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
@@ -102,6 +104,39 @@ object ExpressiveMotionTokens {
      */
     val ColorSpring: SpringSpec<Color> = spring(
         stiffness = Spring.StiffnessMedium
+    )
+
+    /**
+     * Material 3 STANDARD_DECELERATE easing matching Android SystemUI and Gmail
+     * pre-commit predictive back gesture interpolation (PathInterpolator(0, 0, 0, 1)).
+     */
+    val PredictiveBackDecelerateEasing: Easing = CubicBezierEasing(0f, 0f, 0f, 1f)
+
+    /**
+     * Critically damped spatial spring for container transform expansion from a card to full screen.
+     */
+    val ContainerExpandSpring: SpringSpec<Float> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = 420f,
+        visibilityThreshold = 0.001f
+    )
+
+    /**
+     * Snappy critically damped spring for morphing a detached/open screen back into its source card.
+     */
+    val ContainerCollapseSpring: SpringSpec<Float> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = 480f,
+        visibilityThreshold = 0.001f
+    )
+
+    /**
+     * Swift spring for returning a cancelled predictive back preview to full screen.
+     */
+    val PredictiveBackCancelSpring: SpringSpec<Float> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = 520f,
+        visibilityThreshold = 0.001f
     )
 }
 

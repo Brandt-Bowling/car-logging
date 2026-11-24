@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,11 +59,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.services.OdometerSyncService
+import com.example.car_logger.ui.components.VehicleCardBoundsRegistry
 import com.example.car_logger.ui.screens.dialogs.TireRotationIntervalDialog
 import com.example.car_logger.ui.screens.dialogs.VehiclePhotoCustomizerSheet
 import com.example.car_logger.ui.theme.AmberUrgent
@@ -84,6 +87,7 @@ fun GarageTab(
     onSaveCustomImage: ((car: Car, bytes: ByteArray) -> Unit)? = null,
     onSaveImageFromUri: ((car: Car, uri: Uri) -> Unit)? = null,
     onResetVehicleImage: ((car: Car) -> Unit)? = null,
+    cardBoundsRegistry: VehicleCardBoundsRegistry? = null,
     modifier: Modifier = Modifier
 ) {
     var carToDelete by remember { mutableStateOf<Car?>(null) }
@@ -191,6 +195,13 @@ fun GarageTab(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(cars, key = { it.id }) { car ->
+                if (cardBoundsRegistry != null) {
+                    DisposableEffect(car.id) {
+                        onDispose {
+                            cardBoundsRegistry.removeCard(car.id)
+                        }
+                    }
+                }
                 VehicleCard(
                     car = car,
                     onClick = { onCarClick(car) },
@@ -198,11 +209,21 @@ fun GarageTab(
                     onDelete = { carToDelete = car },
                     onEditRotationInterval = { carForRotationInterval = car },
                     onOpenPhotoPicker = { carForPhotoCustomizer = car },
-                    modifier = Modifier.animateItem(
-                        fadeInSpec = ExpressiveMotionTokens.ItemFadeSpring,
-                        fadeOutSpec = ExpressiveMotionTokens.ItemFadeSpring,
-                        placementSpec = ExpressiveMotionTokens.ItemPlacementSpring
-                    )
+                    modifier = Modifier
+                        .animateItem(
+                            fadeInSpec = ExpressiveMotionTokens.ItemFadeSpring,
+                            fadeOutSpec = ExpressiveMotionTokens.ItemFadeSpring,
+                            placementSpec = ExpressiveMotionTokens.ItemPlacementSpring
+                        )
+                        .then(
+                            if (cardBoundsRegistry != null) {
+                                Modifier.onGloballyPositioned { coords ->
+                                    cardBoundsRegistry.updateCard(car.id, coords)
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
                 )
             }
             item {
