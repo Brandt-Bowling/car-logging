@@ -332,6 +332,13 @@ class OdometerSyncService(
         const val TESLA_SCOPE_VEHICLE_LOCATION = "vehicle_location"
         const val TESLA_SCOPE_VEHICLE_CHARGING_CMDS = "vehicle_charging_cmds"
 
+        // Tesla /api/1/dx/charging/history rejects any single request whose span exceeds 1 year
+        // ("Date range cannot exceed 1 year"). Cap each window at 364 full days (8,736 hours) so
+        // leap years, DST transitions, and timezone boundaries can never exceed Tesla's 1-year cap.
+        internal const val TESLA_CHARGING_HISTORY_MAX_WINDOW_DAYS = 364
+        internal const val DEFAULT_SUPERCHARGER_INITIAL_LOOKBACK_DAYS = 364
+        internal const val SUPERCHARGER_INCREMENTAL_OVERLAP_DAYS = 1
+
         private val json = Json {
             ignoreUnknownKeys = true
             isLenient = true
@@ -1556,17 +1563,126 @@ class OdometerSyncService(
             is WorkChargingSyncResult.Error -> "Work charge sync failed: ${result.message}"
         }
 
+        internal fun buildSuperchargerDateWindows(
+            endInstant: Instant,
+            lookbackDays: Int,
+            zoneId: ZoneId = ZoneId.systemDefault(),
+            maxWindowDays: Int = TESLA_CHARGING_HISTORY_MAX_WINDOW_DAYS
+        ): List<Pair<Instant, Instant>> {
+            val safeMaxDays = maxWindowDays.coerceAtLeast(1)
+            val clampedLookbackDays = lookbackDays.coerceIn(1, 730)
+            val endTruncated = endInstant.truncatedTo(ChronoUnit.SECONDS)
+            val maxWindowSeconds = safeMaxDays.toLong() * 86_400L
+
+            if (clampedLookbackDays <= safeMaxDays) {
+                val startCandidate = endTruncated.atZone(zoneId)
+                    .minusDays(clampedLookbackDays.toLong())
+                    .withHour(0)
+                    .withMinute(0)
+                    .withSecond(0)
+                    .withNano(0)
+                    .toInstant()
+                val earliestSingleWindowStart = endTruncated.minusSeconds(maxWindowSeconds)
+                val windowStart = if (startCandidate.isBefore(earliestSingleWindowStart)) {
+                    earliestSingleWindowStart
+                } else {
+                    startCandidate
+                }
+                return listOf(windowStart to endTruncated)
+            }
+
+            val overallStart = endTruncated.minusSeconds(clampedLookbackDays.toLong() * 86_400L)
+            return buildSuperchargerDateWindowsForRange(
+                startInstant = overallStart,
+                endInstant = endTruncated,
+                nowInstant = endTruncated,
+                maxWindowDays = safeMaxDays
+            )
+        }
+
+        internal fun buildSuperchargerDateWindowsForRange(
+            startInstant: Instant,
+            endInstant: Instant,
+            nowInstant: Instant = Instant.now(),
+            maxWindowDays: Int = TESLA_CHARGING_HISTORY_MAX_WINDOW_DAYS
+        ): List<Pair<Instant, Instant>> {
+            val safeMaxDays = maxWindowDays.coerceAtLeast(1)
+            val maxWindowSeconds = safeMaxDays.toLong() * 86_400L
+            val nowTruncated = nowInstant.truncatedTo(ChronoUnit.SECONDS)
+            val requestedEnd = endInstant.truncatedTo(ChronoUnit.SECONDS)
+            val clampedEnd = if (requestedEnd.isAfter(nowTruncated)) nowTruncated else requestedEnd
+            val requestedStart = startInstant.truncatedTo(ChronoUnit.SECONDS)
+            val clampedStart = if (!requestedStart.isBefore(clampedEnd)) {
+                clampedEnd.minusSeconds(3_600L)
+            } else {
+                requestedStart
+            }
+
+            val windows = mutableListOf<Pair<Instant, Instant>>()
+            var cursorEnd = clampedEnd
+            while (cursorEnd.isAfter(clampedStart)) {
+                val candidateStart = cursorEnd.minusSeconds(maxWindowSeconds)
+                val windowStart = if (candidateStart.isBefore(clampedStart)) clampedStart else candidateStart
+                windows.add(windowStart to cursorEnd)
+                cursorEnd = windowStart
+            }
+            return windows
+        }
+
+        internal fun resolveIncrementalSuperchargerWindows(
+            existingSessions: List<ChargingSessionEntity>,
+            nowInstant: Instant = Instant.now(),
+            zoneId: ZoneId = ZoneId.systemDefault(),
+            maxWindowDays: Int = TESLA_CHARGING_HISTORY_MAX_WINDOW_DAYS,
+            overlapDays: Int = SUPERCHARGER_INCREMENTAL_OVERLAP_DAYS
+        ): List<Pair<Instant, Instant>> {
+            val safeMaxDays = maxWindowDays.coerceAtLeast(1)
+            val maxWindowSeconds = safeMaxDays.toLong() * 86_400L
+            val nowTruncated = nowInstant.truncatedTo(ChronoUnit.SECONDS)
+            val latestSyncedMs = existingSessions
+                .asSequence()
+                .filter { it.uploadBatchId == ElectricityImportParser.AUTO_SUPERCHARGER_BATCH_ID }
+                .maxOfOrNull { maxOf(it.startDateMs, it.endDateMs) }
+
+            if (latestSyncedMs == null || latestSyncedMs <= 0L) {
+                return buildSuperchargerDateWindows(
+                    endInstant = nowTruncated,
+                    lookbackDays = DEFAULT_SUPERCHARGER_INITIAL_LOOKBACK_DAYS,
+                    zoneId = zoneId,
+                    maxWindowDays = safeMaxDays
+                )
+            }
+
+            val bufferSeconds = overlapDays.coerceAtLeast(0).toLong() * 86_400L
+            val latestInstant = Instant.ofEpochMilli(latestSyncedMs).truncatedTo(ChronoUnit.SECONDS)
+            val earliestAllowedStart = nowTruncated.minusSeconds(maxWindowSeconds)
+            val rawStart = latestInstant.minusSeconds(bufferSeconds)
+            val clampedStart = when {
+                rawStart.isBefore(earliestAllowedStart) -> earliestAllowedStart
+                !rawStart.isBefore(nowTruncated) -> nowTruncated.minusSeconds(maxOf(bufferSeconds, 3_600L))
+                else -> rawStart
+            }
+            return buildSuperchargerDateWindowsForRange(
+                startInstant = clampedStart,
+                endInstant = nowTruncated,
+                nowInstant = nowTruncated,
+                maxWindowDays = safeMaxDays
+            )
+        }
+
         fun parseTeslaSuperchargerHistory(rawJson: String): Pair<List<TeslaSuperchargerSession>, Boolean> {
             return try {
-                val root = json.parseToJsonElement(rawJson) as? JsonObject ?: return Pair(emptyList(), false)
-                val responseElem = root["response"]
+                val rootElem = json.parseToJsonElement(rawJson)
+                val root = rootElem as? JsonObject
+                val responseElem = root?.get("response")
                 val containerObj = (responseElem as? JsonObject) ?: root
-                val dataArr = (responseElem as? JsonArray)
-                    ?: (containerObj["data"] as? JsonArray)
+                val dataArr = (rootElem as? JsonArray)
+                    ?: (responseElem as? JsonArray)
+                    ?: (containerObj?.get("data") as? JsonArray)
                     ?: return Pair(emptyList(), false)
 
-                val explicitHasMore = containerObj["hasMore"].asBooleanOrNull()
-                    ?: containerObj["has_more"].asBooleanOrNull()
+                val explicitHasMore = containerObj?.get("hasMore").asBooleanOrNull()
+                    ?: containerObj?.get("has_more").asBooleanOrNull()
                     ?: false
 
                 val sessions = mutableListOf<TeslaSuperchargerSession>()
@@ -3551,7 +3667,9 @@ class OdometerSyncService(
 
     suspend fun syncTeslaSuperchargerCharging(
         cars: List<Car>,
-        lookbackDays: Int? = null
+        lookbackDays: Int? = null,
+        startInstant: Instant? = null,
+        endInstant: Instant? = null
     ): SuperchargerSyncResult = withContext(Dispatchers.IO) {
         val dao = chargingSessionDao ?: return@withContext SuperchargerSyncResult.Error("Charging database unavailable")
         val (storedAccess, _, _) = preferencesManager.getTeslaTokens()
@@ -3579,88 +3697,101 @@ class OdometerSyncService(
         _isSyncing.value = true
         try {
             val existingSessions = dao.getAllSessionsList()
-            val hasSuperchargerHistory = existingSessions.any {
-                it.uploadBatchId == ElectricityImportParser.AUTO_SUPERCHARGER_BATCH_ID
-            }
-            val lastSyncMs = preferencesManager.getLastSuperchargerSyncTime()
-            val effectiveLookbackDays = (lookbackDays ?: if (lastSyncMs == 0L || !hasSuperchargerHistory) 365 else 30)
-                .coerceIn(1, 730)
-
             val zoneId = ZoneId.systemDefault()
-            val endZdt = ZonedDateTime.now(zoneId).truncatedTo(ChronoUnit.SECONDS)
-            val startZdt = endZdt.minusDays(effectiveLookbackDays.toLong())
-                .withHour(0)
-                .withMinute(0)
-                .withSecond(0)
-                .withNano(0)
-            val rfc3339 = DateTimeFormatter.ISO_OFFSET_DATE_TIME
-            val encodedStart = URLEncoder.encode(startZdt.format(rfc3339), "UTF-8")
-            val encodedEnd = URLEncoder.encode(endZdt.format(rfc3339), "UTF-8")
+            val nowInstant = Instant.now()
+            val windows = when {
+                startInstant != null -> buildSuperchargerDateWindowsForRange(
+                    startInstant = startInstant,
+                    endInstant = endInstant ?: nowInstant,
+                    nowInstant = nowInstant
+                )
+                lookbackDays != null -> buildSuperchargerDateWindows(
+                    endInstant = nowInstant,
+                    lookbackDays = lookbackDays,
+                    zoneId = zoneId
+                )
+                else -> resolveIncrementalSuperchargerWindows(
+                    existingSessions = existingSessions,
+                    nowInstant = nowInstant,
+                    zoneId = zoneId
+                )
+            }
+
+            Log.i(
+                TAG,
+                "Supercharger sync: ${windows.size} window(s) (${windows.last().first} -> ${windows.first().second})"
+            )
 
             val pageSize = 50
-            val maxPages = 5
+            val maxPagesPerWindow = 5
             val allRaw = mutableListOf<TeslaSuperchargerSession>()
 
-            for (pageNo in 1..maxPages) {
-                val url = "$TESLA_API_BASE/api/1/dx/charging/history" +
-                    "?startTime=$encodedStart&endTime=$encodedEnd&pageNo=$pageNo&pageSize=$pageSize"
-                val (code, bodyStr, updatedToken) = try {
-                    executeTeslaGetWithRefresh(url, token)
-                } catch (e: Exception) {
-                    val err = SuperchargerSyncResult.Error("Network error: ${e.message ?: e.javaClass.simpleName}")
-                    val msg = formatSuperchargerSyncMessage(err)
-                    preferencesManager.recordSuperchargerSyncResult(System.currentTimeMillis(), msg)
-                    _lastSyncMessage.value = msg
-                    return@withContext err
-                }
-                token = updatedToken
+            for ((windowStart, windowEnd) in windows) {
+                val encodedStart = URLEncoder.encode(DateTimeFormatter.ISO_INSTANT.format(windowStart), "UTF-8")
+                val encodedEnd = URLEncoder.encode(DateTimeFormatter.ISO_INSTANT.format(windowEnd), "UTF-8")
 
-                when {
-                    code == 401 -> {
-                        val detail = parseTeslaErrorDetail(bodyStr)
-                        val msg = detail?.let { "Tesla authorization failed (401: $it) — reconnect in Settings" }
-                            ?: "Tesla token expired (401) — reconnect in Settings"
+                for (pageNo in 1..maxPagesPerWindow) {
+                    val url = "$TESLA_API_BASE/api/1/dx/charging/history" +
+                        "?startTime=$encodedStart&endTime=$encodedEnd&pageNo=$pageNo&pageSize=$pageSize"
+                    val (code, bodyStr, updatedToken) = try {
+                        executeTeslaGetWithRefresh(url, token)
+                    } catch (e: Exception) {
+                        val err = SuperchargerSyncResult.Error("Network error: ${e.message ?: e.javaClass.simpleName}")
+                        val msg = formatSuperchargerSyncMessage(err)
                         preferencesManager.recordSuperchargerSyncResult(System.currentTimeMillis(), msg)
                         _lastSyncMessage.value = msg
-                        return@withContext SuperchargerSyncResult.Error(msg)
+                        return@withContext err
                     }
-                    code == 403 -> {
-                        val detail = parseTeslaErrorDetail(bodyStr)
-                        if (isTeslaScopeError(403, detail)) {
-                            val missing = SuperchargerSyncResult.MissingScope(
-                                "Requires Vehicle Charging Management (vehicle_charging_cmds) scope — enable in Tesla Developer Portal & reconnect"
-                            )
-                            preferencesManager.recordSuperchargerSyncResult(System.currentTimeMillis(), missing.message)
-                            _lastSyncMessage.value = missing.message
-                            return@withContext missing
+                    token = updatedToken
+
+                    when {
+                        code == 401 -> {
+                            val detail = parseTeslaErrorDetail(bodyStr)
+                            val msg = detail?.let { "Tesla authorization failed (401: $it) — reconnect in Settings" }
+                                ?: "Tesla token expired (401) — reconnect in Settings"
+                            preferencesManager.recordSuperchargerSyncResult(System.currentTimeMillis(), msg)
+                            _lastSyncMessage.value = msg
+                            return@withContext SuperchargerSyncResult.Error(msg)
                         }
-                        val err = SuperchargerSyncResult.Error(detail?.let { "Tesla charging history (403: $it)" } ?: "Tesla charging history (403)")
-                        val msg = formatSuperchargerSyncMessage(err)
-                        preferencesManager.recordSuperchargerSyncResult(System.currentTimeMillis(), msg)
-                        _lastSyncMessage.value = msg
-                        return@withContext err
-                    }
-                    code !in 200..299 -> {
-                        val detail = parseTeslaErrorDetail(bodyStr)
-                        val err = SuperchargerSyncResult.Error(detail?.let { "Tesla charging history ($code: $it)" } ?: "Tesla charging history ($code)")
-                        val msg = formatSuperchargerSyncMessage(err)
-                        preferencesManager.recordSuperchargerSyncResult(System.currentTimeMillis(), msg)
-                        _lastSyncMessage.value = msg
-                        return@withContext err
-                    }
-                    else -> {
-                        val (pageSessions, hasMore) = parseTeslaSuperchargerHistory(bodyStr)
-                        allRaw.addAll(pageSessions)
-                        if (!hasMore && pageSessions.size < pageSize) {
-                            break
+                        code == 403 -> {
+                            val detail = parseTeslaErrorDetail(bodyStr)
+                            if (isTeslaScopeError(403, detail)) {
+                                val missing = SuperchargerSyncResult.MissingScope(
+                                    "Requires Vehicle Charging Management (vehicle_charging_cmds) scope — enable in Tesla Developer Portal & reconnect"
+                                )
+                                preferencesManager.recordSuperchargerSyncResult(System.currentTimeMillis(), missing.message)
+                                _lastSyncMessage.value = missing.message
+                                return@withContext missing
+                            }
+                            val err = SuperchargerSyncResult.Error(detail?.let { "Tesla (403: $it)" } ?: "Tesla (403)")
+                            val msg = formatSuperchargerSyncMessage(err)
+                            preferencesManager.recordSuperchargerSyncResult(System.currentTimeMillis(), msg)
+                            _lastSyncMessage.value = msg
+                            return@withContext err
+                        }
+                        code !in 200..299 -> {
+                            val detail = parseTeslaErrorDetail(bodyStr)
+                            val err = SuperchargerSyncResult.Error(detail?.let { "Tesla ($code: $it)" } ?: "Tesla ($code)")
+                            val msg = formatSuperchargerSyncMessage(err)
+                            preferencesManager.recordSuperchargerSyncResult(System.currentTimeMillis(), msg)
+                            _lastSyncMessage.value = msg
+                            return@withContext err
+                        }
+                        else -> {
+                            val (pageSessions, hasMore) = parseTeslaSuperchargerHistory(bodyStr)
+                            allRaw.addAll(pageSessions)
+                            if (!hasMore && pageSessions.size < pageSize) {
+                                break
+                            }
                         }
                     }
                 }
             }
 
+            val dedupedRaw = allRaw.distinctBy { it.sessionId }.sortedBy { it.startDateMs }
             val nowMs = System.currentTimeMillis()
             val newEntities = buildSuperchargerSessionEntities(
-                rawSessions = allRaw,
+                rawSessions = dedupedRaw,
                 cars = cars,
                 existingSessions = existingSessions,
                 uploadedAtMs = nowMs,
@@ -3674,7 +3805,7 @@ class OdometerSyncService(
                 insertedCount = newEntities.size,
                 totalKwhAdded = newEntities.sumOf { it.kwh },
                 totalCostAdded = newEntities.sumOf { it.directCost ?: 0.0 },
-                totalSessionsScanned = allRaw.size
+                totalSessionsScanned = dedupedRaw.size
             )
             val statusMsg = formatSuperchargerSyncMessage(result)
             preferencesManager.recordSuperchargerSyncResult(nowMs, statusMsg)
