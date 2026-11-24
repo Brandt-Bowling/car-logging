@@ -7,6 +7,7 @@ import android.text.format.DateFormat
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -37,10 +39,15 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.rounded.EvStation
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
@@ -51,6 +58,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -81,6 +89,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -162,7 +171,6 @@ fun SettingsTab(
     var showAutoDevKeyDialog by remember { mutableStateOf(false) }
     var showSmartcarDialog by remember { mutableStateOf(false) }
     var showTeslaDialog by remember { mutableStateOf(false) }
-    var showWallConnectorMappingDialog by remember { mutableStateOf(false) }
     var showChargerSyncTimePicker by remember { mutableStateOf(false) }
     var carPendingForceWake by remember { mutableStateOf<Car?>(null) }
 
@@ -507,89 +515,6 @@ fun SettingsTab(
         )
     }
 
-    // Wall Connector Vehicle Mapping Dialog
-    if (showWallConnectorMappingDialog) {
-        val activeEvs = cars.filter { !it.isArchived }.ifEmpty { cars }
-        val autoGen3 = OdometerSyncService.resolveCarForWallConnector(
-            connectorType = WallConnectorType.GEN_3,
-            cars = activeEvs
-        )
-        val autoUniversal = OdometerSyncService.resolveCarForWallConnector(
-            connectorType = WallConnectorType.UNIVERSAL,
-            cars = activeEvs
-        )
-        var selectedGen3Id by remember(wallConnectorGen3CarId, autoGen3) {
-            mutableStateOf(wallConnectorGen3CarId ?: autoGen3?.id)
-        }
-        var selectedUniversalId by remember(wallConnectorUniversalCarId, autoUniversal) {
-            mutableStateOf(wallConnectorUniversalCarId ?: autoUniversal?.id)
-        }
-
-        AlertDialog(
-            onDismissRequest = { showWallConnectorMappingDialog = false },
-            title = { Text("Assign Wall Connectors") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "Choose which vehicle uses each charger.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            "Tesla Wall Connector (Gen 3)",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            activeEvs.forEach { carOption ->
-                                FilterChip(
-                                    selected = selectedGen3Id == carOption.id,
-                                    onClick = { selectedGen3Id = carOption.id },
-                                    label = { Text(carOption.model.ifBlank { carOption.displayName }) }
-                                )
-                            }
-                        }
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            "Tesla Universal Wall Connector",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            activeEvs.forEach { carOption ->
-                                FilterChip(
-                                    selected = selectedUniversalId == carOption.id,
-                                    onClick = { selectedUniversalId = carOption.id },
-                                    label = { Text(carOption.model.ifBlank { carOption.displayName }) }
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        coroutineScope.launch {
-                            preferencesManager.setWallConnectorCarMapping(selectedGen3Id, selectedUniversalId)
-                            showWallConnectorMappingDialog = false
-                            Toast.makeText(context, "Wall Connector assignment saved", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                ) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showWallConnectorMappingDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
     // Wake Confirmation Dialog
     if (carPendingForceWake != null && odometerSyncService != null) {
         val targetCar = carPendingForceWake!!
@@ -798,12 +723,12 @@ fun SettingsTab(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column {
                             Text(
-                                text = "Odometer & charging sync",
+                                text = "Odometer sync",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                text = "Automatic mileage and charger updates",
+                                text = "Automatic mileage updates",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -916,14 +841,12 @@ fun SettingsTab(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
-                            val gmSub = when {
-                                !smartcarConnected && gmSyncTimeText == null -> "Not connected"
-                                gmSyncTimeText != null && gmCar != null && OdometerSyncService.isCooldownActive(gmCar.lastOdometerSyncTime, cooldownHours) ->
-                                    "Synced $gmSyncTimeText • Next auto-sync in ${OdometerSyncService.remainingCooldownHours(gmCar.lastOdometerSyncTime, cooldownHours)}h"
-                                gmSyncTimeText != null ->
-                                    "Synced $gmSyncTimeText"
-                                else -> "Connected • Not yet synced"
-                            }
+                            val gmSub = formatVehicleSyncSubtitle(
+                                isConnected = smartcarConnected,
+                                lastSyncTimeMs = gmCar?.lastOdometerSyncTime,
+                                cooldownHours = cooldownHours,
+                                showSyncedWhenDisconnected = true
+                            )
                             Text(
                                 gmSub,
                                 style = MaterialTheme.typography.bodySmall,
@@ -970,16 +893,12 @@ fun SettingsTab(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
-                            val teslaSyncTimeText = OdometerSyncService.formatRelativeTime(teslaCar?.lastOdometerSyncTime)
-                            val teslaSub = when {
-                                !teslaConnected -> "Not connected"
-                                teslaCar?.telemetryStatus == "Asleep" && teslaSyncTimeText != null ->
-                                    "Synced $teslaSyncTimeText • Asleep"
-                                teslaCar?.telemetryStatus == "Asleep" -> "Asleep"
-                                teslaSyncTimeText != null ->
-                                    "Synced $teslaSyncTimeText"
-                                else -> "Connected • Not yet synced"
-                            }
+                            val teslaSub = formatVehicleSyncSubtitle(
+                                isConnected = teslaConnected,
+                                lastSyncTimeMs = teslaCar?.lastOdometerSyncTime,
+                                cooldownHours = cooldownHours,
+                                showSyncedWhenDisconnected = false
+                            )
                             Text(
                                 teslaSub,
                                 style = MaterialTheme.typography.bodySmall,
@@ -1010,126 +929,222 @@ fun SettingsTab(
                             }
                         }
                     }
+                }
+            }
+        }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+        // Home charging section
+        item {
+            val activeEvs = remember(cars) { cars.filter { !it.isArchived }.ifEmpty { cars } }
+            val mappedGen3Car = OdometerSyncService.resolveCarForWallConnector(
+                connectorType = WallConnectorType.GEN_3,
+                cars = activeEvs,
+                gen3OverrideCarId = wallConnectorGen3CarId,
+                universalOverrideCarId = wallConnectorUniversalCarId
+            )
+            val mappedUniversalCar = OdometerSyncService.resolveCarForWallConnector(
+                connectorType = WallConnectorType.UNIVERSAL,
+                cars = activeEvs,
+                gen3OverrideCarId = wallConnectorGen3CarId,
+                universalOverrideCarId = wallConnectorUniversalCarId
+            )
+            val chargerSyncTimeText = OdometerSyncService.formatRelativeTime(lastChargerSyncTime)
+            val hasChargerError = teslaConnected && isWallConnectorErrorStatus(lastChargerSyncStatus)
+            val chargerStatusText = formatWallConnectorSubtitle(
+                teslaConnected = teslaConnected,
+                lastSyncTimeMs = lastChargerSyncTime.takeIf { it > 0L },
+                lastSyncStatus = lastChargerSyncStatus,
+                chargerSyncEnabled = chargerSyncEnabled,
+                formattedSyncTime = formattedChargerSyncTime
+            )
 
-                    // Tesla Wall Connectors (Gen 3 & Universal) Row
-                    val mappedGen3Car = OdometerSyncService.resolveCarForWallConnector(
-                        connectorType = WallConnectorType.GEN_3,
-                        cars = cars,
-                        gen3OverrideCarId = wallConnectorGen3CarId,
-                        universalOverrideCarId = wallConnectorUniversalCarId
-                    )
-                    val mappedUniversalCar = OdometerSyncService.resolveCarForWallConnector(
-                        connectorType = WallConnectorType.UNIVERSAL,
-                        cars = cars,
-                        gen3OverrideCarId = wallConnectorGen3CarId,
-                        universalOverrideCarId = wallConnectorUniversalCarId
-                    )
-                    val gen3Label = mappedGen3Car?.model?.ifBlank { mappedGen3Car.displayName } ?: "Model 3"
-                    val universalLabel = mappedUniversalCar?.model?.ifBlank { mappedUniversalCar.displayName } ?: "Blazer EV"
-                    val chargerSyncTimeText = OdometerSyncService.formatRelativeTime(lastChargerSyncTime)
-
-                    val hasChargerError = lastChargerSyncStatus?.let { status ->
-                        status.contains("energy_device_data", ignoreCase = true) ||
-                            status.contains("failed", ignoreCase = true) ||
-                            status.contains("expired", ignoreCase = true) ||
-                            status.contains("unauthorized", ignoreCase = true) ||
-                            status.contains("401") ||
-                            status.contains("403") ||
-                            status.contains("error", ignoreCase = true) ||
-                            status.contains("forbidden", ignoreCase = true) ||
-                            status.contains("reconnect", ignoreCase = true)
-                    } == true
-
+            SettingsSectionHeader(title = "Home charging")
+            Spacer(modifier = Modifier.height(6.dp))
+            SettingsGroupCard {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Header row with EV charger icon & Sync action
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Wall Connectors",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                "Gen 3 → $gen3Label • Universal → $universalLabel",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            val chargerStatusText = when {
-                                !teslaConnected -> "Connect Tesla to sync home charging"
-                                chargerSyncTimeText != null && !lastChargerSyncStatus.isNullOrBlank() ->
-                                    "Last sync $chargerSyncTimeText • $lastChargerSyncStatus"
-                                chargerSyncTimeText != null ->
-                                    "Last sync $chargerSyncTimeText"
-                                chargerSyncEnabled ->
-                                    "Syncs daily at $formattedChargerSyncTime"
-                                else -> "Auto-sync off"
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.EvStation,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
-                            Text(
-                                text = chargerStatusText,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (hasChargerError) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.primary
-                                },
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (teslaConnected && hasChargerError && odometerSyncService != null) {
-                                TextButton(
-                                    onClick = {
-                                        coroutineScope.launch {
-                                            val (id, _) = odometerSyncService.getEffectiveTeslaCredentials()
-                                            if (!id.isNullOrBlank()) {
-                                                val url = odometerSyncService.buildTeslaAuthUrl(id)
-                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                            } else {
-                                                showTeslaDialog = true
-                                            }
-                                        }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Wall Connectors",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = chargerStatusText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = when {
+                                        hasChargerError -> MaterialTheme.colorScheme.error
+                                        teslaConnected && chargerSyncTimeText != null -> MaterialTheme.colorScheme.primary
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
                                     }
-                                ) {
-                                    Text("Reconnect")
-                                }
+                                )
                             }
-                            if (cars.isNotEmpty()) {
-                                TextButton(onClick = { showWallConnectorMappingDialog = true }) {
-                                    Text("Map")
-                                }
-                            }
-                            if (teslaConnected && odometerSyncService != null) {
-                                TextButton(
-                                    onClick = {
+                        }
+                        if (teslaConnected && odometerSyncService != null) {
+                            TextButton(
+                                onClick = {
+                                    Toast.makeText(
+                                        context,
+                                        "Syncing Wall Connectors...",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    coroutineScope.launch {
+                                        val res = odometerSyncService.syncWallConnectorCharging(cars)
                                         Toast.makeText(
                                             context,
-                                            "Syncing Wall Connectors...",
-                                            Toast.LENGTH_SHORT
+                                            OdometerSyncService.formatWallConnectorSyncMessage(res),
+                                            Toast.LENGTH_LONG
                                         ).show()
-                                        coroutineScope.launch {
-                                            val res = odometerSyncService.syncWallConnectorCharging(cars)
-                                            Toast.makeText(
-                                                context,
-                                                OdometerSyncService.formatWallConnectorSyncMessage(res),
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }
                                     }
-                                ) {
-                                    Text("Sync")
+                                }
+                            ) {
+                                Text("Sync")
+                            }
+                        }
+                    }
+
+                    // Inline error banner with Reconnect action when auth/scope error occurs
+                    if (hasChargerError && !lastChargerSyncStatus.isNullOrBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = lastChargerSyncStatus.orEmpty(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (odometerSyncService != null) {
+                                    Button(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                val (id, _) = odometerSyncService.getEffectiveTeslaCredentials()
+                                                if (!id.isNullOrBlank()) {
+                                                    val url = odometerSyncService.buildTeslaAuthUrl(id)
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                                } else {
+                                                    showTeslaDialog = true
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.error,
+                                            contentColor = MaterialTheme.colorScheme.onError
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("Reconnect", style = MaterialTheme.typography.labelMedium)
+                                    }
                                 }
                             }
                         }
                     }
 
+                    // Side-by-side Bento charger assignment tiles
+                    if (activeEvs.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Assigned vehicles",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                WallConnectorAssignmentTile(
+                                    chargerName = "Gen 3",
+                                    selectedCar = mappedGen3Car,
+                                    fallbackLabel = "Model 3",
+                                    vehicles = activeEvs,
+                                    onSelectVehicle = { selected ->
+                                        coroutineScope.launch {
+                                            val currentUniversalId = wallConnectorUniversalCarId ?: mappedUniversalCar?.id
+                                            preferencesManager.setWallConnectorCarMapping(
+                                                gen3CarId = selected.id,
+                                                universalCarId = currentUniversalId
+                                            )
+                                            val vehicleLabel = selected.model.ifBlank { selected.displayName }
+                                            Toast.makeText(
+                                                context,
+                                                "Gen 3 assigned to $vehicleLabel",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                WallConnectorAssignmentTile(
+                                    chargerName = "Universal",
+                                    selectedCar = mappedUniversalCar,
+                                    fallbackLabel = "Blazer EV",
+                                    vehicles = activeEvs,
+                                    onSelectVehicle = { selected ->
+                                        coroutineScope.launch {
+                                            val currentGen3Id = wallConnectorGen3CarId ?: mappedGen3Car?.id
+                                            preferencesManager.setWallConnectorCarMapping(
+                                                gen3CarId = currentGen3Id,
+                                                universalCarId = selected.id
+                                            )
+                                            val vehicleLabel = selected.model.ifBlank { selected.displayName }
+                                            Toast.makeText(
+                                                context,
+                                                "Universal assigned to $vehicleLabel",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
+                    // Daily charging sync
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 6.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -1139,8 +1154,8 @@ fun SettingsTab(
                         ) {
                             Text(
                                 "Daily charging sync",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
                             )
                             FilterChip(
                                 selected = chargerSyncEnabled,
@@ -1440,3 +1455,210 @@ private fun DashboardLinkButton(
         Text(label)
     }
 }
+
+@Composable
+private fun WallConnectorAssignmentTile(
+    chargerName: String,
+    selectedCar: Car?,
+    fallbackLabel: String,
+    vehicles: List<Car>,
+    onSelectVehicle: (Car) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = selectedCar?.model?.ifBlank { selectedCar.displayName } ?: fallbackLabel
+
+    Box(modifier = modifier) {
+        Surface(
+            onClick = { if (vehicles.isNotEmpty()) expanded = true },
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "$chargerName Wall Connector assigned to $selectedLabel" }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.EvStation,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = chargerName,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Rounded.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Text(
+                    text = selectedLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            vehicles.forEach { carOption ->
+                val optionLabel = carOption.model.ifBlank { carOption.displayName }
+                val isSelected = selectedCar?.id == carOption.id
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = optionLabel,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    },
+                    trailingIcon = if (isSelected) {
+                        {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = "Selected",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        expanded = false
+                        if (!isSelected) {
+                            onSelectVehicle(carOption)
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+private val WALL_CONNECTOR_SYNCED_REGEX = Regex(
+    pattern = """^Synced\s+(\d+)\s+Wall Connector\s+(sessions?)(.*)$""",
+    option = RegexOption.IGNORE_CASE
+)
+
+internal fun formatVehicleSyncSubtitle(
+    isConnected: Boolean,
+    lastSyncTimeMs: Long?,
+    cooldownHours: Int,
+    showSyncedWhenDisconnected: Boolean = false,
+    nowMs: Long = System.currentTimeMillis()
+): String {
+    val syncTimeText = OdometerSyncService.formatRelativeTime(lastSyncTimeMs, nowMs)
+    return when {
+        !isConnected && (!showSyncedWhenDisconnected || syncTimeText == null) -> "Not connected"
+        syncTimeText != null && OdometerSyncService.isCooldownActive(lastSyncTimeMs, cooldownHours, nowMs) ->
+            "Synced $syncTimeText • Next auto-sync in ${OdometerSyncService.remainingCooldownHours(lastSyncTimeMs, cooldownHours, nowMs)}h"
+        syncTimeText != null -> "Synced $syncTimeText"
+        else -> "Connected • Not yet synced"
+    }
+}
+
+internal fun isWallConnectorErrorStatus(status: String?): Boolean {
+    if (status.isNullOrBlank()) return false
+    return status.contains("energy_device_data", ignoreCase = true) ||
+        status.contains("failed", ignoreCase = true) ||
+        status.contains("expired", ignoreCase = true) ||
+        status.contains("unauthorized", ignoreCase = true) ||
+        status.contains("401") ||
+        status.contains("403") ||
+        status.contains("error", ignoreCase = true) ||
+        status.contains("forbidden", ignoreCase = true) ||
+        status.contains("reconnect", ignoreCase = true)
+}
+
+internal fun formatWallConnectorSubtitle(
+    teslaConnected: Boolean,
+    lastSyncTimeMs: Long?,
+    lastSyncStatus: String?,
+    chargerSyncEnabled: Boolean,
+    formattedSyncTime: String,
+    nowMs: Long = System.currentTimeMillis()
+): String {
+    if (!teslaConnected) return "Connect Tesla to sync home charging"
+
+    val syncTimeText = OdometerSyncService.formatRelativeTime(lastSyncTimeMs, nowMs)
+    if (isWallConnectorErrorStatus(lastSyncStatus)) {
+        val status = lastSyncStatus.orEmpty()
+        val needsReconnect = status.contains("energy_device_data", ignoreCase = true) ||
+            status.contains("expired", ignoreCase = true) ||
+            status.contains("unauthorized", ignoreCase = true) ||
+            status.contains("401") ||
+            status.contains("403") ||
+            status.contains("forbidden", ignoreCase = true) ||
+            status.contains("reconnect", ignoreCase = true)
+        val shortError = if (needsReconnect) "Reconnect required" else "Sync failed"
+        return if (syncTimeText != null) "Last sync $syncTimeText • $shortError" else shortError
+    }
+
+    if (syncTimeText != null) {
+        val compactDetail = compactWallConnectorStatus(lastSyncStatus)
+        return if (compactDetail != null) {
+            "Synced $syncTimeText • $compactDetail"
+        } else {
+            "Synced $syncTimeText"
+        }
+    }
+
+    return if (chargerSyncEnabled) {
+        "Syncs daily at $formattedSyncTime"
+    } else {
+        "Auto-sync off"
+    }
+}
+
+private fun compactWallConnectorStatus(status: String?): String? {
+    val trimmed = status?.trim().orEmpty()
+    if (trimmed.isEmpty()) return null
+
+    WALL_CONNECTOR_SYNCED_REGEX.matchEntire(trimmed)?.let { match ->
+        val count = match.groupValues[1]
+        val unit = match.groupValues[2]
+        val suffix = match.groupValues[3]
+        return "$count $unit$suffix"
+    }
+
+    if (trimmed.startsWith("Wall Connectors up to date", ignoreCase = true) ||
+        trimmed.startsWith("Wall Connectors synced", ignoreCase = true)
+    ) {
+        return "Up to date"
+    }
+
+    return trimmed
+}
+
