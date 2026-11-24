@@ -41,7 +41,7 @@ data class ParsedChargingSessionDraft(
     val startDateIso: String,
     val endDateIso: String,
     val kwh: Double,
-    val venue: String, // "HOME" or "PUBLIC"
+    val venue: String, // "HOME", "WORK", or "PUBLIC"
     val directCost: Double? = null,
     val chargerName: String? = null,
     val isSummary: Boolean = false
@@ -56,7 +56,14 @@ data class ParsedChargerImportResult(
 
 object ElectricityImportParser {
 
+    const val VENUE_HOME = "HOME"
+    const val VENUE_WORK = "WORK"
+    const val VENUE_PUBLIC = "PUBLIC"
+
     const val AUTO_WALL_CONNECTOR_BATCH_ID = "auto_wall_connector"
+    const val AUTO_WORK_CHARGING_BATCH_ID = "auto_work_charging"
+    const val AUTO_SUPERCHARGER_BATCH_ID = "auto_supercharger"
+    const val AUTO_SMARTCAR_CHARGING_BATCH_ID = "auto_smartcar_charging"
 
     private val isoDateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
     private val shortDisplayFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.US)
@@ -85,6 +92,28 @@ object ElectricityImportParser {
         "home", "garage", "residence", "residential", "wall connector",
         "mobile connector", "emporia", "wallbox", "my charger", "house", "driveway"
     )
+
+    private val workVenueKeywords = listOf(
+        "work", "office", "workplace", "employer", "company", "campus",
+        "free charge", "free charging", "complimentary", "free j1772"
+    )
+
+    fun normalizeVenue(raw: String?): String = when (raw?.trim()?.uppercase(Locale.US)) {
+        VENUE_WORK -> VENUE_WORK
+        VENUE_PUBLIC -> VENUE_PUBLIC
+        else -> VENUE_HOME
+    }
+
+    fun isAutomatedSyncBatch(session: ChargingSessionEntity): Boolean {
+        return session.uploadBatchId == AUTO_WALL_CONNECTOR_BATCH_ID ||
+            session.uploadBatchId == AUTO_WORK_CHARGING_BATCH_ID ||
+            session.uploadBatchId == AUTO_SUPERCHARGER_BATCH_ID ||
+            session.uploadBatchId == AUTO_SMARTCAR_CHARGING_BATCH_ID ||
+            session.id.startsWith("twc_") ||
+            session.id.startsWith("tesla_work_") ||
+            session.id.startsWith("sc_tesla_") ||
+            session.id.startsWith("sc_smartcar_")
+    }
 
     fun calculateVariableBlendedRate(
         totalAmount: Double,
@@ -116,7 +145,7 @@ object ElectricityImportParser {
         val startDay = Instant.ofEpochMilli(startDateMs).atZone(zoneId).toLocalDate().toString()
         val endDay = Instant.ofEpochMilli(endDateMs).atZone(zoneId).toLocalDate().toString()
         val quantizedKwh = (kwh * 10.0).roundToLong()
-        val normalizedVenue = venue.uppercase(Locale.US).ifBlank { "HOME" }
+        val normalizedVenue = normalizeVenue(venue)
         val normalizedCar = carId?.takeIf { it.isNotBlank() } ?: "shared"
         return "$startDay|$endDay|$quantizedKwh|$normalizedVenue|$normalizedCar"
     }
@@ -191,15 +220,18 @@ object ElectricityImportParser {
     fun classifyVenue(chargerName: String?, directCost: Double?): String {
         val lower = chargerName.orEmpty().lowercase(Locale.US)
         if (homeVenueKeywords.any { lower.contains(it) }) {
-            return "HOME"
+            return VENUE_HOME
         }
         if (publicVenueKeywords.any { lower.contains(it) }) {
-            return "PUBLIC"
+            return VENUE_PUBLIC
+        }
+        if (workVenueKeywords.any { lower.contains(it) } && (directCost == null || directCost <= 0.0)) {
+            return VENUE_WORK
         }
         if (directCost != null && directCost > 0.0) {
-            return "PUBLIC"
+            return VENUE_PUBLIC
         }
-        return "HOME"
+        return VENUE_HOME
     }
 
     fun parseChargerCsv(fileName: String, csvContent: String): List<ParsedChargingSessionDraft> {
@@ -267,8 +299,8 @@ object ElectricityImportParser {
             val kwh = parseNumeric(row.getOrNull(kwhCol)) ?: continue
             if (kwh <= 0.0) continue
 
-            val directCost = if (costCol >= 0) {
-                parseNumeric(row.getOrNull(costCol))?.takeIf { it > 0.0 }
+            val parsedCost = if (costCol >= 0) {
+                parseNumeric(row.getOrNull(costCol))?.takeIf { it >= 0.0 }
             } else {
                 null
             }
@@ -278,7 +310,7 @@ object ElectricityImportParser {
                 row.getOrNull(typeCol)?.trim()?.takeIf { it.isNotBlank() }
             ).joinToString(" · ").ifBlank { null }
 
-            val venue = classifyVenue(locationText, directCost)
+            val venue = classifyVenue(locationText, parsedCost)
             val isSummary = endDate.isAfter(startDate.plusDays(1))
 
             drafts.add(
@@ -287,7 +319,11 @@ object ElectricityImportParser {
                     endDateIso = endDate.format(isoDateFormatter),
                     kwh = kwh,
                     venue = venue,
-                    directCost = if (venue == "PUBLIC") directCost else null,
+                    directCost = when (venue) {
+                        VENUE_PUBLIC -> parsedCost
+                        VENUE_WORK -> 0.0
+                        else -> null
+                    },
                     chargerName = locationText ?: fileName.substringBeforeLast("."),
                     isSummary = isSummary
                 )
@@ -343,9 +379,7 @@ object ElectricityImportParser {
      * the same `carId` is returned.
      */
     fun resolveLastUploadBatch(sessions: List<ChargingSessionEntity>): List<ChargingSessionEntity> {
-        val manualSessions = sessions.filterNot {
-            it.uploadBatchId == AUTO_WALL_CONNECTOR_BATCH_ID || it.id.startsWith("twc_")
-        }
+        val manualSessions = sessions.filterNot { isAutomatedSyncBatch(it) }
         if (manualSessions.isEmpty()) return emptyList()
         val latest = manualSessions.maxWithOrNull(
             compareBy<ChargingSessionEntity> { it.uploadedAtMs }

@@ -578,13 +578,18 @@ object InsightsCalculationEngine {
 
         // Build per-slice breakdown within the active observation window
         val homeSlices = mutableListOf<EnergySlice>()
+        val workSlices = mutableListOf<EnergySlice>()
         val publicSlices = mutableListOf<EnergySlice>()
         val homePeriodLogs = mutableListOf<PeriodChargingLogItem>()
+        val workPeriodLogs = mutableListOf<PeriodChargingLogItem>()
         val publicPeriodLogs = mutableListOf<PeriodChargingLogItem>()
         var homeSessionCountAllCars = 0
+        var workSessionCountAllCars = 0
         var publicSessionCountAllCars = 0
         var homeSessionCountCar1 = 0
         var homeSessionCountCar2 = 0
+        var workSessionCountCar1 = 0
+        var workSessionCountCar2 = 0
         var publicSessionCountCar1 = 0
         var publicSessionCountCar2 = 0
 
@@ -595,7 +600,7 @@ object InsightsCalculationEngine {
         )
 
         for (session in orderedSessions) {
-            val venue = session.venue.uppercase(Locale.US).let { if (it == "PUBLIC") "PUBLIC" else "HOME" }
+            val venue = ElectricityImportParser.normalizeVenue(session.venue)
             if (session.isSummary) {
                 val sStartDay = Instant.ofEpochMilli(session.startDateMs).atZone(zoneId).toLocalDate()
                 val sEndDay = Instant.ofEpochMilli(session.endDateMs).atZone(zoneId).toLocalDate()
@@ -609,107 +614,178 @@ object InsightsCalculationEngine {
                 var overlaps = false
                 var overlapDays = 0L
                 var rawPeriodCost = 0.0
+                var rawPeriodAvoidedCost = 0.0
                 var anyDayEstimated = false
                 var cursor = overlapStart
                 while (!cursor.isAfter(overlapEnd)) {
                     overlaps = true
                     overlapDays++
                     val dayMidMs = cursor.atTime(12, 0).atZone(zoneId).toInstant().toEpochMilli()
-                    if (venue == "PUBLIC") {
-                        val dailyCost = (session.directCost ?: 0.0) / totalDays.toDouble()
-                        rawPeriodCost += dailyCost
-                        publicSlices.add(EnergySlice(dailyKwh, dailyCost, session.carId, venue, null))
-                    } else {
-                        val resolved = resolveRateForTimestamp(
-                            targetMs = dayMidMs,
-                            utilityBills = utilityBills,
-                            defaultElectricityRate = defaultElectricityRate,
-                            useCustomElectricityRate = useCustomElectricityRate
-                        )
-                        val dayCost = dailyKwh * resolved.rate
-                        rawPeriodCost += dayCost
-                        if (resolved.isEstimated) anyDayEstimated = true
-                        homeSlices.add(EnergySlice(dailyKwh, dayCost, session.carId, venue, resolved))
+                    when (venue) {
+                        ElectricityImportParser.VENUE_PUBLIC -> {
+                            val dailyCost = (session.directCost ?: 0.0) / totalDays.toDouble()
+                            rawPeriodCost += dailyCost
+                            publicSlices.add(EnergySlice(dailyKwh, dailyCost, session.carId, venue, null))
+                        }
+                        ElectricityImportParser.VENUE_WORK -> {
+                            val resolved = resolveRateForTimestamp(
+                                targetMs = dayMidMs,
+                                utilityBills = utilityBills,
+                                defaultElectricityRate = defaultElectricityRate,
+                                useCustomElectricityRate = useCustomElectricityRate
+                            )
+                            val avoidedDayCost = dailyKwh * resolved.rate
+                            rawPeriodAvoidedCost += avoidedDayCost
+                            if (resolved.isEstimated) anyDayEstimated = true
+                            // Store avoided home cost in slice.cost for clean attribution; actual work spend is always $0.00
+                            workSlices.add(EnergySlice(dailyKwh, avoidedDayCost, session.carId, venue, resolved))
+                        }
+                        else -> {
+                            val resolved = resolveRateForTimestamp(
+                                targetMs = dayMidMs,
+                                utilityBills = utilityBills,
+                                defaultElectricityRate = defaultElectricityRate,
+                                useCustomElectricityRate = useCustomElectricityRate
+                            )
+                            val dayCost = dailyKwh * resolved.rate
+                            rawPeriodCost += dayCost
+                            if (resolved.isEstimated) anyDayEstimated = true
+                            homeSlices.add(EnergySlice(dailyKwh, dayCost, session.carId, venue, resolved))
+                        }
                     }
                     cursor = cursor.plusDays(1)
                 }
                 if (overlaps) {
-                    if (venue == "PUBLIC") publicSessionCountAllCars++ else homeSessionCountAllCars++
-                    if (session.carId == null || session.carId == car1?.id) {
-                        if (venue == "PUBLIC") publicSessionCountCar1++ else homeSessionCountCar1++
-                    }
-                    if (session.carId == null || session.carId == car2?.id) {
-                        if (venue == "PUBLIC") publicSessionCountCar2++ else homeSessionCountCar2++
+                    when (venue) {
+                        ElectricityImportParser.VENUE_PUBLIC -> {
+                            publicSessionCountAllCars++
+                            if (session.carId == null || session.carId == car1?.id) publicSessionCountCar1++
+                            if (session.carId == null || session.carId == car2?.id) publicSessionCountCar2++
+                        }
+                        ElectricityImportParser.VENUE_WORK -> {
+                            workSessionCountAllCars++
+                            if (session.carId == null || session.carId == car1?.id) workSessionCountCar1++
+                            if (session.carId == null || session.carId == car2?.id) workSessionCountCar2++
+                        }
+                        else -> {
+                            homeSessionCountAllCars++
+                            if (session.carId == null || session.carId == car1?.id) homeSessionCountCar1++
+                            if (session.carId == null || session.carId == car2?.id) homeSessionCountCar2++
+                        }
                     }
                     val attribution = attributionForSelectedCar(session.carId)
                     if (attribution != null) {
                         val (multiplier, isSharedSplit) = attribution
                         val rawPeriodKwh = dailyKwh * overlapDays.toDouble()
-                        val effectiveRate = if (rawPeriodKwh > 0.0) rawPeriodCost / rawPeriodKwh else 0.0
+                        val effectiveRate = when (venue) {
+                            ElectricityImportParser.VENUE_WORK -> 0.0
+                            else -> if (rawPeriodKwh > 0.0) rawPeriodCost / rawPeriodKwh else 0.0
+                        }
                         val logItem = PeriodChargingLogItem(
                             session = session,
                             attributedKwh = rawPeriodKwh * multiplier,
-                            attributedCost = rawPeriodCost * multiplier,
+                            attributedCost = if (venue == ElectricityImportParser.VENUE_WORK) 0.0 else rawPeriodCost * multiplier,
                             effectiveRate = effectiveRate,
-                            isEstimatedRate = if (venue == "PUBLIC") false else anyDayEstimated,
+                            isEstimatedRate = when (venue) {
+                                ElectricityImportParser.VENUE_PUBLIC -> false
+                                ElectricityImportParser.VENUE_WORK -> false
+                                else -> anyDayEstimated
+                            },
                             isSharedSplit = isSharedSplit,
-                            isProratedSummary = overlapDays < totalDays
+                            isProratedSummary = overlapDays < totalDays,
+                            avoidedHomeCost = if (venue == ElectricityImportParser.VENUE_WORK) rawPeriodAvoidedCost * multiplier else 0.0
                         )
-                        if (venue == "PUBLIC") publicPeriodLogs.add(logItem) else homePeriodLogs.add(logItem)
+                        when (venue) {
+                            ElectricityImportParser.VENUE_PUBLIC -> publicPeriodLogs.add(logItem)
+                            ElectricityImportParser.VENUE_WORK -> workPeriodLogs.add(logItem)
+                            else -> homePeriodLogs.add(logItem)
+                        }
                     }
                 }
             } else {
                 val midMs = (session.startDateMs + session.endDateMs) / 2
                 if (midMs !in windowStartMs..windowEndMs) continue
 
-                if (venue == "PUBLIC") {
-                    publicSessionCountAllCars++
-                    if (session.carId == null || session.carId == car1?.id) publicSessionCountCar1++
-                    if (session.carId == null || session.carId == car2?.id) publicSessionCountCar2++
-                    val rawCost = session.directCost ?: 0.0
-                    publicSlices.add(EnergySlice(session.kwh, rawCost, session.carId, venue, null))
-                    val attribution = attributionForSelectedCar(session.carId)
-                    if (attribution != null) {
-                        val (multiplier, isSharedSplit) = attribution
-                        val effectiveRate = if (session.kwh > 0.0) rawCost / session.kwh else 0.0
-                        publicPeriodLogs.add(
-                            PeriodChargingLogItem(
-                                session = session,
-                                attributedKwh = session.kwh * multiplier,
-                                attributedCost = rawCost * multiplier,
-                                effectiveRate = effectiveRate,
-                                isEstimatedRate = false,
-                                isSharedSplit = isSharedSplit,
-                                isProratedSummary = false
+                when (venue) {
+                    ElectricityImportParser.VENUE_PUBLIC -> {
+                        publicSessionCountAllCars++
+                        if (session.carId == null || session.carId == car1?.id) publicSessionCountCar1++
+                        if (session.carId == null || session.carId == car2?.id) publicSessionCountCar2++
+                        val rawCost = session.directCost ?: 0.0
+                        publicSlices.add(EnergySlice(session.kwh, rawCost, session.carId, venue, null))
+                        val attribution = attributionForSelectedCar(session.carId)
+                        if (attribution != null) {
+                            val (multiplier, isSharedSplit) = attribution
+                            val effectiveRate = if (session.kwh > 0.0) rawCost / session.kwh else 0.0
+                            publicPeriodLogs.add(
+                                PeriodChargingLogItem(
+                                    session = session,
+                                    attributedKwh = session.kwh * multiplier,
+                                    attributedCost = rawCost * multiplier,
+                                    effectiveRate = effectiveRate,
+                                    isEstimatedRate = false,
+                                    isSharedSplit = isSharedSplit,
+                                    isProratedSummary = false
+                                )
                             )
-                        )
+                        }
                     }
-                } else {
-                    homeSessionCountAllCars++
-                    if (session.carId == null || session.carId == car1?.id) homeSessionCountCar1++
-                    if (session.carId == null || session.carId == car2?.id) homeSessionCountCar2++
-                    val resolved = resolveRateForTimestamp(
-                        targetMs = midMs,
-                        utilityBills = utilityBills,
-                        defaultElectricityRate = defaultElectricityRate,
-                        useCustomElectricityRate = useCustomElectricityRate
-                    )
-                    val rawCost = session.kwh * resolved.rate
-                    homeSlices.add(EnergySlice(session.kwh, rawCost, session.carId, venue, resolved))
-                    val attribution = attributionForSelectedCar(session.carId)
-                    if (attribution != null) {
-                        val (multiplier, isSharedSplit) = attribution
-                        homePeriodLogs.add(
-                            PeriodChargingLogItem(
-                                session = session,
-                                attributedKwh = session.kwh * multiplier,
-                                attributedCost = rawCost * multiplier,
-                                effectiveRate = resolved.rate,
-                                isEstimatedRate = resolved.isEstimated,
-                                isSharedSplit = isSharedSplit,
-                                isProratedSummary = false
-                            )
+                    ElectricityImportParser.VENUE_WORK -> {
+                        workSessionCountAllCars++
+                        if (session.carId == null || session.carId == car1?.id) workSessionCountCar1++
+                        if (session.carId == null || session.carId == car2?.id) workSessionCountCar2++
+                        val resolved = resolveRateForTimestamp(
+                            targetMs = midMs,
+                            utilityBills = utilityBills,
+                            defaultElectricityRate = defaultElectricityRate,
+                            useCustomElectricityRate = useCustomElectricityRate
                         )
+                        val rawAvoidedCost = session.kwh * resolved.rate
+                        workSlices.add(EnergySlice(session.kwh, rawAvoidedCost, session.carId, venue, resolved))
+                        val attribution = attributionForSelectedCar(session.carId)
+                        if (attribution != null) {
+                            val (multiplier, isSharedSplit) = attribution
+                            workPeriodLogs.add(
+                                PeriodChargingLogItem(
+                                    session = session,
+                                    attributedKwh = session.kwh * multiplier,
+                                    attributedCost = 0.0,
+                                    effectiveRate = 0.0,
+                                    isEstimatedRate = false,
+                                    isSharedSplit = isSharedSplit,
+                                    isProratedSummary = false,
+                                    avoidedHomeCost = rawAvoidedCost * multiplier
+                                )
+                            )
+                        }
+                    }
+                    else -> {
+                        homeSessionCountAllCars++
+                        if (session.carId == null || session.carId == car1?.id) homeSessionCountCar1++
+                        if (session.carId == null || session.carId == car2?.id) homeSessionCountCar2++
+                        val resolved = resolveRateForTimestamp(
+                            targetMs = midMs,
+                            utilityBills = utilityBills,
+                            defaultElectricityRate = defaultElectricityRate,
+                            useCustomElectricityRate = useCustomElectricityRate
+                        )
+                        val rawCost = session.kwh * resolved.rate
+                        homeSlices.add(EnergySlice(session.kwh, rawCost, session.carId, venue, resolved))
+                        val attribution = attributionForSelectedCar(session.carId)
+                        if (attribution != null) {
+                            val (multiplier, isSharedSplit) = attribution
+                            homePeriodLogs.add(
+                                PeriodChargingLogItem(
+                                    session = session,
+                                    attributedKwh = session.kwh * multiplier,
+                                    attributedCost = rawCost * multiplier,
+                                    effectiveRate = resolved.rate,
+                                    isEstimatedRate = resolved.isEstimated,
+                                    isSharedSplit = isSharedSplit,
+                                    isProratedSummary = false
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -747,6 +823,7 @@ object InsightsCalculationEngine {
         }
 
         val homeAttr = attributeSlices(homeSlices)
+        val workAttr = attributeSlices(workSlices)
         val publicAttr = attributeSlices(publicSlices)
 
         val homeFilteredKwh = when (selectedCarId) {
@@ -760,6 +837,18 @@ object InsightsCalculationEngine {
             car1?.id -> homeAttr.car1Cost
             car2?.id -> homeAttr.car2Cost
             else -> homeAttr.fleetCost
+        }
+        val workFilteredKwh = when (selectedCarId) {
+            null -> workAttr.fleetKwh
+            car1?.id -> workAttr.car1Kwh
+            car2?.id -> workAttr.car2Kwh
+            else -> workAttr.fleetKwh
+        }
+        val workFilteredAvoidedCost = when (selectedCarId) {
+            null -> workAttr.fleetCost
+            car1?.id -> workAttr.car1Cost
+            car2?.id -> workAttr.car2Cost
+            else -> workAttr.fleetCost
         }
         val publicFilteredKwh = when (selectedCarId) {
             null -> publicAttr.fleetKwh
@@ -776,8 +865,9 @@ object InsightsCalculationEngine {
 
         // Miles for efficiency should include EVs (or cars that explicitly logged kWh)
         val evMilesInFleet = activeCars.filter { car ->
-            car.isEv || (car.id == car1?.id && (homeAttr.car1Kwh + publicAttr.car1Kwh) > 0.0) ||
-                (car.id == car2?.id && (homeAttr.car2Kwh + publicAttr.car2Kwh) > 0.0)
+            car.isEv ||
+                (car.id == car1?.id && (homeAttr.car1Kwh + workAttr.car1Kwh + publicAttr.car1Kwh) > 0.0) ||
+                (car.id == car2?.id && (homeAttr.car2Kwh + workAttr.car2Kwh + publicAttr.car2Kwh) > 0.0)
         }.sumOf { milesByCarId[it.id] ?: 0 }
 
         val milesForEfficiency = when (selectedCarId) {
@@ -793,7 +883,7 @@ object InsightsCalculationEngine {
         val publicMilesPerKwh = if (milesForEfficiency > 0 && publicFilteredKwh > 0.0) milesForEfficiency / publicFilteredKwh else null
         val publicCostPerMile = if (milesForEfficiency > 0 && publicFilteredKwh > 0.0) publicFilteredCost / milesForEfficiency else null
 
-        val combinedKwh = homeFilteredKwh + publicFilteredKwh
+        val combinedKwh = homeFilteredKwh + workFilteredKwh + publicFilteredKwh
         val combinedCost = homeFilteredCost + publicFilteredCost
         val combinedMilesPerKwh = if (milesForEfficiency > 0 && combinedKwh > 0.0) milesForEfficiency / combinedKwh else null
         val combinedCostPerMile = if (milesForEfficiency > 0 && combinedKwh > 0.0) combinedCost / milesForEfficiency else null
@@ -847,6 +937,10 @@ object InsightsCalculationEngine {
         val homeC1Pct = if (homeAllocatedKwhSum > 0.0) ((homeAttr.car1Kwh / homeAllocatedKwhSum) * 100.0).roundToInt().coerceIn(0, 100) else 0
         val homeC2Pct = if (homeAllocatedKwhSum > 0.0) (100 - homeC1Pct).coerceIn(0, 100) else 0
 
+        val workAllocatedKwhSum = workAttr.car1Kwh + workAttr.car2Kwh
+        val workC1Pct = if (workAllocatedKwhSum > 0.0) ((workAttr.car1Kwh / workAllocatedKwhSum) * 100.0).roundToInt().coerceIn(0, 100) else 0
+        val workC2Pct = if (workAllocatedKwhSum > 0.0) (100 - workC1Pct).coerceIn(0, 100) else 0
+
         val publicAllocatedKwhSum = publicAttr.car1Kwh + publicAttr.car2Kwh
         val publicC1Pct = if (publicAllocatedKwhSum > 0.0) ((publicAttr.car1Kwh / publicAllocatedKwhSum) * 100.0).roundToInt().coerceIn(0, 100) else 0
         val publicC2Pct = if (publicAllocatedKwhSum > 0.0) (100 - publicC1Pct).coerceIn(0, 100) else 0
@@ -856,6 +950,12 @@ object InsightsCalculationEngine {
             car1?.id -> homeSessionCountCar1
             car2?.id -> homeSessionCountCar2
             else -> homeSessionCountAllCars
+        }
+        val effectiveWorkSessionCount = when (selectedCarId) {
+            null -> workSessionCountAllCars
+            car1?.id -> workSessionCountCar1
+            car2?.id -> workSessionCountCar2
+            else -> workSessionCountAllCars
         }
         val effectivePublicSessionCount = when (selectedCarId) {
             null -> publicSessionCountAllCars
@@ -868,6 +968,7 @@ object InsightsCalculationEngine {
 
         return ElectricityCostData(
             hasHomeData = homeFilteredKwh > 0.0 || effectiveHomeSessionCount > 0,
+            hasWorkData = workFilteredKwh > 0.0 || effectiveWorkSessionCount > 0,
             hasPublicData = publicFilteredKwh > 0.0 || effectivePublicSessionCount > 0,
             hasAnyData = chargingSessions.isNotEmpty() || utilityBills.isNotEmpty(),
             homeTotalCost = homeFilteredCost,
@@ -887,12 +988,20 @@ object InsightsCalculationEngine {
             homeCar2SharePct = homeC2Pct,
             homeSessionCount = effectiveHomeSessionCount,
             homePeriodLogs = homePeriodLogs,
+            workTotalKwh = workFilteredKwh,
+            workAvoidedHomeCost = workFilteredAvoidedCost,
+            workCar1Kwh = workAttr.car1Kwh,
+            workCar1SharePct = workC1Pct,
+            workCar2Kwh = workAttr.car2Kwh,
+            workCar2SharePct = workC2Pct,
+            workSessionCount = effectiveWorkSessionCount,
+            workPeriodLogs = workPeriodLogs,
             publicTotalCost = publicFilteredCost,
             publicTotalKwh = publicFilteredKwh,
             publicMilesPerKwh = publicMilesPerKwh,
             publicCostPerMile = publicCostPerMile,
             publicEffectiveRate = publicEffectiveRate,
-            publicRateSourceLabel = if (effectivePublicSessionCount == 1) "1 receipt" else "$effectivePublicSessionCount receipts",
+            publicRateSourceLabel = if (effectivePublicSessionCount == 1) "1 session" else "$effectivePublicSessionCount sessions",
             publicCar1Cost = publicAttr.car1Cost,
             publicCar1Kwh = publicAttr.car1Kwh,
             publicCar1SharePct = publicC1Pct,
@@ -958,13 +1067,16 @@ object InsightsCalculationEngine {
         gasPrice: Float,
         electricityCost: ElectricityCostData
     ): Double? {
-        val totalSessionsInWindow = electricityCost.homeSessionCount + electricityCost.publicSessionCount
+        val totalSessionsInWindow =
+            electricityCost.homeSessionCount + electricityCost.workSessionCount + electricityCost.publicSessionCount
         if (totalSessionsInWindow <= 0 || electricityCost.combinedTotalKwh <= 0.0) return null
 
         val evMilesForGasBaseline = when (selectedCarId) {
             null -> {
-                val c1IsEv = car1?.isEv == true || (electricityCost.homeCar1Kwh + electricityCost.publicCar1Kwh) > 0.0
-                val c2IsEv = car2?.isEv == true || (electricityCost.homeCar2Kwh + electricityCost.publicCar2Kwh) > 0.0
+                val c1IsEv = car1?.isEv == true ||
+                    (electricityCost.homeCar1Kwh + electricityCost.workCar1Kwh + electricityCost.publicCar1Kwh) > 0.0
+                val c2IsEv = car2?.isEv == true ||
+                    (electricityCost.homeCar2Kwh + electricityCost.workCar2Kwh + electricityCost.publicCar2Kwh) > 0.0
                 val evMiles = (if (c1IsEv) car1Miles else 0) + (if (c2IsEv) car2Miles else 0)
                 if (activeCars.none { it.isEv } && evMiles == 0) car1Miles + car2Miles else evMiles
             }

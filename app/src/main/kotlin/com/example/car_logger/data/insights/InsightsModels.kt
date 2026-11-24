@@ -9,9 +9,10 @@ enum class InsightsTimeGranularity(val label: String) {
     YTD("Year")
 }
 
-enum class ChargingVenue(val label: String) {
-    HOME("Home charging"),
-    PUBLIC("Public charging")
+enum class ChargingVenue(val label: String, val shortLabel: String) {
+    HOME("Home charging", "Home"),
+    WORK("Work charging", "Work"),
+    PUBLIC("Public charging", "Public")
 }
 
 data class DrivingActivityBar(
@@ -43,11 +44,13 @@ data class PeriodChargingLogItem(
     val effectiveRate: Double,
     val isEstimatedRate: Boolean,
     val isSharedSplit: Boolean,
-    val isProratedSummary: Boolean
+    val isProratedSummary: Boolean,
+    val avoidedHomeCost: Double = 0.0
 )
 
 data class ElectricityCostData(
     val hasHomeData: Boolean = false,
+    val hasWorkData: Boolean = false,
     val hasPublicData: Boolean = false,
     val hasAnyData: Boolean = false,
     // Home charging metrics for the current period & vehicle filter
@@ -68,6 +71,15 @@ data class ElectricityCostData(
     val homeCar2SharePct: Int = 0,
     val homeSessionCount: Int = 0,
     val homePeriodLogs: List<PeriodChargingLogItem> = emptyList(),
+    // Work charging (free) metrics for the current period & vehicle filter
+    val workTotalKwh: Double = 0.0,
+    val workAvoidedHomeCost: Double = 0.0,
+    val workCar1Kwh: Double = 0.0,
+    val workCar1SharePct: Int = 0,
+    val workCar2Kwh: Double = 0.0,
+    val workCar2SharePct: Int = 0,
+    val workSessionCount: Int = 0,
+    val workPeriodLogs: List<PeriodChargingLogItem> = emptyList(),
     // Public charging metrics for the current period & vehicle filter
     val publicTotalCost: Double = 0.0,
     val publicTotalKwh: Double = 0.0,
@@ -83,7 +95,7 @@ data class ElectricityCostData(
     val publicCar2SharePct: Int = 0,
     val publicSessionCount: Int = 0,
     val publicPeriodLogs: List<PeriodChargingLogItem> = emptyList(),
-    // Combined (Home + Public) metrics for the current period & vehicle filter
+    // Combined (Home + Work + Public) metrics for the current period & vehicle filter
     val combinedTotalCost: Double = 0.0,
     val combinedTotalKwh: Double = 0.0,
     val combinedMilesPerKwh: Double? = null,

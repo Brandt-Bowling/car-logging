@@ -101,9 +101,12 @@ fun InsightsTab(
     onUndoAndRetagChargingUpload: () -> Unit = {},
     onDeleteUtilityBill: (String) -> Unit = {},
     onDeleteChargingSession: (String) -> Unit = {},
+    onUpdateChargingSessionCost: (String, Double) -> Unit = { _, _ -> },
     onUpdateDefaultElectricityRate: (Float) -> Unit = {},
     onUseSavedBillRate: () -> Unit = {},
     onSyncWallConnectors: () -> Unit = {},
+    onSyncWorkCharging: () -> Unit = {},
+    onSyncPublicCharging: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
@@ -294,6 +297,8 @@ fun InsightsTab(
                     onOpenManageSheet = { showManageElectricitySheet = true },
                     onSaveCustomRate = onUpdateDefaultElectricityRate,
                     onSyncWallConnectors = onSyncWallConnectors,
+                    onSyncWorkCharging = onSyncWorkCharging,
+                    onSyncPublicCharging = onSyncPublicCharging,
                     onOpenPeriodLogs = { periodLogsVenue = it }
                 )
             }
@@ -353,6 +358,8 @@ fun InsightsTab(
                     onOpenManageSheet = { showManageElectricitySheet = true },
                     onSaveCustomRate = onUpdateDefaultElectricityRate,
                     onSyncWallConnectors = onSyncWallConnectors,
+                    onSyncWorkCharging = onSyncWorkCharging,
+                    onSyncPublicCharging = onSyncPublicCharging,
                     onOpenPeriodLogs = { periodLogsVenue = it }
                 )
             }
@@ -443,6 +450,7 @@ fun InsightsTab(
             onDismiss = onDismissChargerUsageSheet,
             onSaveSessions = onSaveChargingSessions,
             initialSelectedCarId = state.selectedCarId,
+            initialVenue = selectedVenue,
             lastUploadBatch = lastUploadBatch,
             onUndoLastUpload = onUndoLastChargingUpload,
             onUndoAndRetagLastUpload = onUndoAndRetagChargingUpload
@@ -501,6 +509,7 @@ fun InsightsTab(
             onPreviousPeriod = onPreviousPeriod,
             onNextPeriod = onNextPeriod,
             onDeleteSession = onDeleteChargingSession,
+            onUpdateSessionCost = onUpdateChargingSessionCost,
             onOpenAddCharger = {
                 periodLogsVenue = null
                 onOpenManualChargerUsageSheet()

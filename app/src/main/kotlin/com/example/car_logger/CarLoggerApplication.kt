@@ -7,6 +7,7 @@ import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.migration.FlutterDataMigrator
 import com.example.car_logger.services.ChargerSyncScheduler
 import com.example.car_logger.services.DailyPollScheduler
+import com.example.car_logger.services.WorkChargingSyncScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,6 +47,15 @@ class CarLoggerApplication : Application() {
                         context = this@CarLoggerApplication,
                         targetHour = preferencesManager.getChargerSyncHour(),
                         targetMinute = preferencesManager.getChargerSyncMinute()
+                    )
+                }
+                if (preferencesManager.getWorkChargingSyncEnabled()) {
+                    WorkChargingSyncScheduler.schedule(
+                        context = this@CarLoggerApplication,
+                        startHour = preferencesManager.getWorkChargingWindowStartHour(),
+                        startMinute = preferencesManager.getWorkChargingWindowStartMinute(),
+                        endHour = preferencesManager.getWorkChargingWindowEndHour(),
+                        endMinute = preferencesManager.getWorkChargingWindowEndMinute()
                     )
                 }
             } catch (e: Exception) {

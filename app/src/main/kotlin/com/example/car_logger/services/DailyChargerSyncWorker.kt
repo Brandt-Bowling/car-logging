@@ -52,6 +52,30 @@ class DailyChargerSyncWorker(
             val entities = carDao.getAllCarsList()
             val models = entities.map { it.toModel() }
             syncService.syncWallConnectorCharging(models)
+
+            if (prefs.getSuperchargerSyncEnabled()) {
+                try {
+                    syncService.syncTeslaSuperchargerCharging(models)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Scheduled Supercharger sync skipped/failed: ${e.message}")
+                }
+            }
+
+            if (prefs.getSmartcarDcSyncEnabled()) {
+                try {
+                    syncService.syncSmartcarDcCharging(
+                        cars = models,
+                        forceCapabilityRecheck = false,
+                        allowLiveProbe = false
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Scheduled Smartcar DC sync skipped/failed: ${e.message}")
+                }
+            }
         }
     }
 }

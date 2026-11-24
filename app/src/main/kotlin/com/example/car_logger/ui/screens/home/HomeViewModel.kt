@@ -655,6 +655,63 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun syncWorkCharging() {
+        viewModelScope.launch {
+            val currentCars = cars.value.ifEmpty { carDao.getAllCarsList().map { it.toModel() } }
+            val result = odometerSyncService.syncTeslaWorkCharging(currentCars, forceWake = false)
+            _toastMessage.emit(OdometerSyncService.formatWorkChargingSyncMessage(result))
+        }
+    }
+
+    fun syncPublicCharging() {
+        viewModelScope.launch {
+            val currentCars = cars.value.ifEmpty { carDao.getAllCarsList().map { it.toModel() } }
+            val scResult = odometerSyncService.syncTeslaSuperchargerCharging(currentCars)
+            val smartcarResult = odometerSyncService.syncSmartcarDcCharging(
+                cars = currentCars,
+                forceCapabilityRecheck = true,
+                allowLiveProbe = true
+            )
+            val parts = buildList {
+                if (scResult !is com.example.car_logger.services.SuperchargerSyncResult.NotConfigured) {
+                    add(OdometerSyncService.formatSuperchargerSyncMessage(scResult))
+                }
+                if (smartcarResult !is com.example.car_logger.services.SmartcarDcSyncResult.NotConfigured) {
+                    val includeSmartcar = smartcarResult is com.example.car_logger.services.SmartcarDcSyncResult.Synced &&
+                        smartcarResult.insertedCount > 0 ||
+                        scResult is com.example.car_logger.services.SuperchargerSyncResult.NotConfigured ||
+                        smartcarResult is com.example.car_logger.services.SmartcarDcSyncResult.MissingPermission
+                    if (includeSmartcar) {
+                        add(OdometerSyncService.formatSmartcarDcSyncMessage(smartcarResult))
+                    }
+                }
+            }
+            _toastMessage.emit(
+                parts.joinToString(" · ").ifBlank { "Connect Tesla or Smartcar in Settings to sync public charging" }
+            )
+        }
+    }
+
+    fun updateChargingSessionDirectCost(sessionId: String, newCost: Double) {
+        viewModelScope.launch {
+            val sanitizedCost = newCost.coerceAtLeast(0.0)
+            val updated = withContext(Dispatchers.IO) {
+                val existing = chargingSessionDao.getAllSessionsList().firstOrNull { it.id == sessionId }
+                if (existing != null) {
+                    chargingSessionDao.insertSession(existing.copy(directCost = sanitizedCost))
+                    true
+                } else {
+                    false
+                }
+            }
+            if (updated) {
+                _toastMessage.emit(
+                    "Updated session cost to $${String.format(Locale.US, "%.2f", sanitizedCost)}"
+                )
+            }
+        }
+    }
+
     fun handleOAuthCallback(uri: Uri) {
         viewModelScope.launch {
             val isSmartcar = uri.path.orEmpty().contains("smartcar", ignoreCase = true)
@@ -689,6 +746,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             _toastMessage.tryEmit(OdometerSyncService.formatWallConnectorSyncMessage(chargerResult))
                         }
                         com.example.car_logger.services.WallConnectorSyncResult.NotConfigured -> Unit
+                    }
+
+                    val (teslaAccess, _, _) = preferencesManager.getTeslaTokens()
+                    if (OdometerSyncService.hasTeslaChargingHistoryScope(teslaAccess)) {
+                        val scResult = odometerSyncService.syncTeslaSuperchargerCharging(currentCars)
+                        if (scResult is com.example.car_logger.services.SuperchargerSyncResult.Synced &&
+                            scResult.insertedCount > 0
+                        ) {
+                            _toastMessage.tryEmit(OdometerSyncService.formatSuperchargerSyncMessage(scResult))
+                        }
                     }
                 }
             } else {

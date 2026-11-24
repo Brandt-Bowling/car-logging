@@ -427,7 +427,9 @@ fun ManageElectricityDataSheet(
                         }
 
                         chargingSessions.forEach { session ->
-                            val isPublic = session.venue.equals("PUBLIC", ignoreCase = true)
+                            val normalizedVenue = ElectricityImportParser.normalizeVenue(session.venue)
+                            val isPublic = normalizedVenue == ElectricityImportParser.VENUE_PUBLIC
+                            val isWork = normalizedVenue == ElectricityImportParser.VENUE_WORK
                             val vehicleLabel = session.carId?.let { carNameById[it] } ?: "All vehicles"
                             val dateLabel = ElectricityImportParser.formatPeriodShort(session.startDateMs, session.endDateMs)
                             Surface(
@@ -450,7 +452,13 @@ fun ManageElectricityDataSheet(
                                             text = buildString {
                                                 append(dateLabel)
                                                 append(" · ")
-                                                append(if (isPublic) "Public" else "Home")
+                                                append(
+                                                    when {
+                                                        isWork -> "Work · Free"
+                                                        isPublic -> "Public"
+                                                        else -> "Home"
+                                                    }
+                                                )
                                                 if (session.isSummary) append(" · Total")
                                             },
                                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
@@ -461,6 +469,8 @@ fun ManageElectricityDataSheet(
                                                 append("${String.format(Locale.US, "%.1f", session.kwh)} kWh")
                                                 if (isPublic && session.directCost != null) {
                                                     append(" · $${String.format(Locale.US, "%.2f", session.directCost)}")
+                                                } else if (isWork) {
+                                                    append(" · $0.00")
                                                 }
                                                 append(" · $vehicleLabel")
                                                 if (!session.chargerName.isNullOrBlank()) {

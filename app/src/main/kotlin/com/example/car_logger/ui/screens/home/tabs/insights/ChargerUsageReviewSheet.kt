@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,16 +28,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.EvStation
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -53,10 +57,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.car_logger.data.insights.ChargingVenue
 import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.services.ElectricityImportParser
@@ -85,6 +91,7 @@ fun ChargerUsageReviewSheet(
     onDismiss: () -> Unit,
     onSaveSessions: (sessions: List<ChargingSessionEntity>, skippedDuplicates: Int) -> Unit,
     initialSelectedCarId: String? = null,
+    initialVenue: ChargingVenue = ChargingVenue.HOME,
     lastUploadBatch: List<ChargingSessionEntity> = emptyList(),
     onUndoLastUpload: () -> Unit = {},
     onUndoAndRetagLastUpload: () -> Unit = {},
@@ -92,6 +99,9 @@ fun ChargerUsageReviewSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val activeCars = remember(cars) { cars.filter { !it.isArchived }.ifEmpty { cars } }
+    val isDark = isSystemInDarkTheme()
+    val workChipBg = if (isDark) Color(0xFF0F4020) else Color(0xFFD3F5DC)
+    val workChipFg = if (isDark) Color(0xFF81E6A1) else Color(0xFF0B5F2A)
 
     // Default vehicle assignment: active filter carId if set, or single car id, or All (null)
     var selectedCarId by remember(activeCars, initialSelectedCarId) {
@@ -101,7 +111,7 @@ fun ChargerUsageReviewSheet(
 
     val isImportReviewMode = initialImport != null && initialImport.sessions.isNotEmpty()
 
-    // Import review mutable venue overrides so user can flip any parsed row HOME <-> PUBLIC
+    // Import review mutable venue overrides so user can cycle Home -> Work -> Public or drop duplicate rows
     val importDrafts = remember(initialImport) {
         mutableStateListOf<ParsedChargingSessionDraft>().apply {
             if (initialImport != null) addAll(initialImport.sessions)
@@ -110,7 +120,15 @@ fun ChargerUsageReviewSheet(
 
     // Manual entry fields
     var entryMode by remember { mutableStateOf(ManualEntryMode.SINGLE_SESSION) }
-    var venue by remember { mutableStateOf("HOME") }
+    var venue by remember(initialVenue) {
+        mutableStateOf(
+            when (initialVenue) {
+                ChargingVenue.HOME -> ElectricityImportParser.VENUE_HOME
+                ChargingVenue.WORK -> ElectricityImportParser.VENUE_WORK
+                ChargingVenue.PUBLIC -> ElectricityImportParser.VENUE_PUBLIC
+            }
+        )
+    }
     val todayIso = remember { LocalDate.now().toString() }
     val monthStartIso = remember { YearMonth.now().atDay(1).toString() }
     val monthEndIso = remember { YearMonth.now().atEndOfMonth().toString() }
@@ -268,7 +286,7 @@ fun ChargerUsageReviewSheet(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Tap Home or Public on any row to change it.",
+                            text = "Tap a venue badge to cycle Home / Work / Public, or × to skip rows already synced.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -355,6 +373,7 @@ fun ChargerUsageReviewSheet(
                 // Preview of parsed rows (up to 15 shown cleanly)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     importDrafts.take(15).forEachIndexed { idx, row ->
+                        val normalizedVenue = ElectricityImportParser.normalizeVenue(row.venue)
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -363,8 +382,8 @@ fun ChargerUsageReviewSheet(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                    .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
@@ -383,8 +402,11 @@ fun ChargerUsageReviewSheet(
                                     )
                                     val subtitle = buildString {
                                         append("${String.format(Locale.US, "%.1f", row.kwh)} kWh")
-                                        if (row.venue == "PUBLIC" && row.directCost != null) {
-                                            append(" · $${String.format(Locale.US, "%.2f", row.directCost)}")
+                                        when (normalizedVenue) {
+                                            ElectricityImportParser.VENUE_WORK -> append(" · Free")
+                                            ElectricityImportParser.VENUE_PUBLIC -> if (row.directCost != null) {
+                                                append(" · $${String.format(Locale.US, "%.2f", row.directCost)}")
+                                            }
                                         }
                                         if (!row.chargerName.isNullOrBlank()) {
                                             append(" · ${row.chargerName}")
@@ -399,28 +421,55 @@ fun ChargerUsageReviewSheet(
                                     )
                                 }
 
-                                val isHome = row.venue != "PUBLIC"
+                                val (badgeBg, badgeFg, badgeLabel) = when (normalizedVenue) {
+                                    ElectricityImportParser.VENUE_WORK -> Triple(workChipBg, workChipFg, "Work")
+                                    ElectricityImportParser.VENUE_PUBLIC -> Triple(
+                                        MaterialTheme.colorScheme.tertiaryContainer,
+                                        MaterialTheme.colorScheme.onTertiaryContainer,
+                                        "Public"
+                                    )
+                                    else -> Triple(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.onPrimaryContainer,
+                                        "Home"
+                                    )
+                                }
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
-                                    color = if (isHome) {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.tertiaryContainer
-                                    },
+                                    color = badgeBg,
                                     modifier = Modifier.expressiveBounceClick {
-                                        val toggled = if (isHome) "PUBLIC" else "HOME"
-                                        importDrafts[idx] = row.copy(venue = toggled)
+                                        val nextVenue = when (normalizedVenue) {
+                                            ElectricityImportParser.VENUE_HOME -> ElectricityImportParser.VENUE_WORK
+                                            ElectricityImportParser.VENUE_WORK -> ElectricityImportParser.VENUE_PUBLIC
+                                            else -> ElectricityImportParser.VENUE_HOME
+                                        }
+                                        importDrafts[idx] = row.copy(
+                                            venue = nextVenue,
+                                            directCost = when (nextVenue) {
+                                                ElectricityImportParser.VENUE_WORK -> 0.0
+                                                ElectricityImportParser.VENUE_HOME -> null
+                                                else -> row.directCost
+                                            }
+                                        )
                                     }
                                 ) {
                                     Text(
-                                        text = if (isHome) "Home" else "Public",
+                                        text = badgeLabel,
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = if (isHome) {
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onTertiaryContainer
-                                        },
+                                        color = badgeFg,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { importDrafts.removeAt(idx) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Remove row from import",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -444,18 +493,18 @@ fun ChargerUsageReviewSheet(
                     }
                 )
 
-                // Home vs Public FilterChips (14.dp radius)
+                // 3-Option Venue FilterChips (Home | Work | Public)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilterChip(
-                        selected = venue == "HOME",
-                        onClick = { venue = "HOME" },
-                        label = { Text("Home charger") },
+                        selected = venue == ElectricityImportParser.VENUE_HOME,
+                        onClick = { venue = ElectricityImportParser.VENUE_HOME },
+                        label = { Text("Home", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         leadingIcon = {
                             Icon(
-                                imageVector = if (venue == "HOME") Icons.Rounded.Check else Icons.Rounded.Home,
+                                imageVector = if (venue == ElectricityImportParser.VENUE_HOME) Icons.Rounded.Check else Icons.Rounded.Home,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -468,12 +517,31 @@ fun ChargerUsageReviewSheet(
                         modifier = Modifier.weight(1f)
                     )
                     FilterChip(
-                        selected = venue == "PUBLIC",
-                        onClick = { venue = "PUBLIC" },
-                        label = { Text("Public charger") },
+                        selected = venue == ElectricityImportParser.VENUE_WORK,
+                        onClick = { venue = ElectricityImportParser.VENUE_WORK },
+                        label = { Text("Work", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         leadingIcon = {
                             Icon(
-                                imageVector = if (venue == "PUBLIC") Icons.Rounded.Check else Icons.Rounded.EvStation,
+                                imageVector = if (venue == ElectricityImportParser.VENUE_WORK) Icons.Rounded.Check else Icons.Rounded.Work,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = workChipBg,
+                            selectedLabelColor = workChipFg,
+                            selectedLeadingIconColor = workChipFg
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = venue == ElectricityImportParser.VENUE_PUBLIC,
+                        onClick = { venue = ElectricityImportParser.VENUE_PUBLIC },
+                        label = { Text("Public", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (venue == ElectricityImportParser.VENUE_PUBLIC) Icons.Rounded.Check else Icons.Rounded.EvStation,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -555,7 +623,7 @@ fun ChargerUsageReviewSheet(
                         modifier = Modifier.weight(1f)
                     )
 
-                    if (venue == "PUBLIC") {
+                    if (venue == ElectricityImportParser.VENUE_PUBLIC) {
                         OutlinedTextField(
                             value = directCostText,
                             onValueChange = {
@@ -572,7 +640,7 @@ fun ChargerUsageReviewSheet(
                     }
                 }
 
-                AnimatedVisibility(visible = venue == "HOME") {
+                AnimatedVisibility(visible = venue == ElectricityImportParser.VENUE_HOME) {
                     Text(
                         text = "Uses your electric bill rate, or your default home rate.",
                         style = MaterialTheme.typography.bodySmall,
@@ -580,11 +648,35 @@ fun ChargerUsageReviewSheet(
                     )
                 }
 
+                AnimatedVisibility(visible = venue == ElectricityImportParser.VENUE_WORK) {
+                    Text(
+                        text = "Free workplace charging — logged at $0.00 and included in overall efficiency.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = workChipFg
+                    )
+                }
+
                 OutlinedTextField(
                     value = chargerNameText,
                     onValueChange = { chargerNameText = it },
-                    label = { Text(if (venue == "HOME") "Charger name (optional)" else "Station name (optional)") },
-                    placeholder = { Text(if (venue == "HOME") "e.g., Garage Wall Connector" else "e.g., Supercharger") },
+                    label = {
+                        Text(
+                            when (venue) {
+                                ElectricityImportParser.VENUE_HOME -> "Charger name (optional)"
+                                ElectricityImportParser.VENUE_WORK -> "Work charger (optional)"
+                                else -> "Station name (optional)"
+                            }
+                        )
+                    },
+                    placeholder = {
+                        Text(
+                            when (venue) {
+                                ElectricityImportParser.VENUE_HOME -> "e.g., Garage Wall Connector"
+                                ElectricityImportParser.VENUE_WORK -> "e.g., Work J1772"
+                                else -> "e.g., Supercharger or Electrify America"
+                            }
+                        )
+                    },
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -623,13 +715,17 @@ fun ChargerUsageReviewSheet(
                                 if (isSummary) rangeEndText else singleDateText
                             )
                             val kwh = kwhText.toDoubleOrNull()
-                            val parsedCost = if (venue == "PUBLIC") directCostText.toDoubleOrNull() else null
+                            val parsedCost = when (venue) {
+                                ElectricityImportParser.VENUE_PUBLIC -> directCostText.toDoubleOrNull()
+                                ElectricityImportParser.VENUE_WORK -> 0.0
+                                else -> null
+                            }
 
                             when {
                                 sMs == null || eMs == null -> errorMessage = "Enter valid dates (YYYY-MM-DD)."
                                 eMs < sMs -> errorMessage = "End date cannot be before start date."
                                 kwh == null || kwh <= 0.0 -> errorMessage = "Enter energy above 0 kWh."
-                                venue == "PUBLIC" && (parsedCost == null || parsedCost < 0.0) ->
+                                venue == ElectricityImportParser.VENUE_PUBLIC && (parsedCost == null || parsedCost < 0.0) ->
                                     errorMessage = "Enter total paid ($) for public charging (0.00 if free)."
                                 else -> {
                                     val fingerprint = ElectricityImportParser.buildFingerprint(
@@ -651,7 +747,11 @@ fun ChargerUsageReviewSheet(
                                             venue = venue,
                                             directCost = parsedCost,
                                             chargerName = chargerNameText.trim().ifBlank {
-                                                if (venue == "HOME") "Home charger" else "Public charger"
+                                                when (venue) {
+                                                    ElectricityImportParser.VENUE_HOME -> "Home charger"
+                                                    ElectricityImportParser.VENUE_WORK -> "Work J1772"
+                                                    else -> "Public charger"
+                                                }
                                             },
                                             isSummary = isSummary,
                                             fingerprint = fingerprint
@@ -694,8 +794,12 @@ private fun buildEntitiesFromDrafts(
         val sMs = ElectricityImportParser.parseDateToStartOfDayMs(draft.startDateIso) ?: continue
         val eMs = ElectricityImportParser.parseDateToEndOfDayMs(draft.endDateIso) ?: sMs
         val effectiveEnd = maxOf(sMs, eMs)
-        val venue = draft.venue.uppercase(Locale.US).let { if (it == "PUBLIC") "PUBLIC" else "HOME" }
-        val directCost = if (venue == "PUBLIC") draft.directCost else null
+        val venue = ElectricityImportParser.normalizeVenue(draft.venue)
+        val directCost = when (venue) {
+            ElectricityImportParser.VENUE_WORK -> 0.0
+            ElectricityImportParser.VENUE_PUBLIC -> draft.directCost
+            else -> null
+        }
         val fp = ElectricityImportParser.buildFingerprint(
             startDateMs = sMs,
             endDateMs = effectiveEnd,
