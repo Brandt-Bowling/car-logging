@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,8 +40,11 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.EvStation
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -103,6 +107,9 @@ import com.example.car_logger.services.DailyPollScheduler
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncService
 import com.example.car_logger.services.WallConnectorType
+import com.example.car_logger.services.WorkChargingSyncResult
+import com.example.car_logger.services.WorkChargingSyncScheduler
+import com.example.car_logger.services.WorkLocationCaptureResult
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -120,6 +127,7 @@ fun SettingsTab(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val isDark = isSystemInDarkTheme()
     val garageName by preferencesManager.garageNameFlow.collectAsState(initial = PreferencesManager.DEFAULT_GARAGE_NAME)
     val geminiKey by preferencesManager.geminiApiKeyFlow.collectAsState(initial = null)
     val autoDevKey by preferencesManager.autoDevApiKeyFlow.collectAsState(initial = null)
@@ -129,6 +137,14 @@ fun SettingsTab(
     val cooldownHours by preferencesManager.syncCooldownHoursFlow.collectAsState(initial = PreferencesManager.DEFAULT_COOLDOWN_HOURS)
     val smartcarConnected by preferencesManager.smartcarConnectedFlow.collectAsState(initial = false)
     val teslaConnected by preferencesManager.teslaConnectedFlow.collectAsState(initial = false)
+    val teslaAccessToken by preferencesManager.teslaAccessTokenFlow.collectAsState(initial = null)
+    val hasTeslaLocationScope = remember(teslaAccessToken) {
+        OdometerSyncService.hasTeslaLocationScope(teslaAccessToken)
+    }
+    val hasTeslaChargingHistoryScope = remember(teslaAccessToken) {
+        OdometerSyncService.hasTeslaChargingHistoryScope(teslaAccessToken)
+    }
+
     val dailyPollEnabled by preferencesManager.dailyPollEnabledFlow.collectAsState(initial = true)
     val lastDailyPollTime by preferencesManager.lastDailyPollTimeFlow.collectAsState(initial = 0L)
     val lastDailyPollStatus by preferencesManager.lastDailyPollStatusFlow.collectAsState(initial = null)
@@ -139,6 +155,27 @@ fun SettingsTab(
     val chargerSyncMinute by preferencesManager.chargerSyncMinuteFlow.collectAsState(initial = PreferencesManager.DEFAULT_CHARGER_SYNC_MINUTE)
     val lastChargerSyncTime by preferencesManager.lastChargerSyncTimeFlow.collectAsState(initial = 0L)
     val lastChargerSyncStatus by preferencesManager.lastChargerSyncStatusFlow.collectAsState(initial = null)
+
+    val workChargingSyncEnabled by preferencesManager.workChargingSyncEnabledFlow.collectAsState(initial = true)
+    val workWindowStartHour by preferencesManager.workChargingWindowStartHourFlow.collectAsState(initial = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_START_HOUR)
+    val workWindowStartMinute by preferencesManager.workChargingWindowStartMinuteFlow.collectAsState(initial = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_START_MINUTE)
+    val workWindowEndHour by preferencesManager.workChargingWindowEndHourFlow.collectAsState(initial = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_END_HOUR)
+    val workWindowEndMinute by preferencesManager.workChargingWindowEndMinuteFlow.collectAsState(initial = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_END_MINUTE)
+    val workChargingWeekdaysOnly by preferencesManager.workChargingWeekdaysOnlyFlow.collectAsState(initial = true)
+    val lastWorkChargingSyncTime by preferencesManager.lastWorkChargingSyncTimeFlow.collectAsState(initial = 0L)
+    val lastWorkChargingSyncStatus by preferencesManager.lastWorkChargingSyncStatusFlow.collectAsState(initial = null)
+    val workLocationLat by preferencesManager.workLocationLatFlow.collectAsState(initial = null)
+    val workLocationLng by preferencesManager.workLocationLngFlow.collectAsState(initial = null)
+    val workLocationRadiusMeters by preferencesManager.workLocationRadiusMetersFlow.collectAsState(initial = PreferencesManager.DEFAULT_WORK_LOCATION_RADIUS_METERS)
+
+    val superchargerSyncEnabled by preferencesManager.superchargerSyncEnabledFlow.collectAsState(initial = true)
+    val lastSuperchargerSyncTime by preferencesManager.lastSuperchargerSyncTimeFlow.collectAsState(initial = 0L)
+    val lastSuperchargerSyncStatus by preferencesManager.lastSuperchargerSyncStatusFlow.collectAsState(initial = null)
+
+    val smartcarDcSyncEnabled by preferencesManager.smartcarDcSyncEnabledFlow.collectAsState(initial = true)
+    val smartcarDcCapability by preferencesManager.smartcarDcCapabilityFlow.collectAsState(initial = PreferencesManager.SMARTCAR_CAPABILITY_UNKNOWN)
+    val lastSmartcarDcSyncTime by preferencesManager.lastSmartcarDcSyncTimeFlow.collectAsState(initial = 0L)
+    val lastSmartcarDcSyncStatus by preferencesManager.lastSmartcarDcSyncStatusFlow.collectAsState(initial = null)
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner, odometerSyncService, cars) {
@@ -172,6 +209,10 @@ fun SettingsTab(
     var showSmartcarDialog by remember { mutableStateOf(false) }
     var showTeslaDialog by remember { mutableStateOf(false) }
     var showChargerSyncTimePicker by remember { mutableStateOf(false) }
+    var workWindowPickerTarget by remember { mutableStateOf<String?>(null) } // "START" or "END"
+    var showWorkLocationScopeDialog by remember { mutableStateOf(false) }
+    var showWorkLocationWakeDialog by remember { mutableStateOf(false) }
+    var showWorkChargeWakeDialog by remember { mutableStateOf(false) }
     var carPendingForceWake by remember { mutableStateOf<Car?>(null) }
 
     val is24Hour = DateFormat.is24HourFormat(context)
@@ -179,6 +220,41 @@ fun SettingsTab(
         val scheduledTime = LocalTime.of(chargerSyncHour.coerceIn(0, 23), chargerSyncMinute.coerceIn(0, 59))
         val pattern = if (is24Hour) "HH:mm" else "h:mm a"
         scheduledTime.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+    }
+    val formattedWorkWindowStart = remember(workWindowStartHour, workWindowStartMinute, is24Hour) {
+        val t = LocalTime.of(workWindowStartHour.coerceIn(0, 23), workWindowStartMinute.coerceIn(0, 59))
+        val pattern = if (is24Hour) "HH:mm" else "h:mm a"
+        t.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+    }
+    val formattedWorkWindowEnd = remember(workWindowEndHour, workWindowEndMinute, is24Hour) {
+        val t = LocalTime.of(workWindowEndHour.coerceIn(0, 23), workWindowEndMinute.coerceIn(0, 59))
+        val pattern = if (is24Hour) "HH:mm" else "h:mm a"
+        t.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+    }
+    val formattedWorkWindowRange = "$formattedWorkWindowStart – $formattedWorkWindowEnd"
+
+    fun launchTeslaOAuth(
+        includeLocationScope: Boolean = hasTeslaLocationScope,
+        includeChargingHistoryScope: Boolean = hasTeslaChargingHistoryScope
+    ) {
+        if (odometerSyncService == null) return
+        coroutineScope.launch {
+            val (id, _) = odometerSyncService.getEffectiveTeslaCredentials()
+            if (!id.isNullOrBlank()) {
+                val url = odometerSyncService.buildTeslaAuthUrl(
+                    clientId = id,
+                    includeLocationScope = includeLocationScope,
+                    includeChargingHistoryScope = includeChargingHistoryScope
+                )
+                try {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                } catch (_: ActivityNotFoundException) {
+                    Toast.makeText(context, "No web browser found to open link", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                showTeslaDialog = true
+            }
+        }
     }
 
     val signInLauncher = rememberLauncherForActivityResult(
@@ -424,6 +500,8 @@ fun SettingsTab(
         var clientId by remember { mutableStateOf("") }
         var clientSecret by remember { mutableStateOf("") }
         var accessToken by remember { mutableStateOf("") }
+        var includeChargingHistoryScope by remember { mutableStateOf(hasTeslaChargingHistoryScope) }
+        var includeLocationScope by remember { mutableStateOf(hasTeslaLocationScope) }
 
         LaunchedEffect(Unit) {
             val (id, secret) = odometerSyncService?.getEffectiveTeslaCredentials()
@@ -432,6 +510,8 @@ fun SettingsTab(
             clientId = id.orEmpty()
             clientSecret = secret.orEmpty()
             accessToken = token.orEmpty()
+            includeChargingHistoryScope = OdometerSyncService.hasTeslaChargingHistoryScope(token)
+            includeLocationScope = OdometerSyncService.hasTeslaLocationScope(token)
         }
 
         AlertDialog(
@@ -465,11 +545,54 @@ fun SettingsTab(
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (clientId.isNotBlank() && odometerSyncService != null) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Optional Tesla scopes (enable in portal first)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            FilterChip(
+                                selected = includeChargingHistoryScope,
+                                onClick = { includeChargingHistoryScope = !includeChargingHistoryScope },
+                                leadingIcon = if (includeChargingHistoryScope) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                                label = { Text("Supercharger history (vehicle_charging_cmds)", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            )
+                            FilterChip(
+                                selected = includeLocationScope,
+                                onClick = { includeLocationScope = !includeLocationScope },
+                                leadingIcon = if (includeLocationScope) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                                label = { Text("Work GPS (vehicle_location)", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            )
+                        }
                         FilledTonalButton(
                             onClick = {
                                 coroutineScope.launch {
                                     preferencesManager.setTeslaCredentials(clientId, clientSecret, accessToken = null)
-                                    val url = odometerSyncService.buildTeslaAuthUrl(clientId)
+                                    val url = odometerSyncService.buildTeslaAuthUrl(
+                                        clientId = clientId,
+                                        includeLocationScope = includeLocationScope,
+                                        includeChargingHistoryScope = includeChargingHistoryScope
+                                    )
                                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                                     showTeslaDialog = false
                                 }
@@ -556,6 +679,121 @@ fun SettingsTab(
         )
     }
 
+    // Work Location Missing Scope Dialog
+    if (showWorkLocationScopeDialog && odometerSyncService != null) {
+        AlertDialog(
+            onDismissRequest = { showWorkLocationScopeDialog = false },
+            title = { Text("Enable Work GPS scope") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Saving your work location requires Tesla's optional vehicle_location scope. " +
+                            "Make sure Vehicle Location is enabled for your app in the Tesla Developer Portal, then reconnect.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    DashboardLinkButton(
+                        label = "Open Tesla developer portal",
+                        url = DeveloperDashboardUrls.TESLA
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showWorkLocationScopeDialog = false
+                        launchTeslaOAuth(
+                            includeLocationScope = true,
+                            includeChargingHistoryScope = hasTeslaChargingHistoryScope
+                        )
+                    }
+                ) {
+                    Text("Reconnect with location")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWorkLocationScopeDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Work Location Wake Confirmation Dialog
+    if (showWorkLocationWakeDialog && odometerSyncService != null) {
+        AlertDialog(
+            onDismissRequest = { showWorkLocationWakeDialog = false },
+            title = { Text("Wake Tesla to save location?") },
+            text = {
+                Text("Your Tesla is currently asleep. Waking it briefly uses a small amount of battery to read its current GPS coordinates as your work location.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showWorkLocationWakeDialog = false
+                        Toast.makeText(context, "Waking Tesla to save work location...", Toast.LENGTH_SHORT).show()
+                        coroutineScope.launch {
+                            val result = odometerSyncService.captureCurrentTeslaWorkLocation(cars, forceWake = true)
+                            val msg = when (result) {
+                                is WorkLocationCaptureResult.Saved ->
+                                    "Saved work GPS (${String.format(Locale.US, "%.4f, %.4f", result.latitude, result.longitude)})"
+                                is WorkLocationCaptureResult.MissingScope -> {
+                                    showWorkLocationScopeDialog = true
+                                    result.message
+                                }
+                                is WorkLocationCaptureResult.SkippedAsleep -> result.message
+                                WorkLocationCaptureResult.NotConfigured -> "Connect Tesla first"
+                                is WorkLocationCaptureResult.Error -> result.message
+                            }
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                ) {
+                    Text("Wake & save", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWorkLocationWakeDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Work Charge Manual Sync Wake Dialog
+    if (showWorkChargeWakeDialog && odometerSyncService != null) {
+        AlertDialog(
+            onDismissRequest = { showWorkChargeWakeDialog = false },
+            title = { Text("Tesla is asleep") },
+            text = {
+                Text("Zero-wake check did not find cached charge data. Wake your Tesla briefly to check for a work charge now?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showWorkChargeWakeDialog = false
+                        Toast.makeText(context, "Waking Tesla to check work charge...", Toast.LENGTH_SHORT).show()
+                        coroutineScope.launch {
+                            val res = odometerSyncService.syncTeslaWorkCharging(cars, forceWake = true)
+                            Toast.makeText(
+                                context,
+                                OdometerSyncService.formatWorkChargingSyncMessage(res),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                ) {
+                    Text("Wake & sync", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWorkChargeWakeDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     if (showChargerSyncTimePicker) {
         val timePickerState = rememberTimePickerState(
             initialHour = chargerSyncHour,
@@ -611,6 +849,86 @@ fun SettingsTab(
         ) {
             Text(
                 text = "Charging sync time",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            if (displayMode == TimePickerDisplayMode.Scroll && supportsScrollMode) {
+                TimeScroll(
+                    state = timePickerState,
+                    shapes = TimePickerDefaults.shapes()
+                )
+            } else {
+                TimeInput(
+                    state = timePickerState,
+                    shapes = TimePickerDefaults.shapes()
+                )
+            }
+        }
+    }
+
+    if (workWindowPickerTarget != null) {
+        val editingStart = workWindowPickerTarget == "START"
+        val timePickerState = rememberTimePickerState(
+            initialHour = if (editingStart) workWindowStartHour else workWindowEndHour,
+            initialMinute = if (editingStart) workWindowStartMinute else workWindowEndMinute,
+            is24Hour = is24Hour
+        )
+        var displayMode by remember { mutableStateOf(TimePickerDisplayMode.Scroll) }
+        val supportsScrollMode = LocalConfiguration.current.screenHeightDp.dp > TimePickerDialogDefaults.MinHeightForTimePicker
+
+        VibrantTimePickerDialog(
+            onDismissRequest = { workWindowPickerTarget = null },
+            confirmButton = {
+                TextButton(
+                    enabled = timePickerState.isInputValid,
+                    onClick = {
+                        val selectedHour = timePickerState.hour
+                        val selectedMinute = timePickerState.minute
+                        workWindowPickerTarget = null
+                        val newStartH = if (editingStart) selectedHour else workWindowStartHour
+                        val newStartM = if (editingStart) selectedMinute else workWindowStartMinute
+                        val newEndH = if (editingStart) workWindowEndHour else selectedHour
+                        val newEndM = if (editingStart) workWindowEndMinute else selectedMinute
+                        coroutineScope.launch {
+                            preferencesManager.setWorkChargingWindow(newStartH, newStartM, newEndH, newEndM)
+                            if (workChargingSyncEnabled) {
+                                WorkChargingSyncScheduler.schedule(
+                                    context = context,
+                                    startHour = preferencesManager.getWorkChargingWindowStartHour(),
+                                    startMinute = preferencesManager.getWorkChargingWindowStartMinute(),
+                                    endHour = preferencesManager.getWorkChargingWindowEndHour(),
+                                    endMinute = preferencesManager.getWorkChargingWindowEndMinute()
+                                )
+                            }
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { workWindowPickerTarget = null }) {
+                    Text("Cancel")
+                }
+            },
+            modeToggleButton = {
+                if (supportsScrollMode) {
+                    TimePickerDialogDefaults.ScrollDisplayModeToggle(
+                        onDisplayModeChange = {
+                            displayMode = if (displayMode == TimePickerDisplayMode.Scroll) {
+                                TimePickerDisplayMode.Input
+                            } else {
+                                TimePickerDisplayMode.Scroll
+                            }
+                        },
+                        displayMode = displayMode
+                    )
+                }
+            }
+        ) {
+            Text(
+                text = if (editingStart) "Work check window start" else "Work check window end",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -1056,17 +1374,7 @@ fun SettingsTab(
                                 )
                                 if (odometerSyncService != null) {
                                     Button(
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                val (id, _) = odometerSyncService.getEffectiveTeslaCredentials()
-                                                if (!id.isNullOrBlank()) {
-                                                    val url = odometerSyncService.buildTeslaAuthUrl(id)
-                                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                                } else {
-                                                    showTeslaDialog = true
-                                                }
-                                            }
-                                        },
+                                        onClick = { launchTeslaOAuth() },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = MaterialTheme.colorScheme.error,
                                             contentColor = MaterialTheme.colorScheme.onError
@@ -1200,6 +1508,633 @@ fun SettingsTab(
                                     } else {
                                         ChargerSyncScheduler.cancel(context)
                                     }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Work charging section (Free Tesla J1772 auto-capture)
+        item {
+            val workIconContainer = if (isDark) Color(0xFF0A2E1A) else Color(0xFFDFF7E8)
+            val workIconTint = if (isDark) Color(0xFF4ADE80) else Color(0xFF15803D)
+            val workStatusText = formatWorkChargingSubtitle(
+                teslaConnected = teslaConnected,
+                lastSyncTimeMs = lastWorkChargingSyncTime.takeIf { it > 0L },
+                lastSyncStatus = lastWorkChargingSyncStatus,
+                syncEnabled = workChargingSyncEnabled,
+                weekdaysOnly = workChargingWeekdaysOnly,
+                formattedWindowRange = formattedWorkWindowRange
+            )
+            val hasWorkError = teslaConnected && isWorkChargingErrorStatus(lastWorkChargingSyncStatus)
+            val hasWorkGps = workLocationLat != null && workLocationLng != null
+
+            SettingsSectionHeader(title = "Work charging")
+            Spacer(modifier = Modifier.height(6.dp))
+            SettingsGroupCard {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Header row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(workIconContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Work,
+                                    contentDescription = null,
+                                    tint = workIconTint,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Work charging (Tesla)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = workStatusText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = when {
+                                        hasWorkError -> MaterialTheme.colorScheme.error
+                                        teslaConnected && lastWorkChargingSyncTime > 0L -> workIconTint
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                        if (teslaConnected && odometerSyncService != null) {
+                            TextButton(
+                                onClick = {
+                                    Toast.makeText(
+                                        context,
+                                        "Checking Tesla for work charge...",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    coroutineScope.launch {
+                                        val res = odometerSyncService.syncTeslaWorkCharging(cars, forceWake = false)
+                                        if (res is WorkChargingSyncResult.SkippedAsleep) {
+                                            showWorkChargeWakeDialog = true
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                OdometerSyncService.formatWorkChargingSyncMessage(res),
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("Sync")
+                            }
+                        }
+                    }
+
+                    // Auto-capture schedule row (hourly zero-wake window)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Auto-capture during work",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Hourly zero-wake checks — catches variable departure times before home charging",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = workChargingSyncEnabled,
+                                modifier = Modifier.semantics { contentDescription = "Auto-capture during work" },
+                                onCheckedChange = { isChecked ->
+                                    coroutineScope.launch {
+                                        preferencesManager.setWorkChargingSyncEnabled(isChecked)
+                                        if (isChecked) {
+                                            WorkChargingSyncScheduler.schedule(
+                                                context = context,
+                                                startHour = workWindowStartHour,
+                                                startMinute = workWindowStartMinute,
+                                                endHour = workWindowEndHour,
+                                                endMinute = workWindowEndMinute
+                                            )
+                                        } else {
+                                            WorkChargingSyncScheduler.cancel(context)
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FilterChip(
+                                selected = workChargingSyncEnabled,
+                                onClick = { workWindowPickerTarget = "START" },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Schedule,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = { Text(formattedWorkWindowStart) },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = "Edit work window start time",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
+                            Text(
+                                text = "–",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            FilterChip(
+                                selected = workChargingSyncEnabled,
+                                onClick = { workWindowPickerTarget = "END" },
+                                label = { Text(formattedWorkWindowEnd) },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = "Edit work window end time",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
+                        }
+                        FilterChip(
+                            selected = workChargingWeekdaysOnly,
+                            onClick = {
+                                coroutineScope.launch {
+                                    preferencesManager.setWorkChargingWeekdaysOnly(!workChargingWeekdaysOnly)
+                                }
+                            },
+                            leadingIcon = if (workChargingWeekdaysOnly) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                            label = { Text("Weekdays only") }
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
+                    // Optional Work GPS row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.LocationOn,
+                                contentDescription = null,
+                                tint = if (hasWorkGps) workIconTint else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Work location (GPS)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = if (hasWorkGps) {
+                                        "Saved (${String.format(Locale.US, "%.4f, %.4f", workLocationLat, workLocationLng)} · ${workLocationRadiusMeters}m)"
+                                    } else {
+                                        "Optional • using Home Wall Connector filter"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (hasWorkGps) {
+                                TextButton(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            preferencesManager.clearWorkLocation()
+                                            Toast.makeText(context, "Cleared work GPS location", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                ) {
+                                    Text("Clear")
+                                }
+                            }
+                            if (teslaConnected && odometerSyncService != null) {
+                                TextButton(
+                                    onClick = {
+                                        Toast.makeText(context, "Reading Tesla location...", Toast.LENGTH_SHORT).show()
+                                        coroutineScope.launch {
+                                            when (val result = odometerSyncService.captureCurrentTeslaWorkLocation(cars, forceWake = false)) {
+                                                is WorkLocationCaptureResult.Saved -> {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Saved work GPS (${String.format(Locale.US, "%.4f, %.4f", result.latitude, result.longitude)})",
+                                                        Toast.LENGTH_LONG
+                                                    ).show()
+                                                }
+                                                is WorkLocationCaptureResult.MissingScope -> {
+                                                    showWorkLocationScopeDialog = true
+                                                }
+                                                is WorkLocationCaptureResult.SkippedAsleep -> {
+                                                    showWorkLocationWakeDialog = true
+                                                }
+                                                WorkLocationCaptureResult.NotConfigured -> {
+                                                    Toast.makeText(context, "Connect Tesla first", Toast.LENGTH_SHORT).show()
+                                                }
+                                                is WorkLocationCaptureResult.Error -> {
+                                                    Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Text("Set from car")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Public & DC charging section (Tesla Superchargers + Smartcar DC)
+        item {
+            val scSubtitle = formatSuperchargerSubtitle(
+                teslaConnected = teslaConnected,
+                hasChargingScope = hasTeslaChargingHistoryScope,
+                lastSyncTimeMs = lastSuperchargerSyncTime.takeIf { it > 0L },
+                lastSyncStatus = lastSuperchargerSyncStatus,
+                syncEnabled = superchargerSyncEnabled
+            )
+            val showSuperchargerScopeBanner = teslaConnected &&
+                (!hasTeslaChargingHistoryScope || isSuperchargerScopeError(lastSuperchargerSyncStatus))
+
+            val smartcarDcSubtitle = formatSmartcarDcSubtitle(
+                smartcarConnected = smartcarConnected,
+                capability = smartcarDcCapability,
+                lastSyncTimeMs = lastSmartcarDcSyncTime.takeIf { it > 0L },
+                lastSyncStatus = lastSmartcarDcSyncStatus,
+                syncEnabled = smartcarDcSyncEnabled
+            )
+            val showSmartcarPermissionBanner = smartcarConnected &&
+                smartcarDcCapability == PreferencesManager.SMARTCAR_CAPABILITY_MISSING_PERMISSION
+
+            SettingsSectionHeader(title = "Public & DC charging")
+            Spacer(modifier = Modifier.height(6.dp))
+            SettingsGroupCard {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Tesla Superchargers
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.tertiaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Bolt,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Tesla Superchargers",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = scSubtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = when {
+                                        showSuperchargerScopeBanner -> MaterialTheme.colorScheme.error
+                                        teslaConnected && lastSuperchargerSyncTime > 0L -> MaterialTheme.colorScheme.primary
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                        if (teslaConnected && odometerSyncService != null) {
+                            TextButton(
+                                onClick = {
+                                    Toast.makeText(
+                                        context,
+                                        "Syncing Tesla Superchargers...",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    coroutineScope.launch {
+                                        val res = odometerSyncService.syncTeslaSuperchargerCharging(cars)
+                                        Toast.makeText(
+                                            context,
+                                            OdometerSyncService.formatSuperchargerSyncMessage(res),
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            ) {
+                                Text("Sync")
+                            }
+                        }
+                    }
+
+                    if (showSuperchargerScopeBanner && odometerSyncService != null) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Enable vehicle_charging_cmds in Tesla Developer Portal, then reconnect to pull paid Supercharger sessions (Model 3 & Blazer EV).",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                context.startActivity(
+                                                    Intent(Intent.ACTION_VIEW, Uri.parse(DeveloperDashboardUrls.TESLA))
+                                                )
+                                            } catch (_: ActivityNotFoundException) {
+                                                Toast.makeText(context, "No web browser found to open link", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Portal", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                    }
+                                    FilledTonalButton(
+                                        onClick = {
+                                            launchTeslaOAuth(
+                                                includeLocationScope = hasTeslaLocationScope,
+                                                includeChargingHistoryScope = true
+                                            )
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.weight(1.3f)
+                                    ) {
+                                        Text("Enable & reconnect", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Auto-sync Superchargers",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Zero-wake pull with daily charging sync",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = superchargerSyncEnabled,
+                            modifier = Modifier.semantics { contentDescription = "Auto-sync Superchargers" },
+                            onCheckedChange = { isChecked ->
+                                coroutineScope.launch {
+                                    preferencesManager.setSuperchargerSyncEnabled(isChecked)
+                                }
+                            }
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
+                    // Smartcar DC Charging (Blazer EV)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.EvStation,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Smartcar DC charging",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = smartcarDcSubtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = when {
+                                        showSmartcarPermissionBanner -> MaterialTheme.colorScheme.error
+                                        smartcarConnected && lastSmartcarDcSyncTime > 0L &&
+                                            smartcarDcCapability != PreferencesManager.SMARTCAR_CAPABILITY_UNSUPPORTED ->
+                                            MaterialTheme.colorScheme.primary
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                        if (smartcarConnected && odometerSyncService != null) {
+                            TextButton(
+                                onClick = {
+                                    Toast.makeText(
+                                        context,
+                                        "Checking Smartcar DC charging...",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    coroutineScope.launch {
+                                        val res = odometerSyncService.syncSmartcarDcCharging(
+                                            cars = cars,
+                                            forceCapabilityRecheck = true,
+                                            allowLiveProbe = true
+                                        )
+                                        Toast.makeText(
+                                            context,
+                                            OdometerSyncService.formatSmartcarDcSyncMessage(res),
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            ) {
+                                Text("Check / Sync")
+                            }
+                        }
+                    }
+
+                    if (showSmartcarPermissionBanner && odometerSyncService != null) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Enable charge records or fast-charger signals under Vehicle Access in the Smartcar dashboard, then reconnect.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                context.startActivity(
+                                                    Intent(Intent.ACTION_VIEW, Uri.parse(DeveloperDashboardUrls.SMARTCAR))
+                                                )
+                                            } catch (_: ActivityNotFoundException) {
+                                                Toast.makeText(context, "No web browser found to open link", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Dashboard", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                    }
+                                    FilledTonalButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                val (clientId, _) = odometerSyncService.getEffectiveSmartcarCredentials()
+                                                val url = odometerSyncService.resolveSmartcarAuthUrl(clientId.orEmpty())
+                                                try {
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                                } catch (_: ActivityNotFoundException) {
+                                                    Toast.makeText(context, "No web browser found to open link", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.weight(1.2f)
+                                    ) {
+                                        Text("Reconnect", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Auto-sync Smartcar DC",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (smartcarDcCapability == PreferencesManager.SMARTCAR_CAPABILITY_UNSUPPORTED) {
+                                    "Skipped in background — vehicle does not expose charge history"
+                                } else {
+                                    "Runs with daily sync when supported by vehicle"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = smartcarDcSyncEnabled,
+                            modifier = Modifier.semantics { contentDescription = "Auto-sync Smartcar DC" },
+                            onCheckedChange = { isChecked ->
+                                coroutineScope.launch {
+                                    preferencesManager.setSmartcarDcSyncEnabled(isChecked)
                                 }
                             }
                         )
@@ -1662,3 +2597,135 @@ private fun compactWallConnectorStatus(status: String?): String? {
     return trimmed
 }
 
+internal fun isWorkChargingErrorStatus(status: String?): Boolean {
+    if (status.isNullOrBlank()) return false
+    return status.contains("failed", ignoreCase = true) ||
+        status.contains("expired", ignoreCase = true) ||
+        status.contains("unauthorized", ignoreCase = true) ||
+        status.contains("401") ||
+        status.contains("403") ||
+        status.contains("error", ignoreCase = true) ||
+        status.contains("reconnect", ignoreCase = true)
+}
+
+internal fun formatWorkChargingSubtitle(
+    teslaConnected: Boolean,
+    lastSyncTimeMs: Long?,
+    lastSyncStatus: String?,
+    syncEnabled: Boolean,
+    weekdaysOnly: Boolean,
+    formattedWindowRange: String,
+    nowMs: Long = System.currentTimeMillis()
+): String {
+    if (!teslaConnected) return "Connect Tesla to auto-capture free work charges"
+
+    val syncTimeText = OdometerSyncService.formatRelativeTime(lastSyncTimeMs, nowMs)
+    if (isWorkChargingErrorStatus(lastSyncStatus)) {
+        val status = lastSyncStatus.orEmpty()
+        val needsReconnect = status.contains("expired", ignoreCase = true) ||
+            status.contains("unauthorized", ignoreCase = true) ||
+            status.contains("401") ||
+            status.contains("403") ||
+            status.contains("reconnect", ignoreCase = true)
+        val shortError = if (needsReconnect) "Reconnect required" else "Check failed"
+        return if (syncTimeText != null) "Checked $syncTimeText • $shortError" else shortError
+    }
+
+    if (syncTimeText != null) {
+        val detail = lastSyncStatus?.trim()?.takeIf { it.isNotEmpty() }
+        return if (detail != null) {
+            "Checked $syncTimeText • $detail"
+        } else {
+            "Checked $syncTimeText"
+        }
+    }
+
+    return if (syncEnabled) {
+        val freq = if (weekdaysOnly) "weekdays" else "daily"
+        "Checks hourly $freq, $formattedWindowRange (zero-wake)"
+    } else {
+        "Auto-capture off"
+    }
+}
+
+internal fun isSuperchargerScopeError(status: String?): Boolean {
+    if (status.isNullOrBlank()) return false
+    return status.contains("vehicle_charging_cmds", ignoreCase = true) ||
+        status.contains("missing", ignoreCase = true) ||
+        status.contains("403") ||
+        status.contains("forbidden", ignoreCase = true) ||
+        status.contains("reconnect", ignoreCase = true)
+}
+
+internal fun formatSuperchargerSubtitle(
+    teslaConnected: Boolean,
+    hasChargingScope: Boolean,
+    lastSyncTimeMs: Long?,
+    lastSyncStatus: String?,
+    syncEnabled: Boolean,
+    nowMs: Long = System.currentTimeMillis()
+): String {
+    if (!teslaConnected) return "Connect Tesla to pull paid Supercharger sessions"
+    if (!hasChargingScope || isSuperchargerScopeError(lastSyncStatus)) {
+        return "Enable vehicle_charging_cmds scope to sync"
+    }
+
+    val syncTimeText = OdometerSyncService.formatRelativeTime(lastSyncTimeMs, nowMs)
+    if (syncTimeText != null) {
+        val detail = lastSyncStatus?.trim()?.takeIf { it.isNotEmpty() }
+        return if (detail != null) {
+            "Synced $syncTimeText • $detail"
+        } else {
+            "Synced $syncTimeText"
+        }
+    }
+
+    return if (syncEnabled) {
+        "Ready • Zero-wake sync with daily charging sync"
+    } else {
+        "Auto-sync off"
+    }
+}
+
+internal fun formatSmartcarDcSubtitle(
+    smartcarConnected: Boolean,
+    capability: String,
+    lastSyncTimeMs: Long?,
+    lastSyncStatus: String?,
+    syncEnabled: Boolean,
+    nowMs: Long = System.currentTimeMillis()
+): String {
+    if (!smartcarConnected) return "Connect Smartcar to check DC fast charging"
+
+    val syncTimeText = OdometerSyncService.formatRelativeTime(lastSyncTimeMs, nowMs)
+    return when (capability) {
+        PreferencesManager.SMARTCAR_CAPABILITY_MISSING_PERMISSION ->
+            "Enable charging permissions in Smartcar dashboard"
+        PreferencesManager.SMARTCAR_CAPABILITY_UNSUPPORTED ->
+            "History unavailable on this vehicle • use receipt scan or Tesla Supercharger sync"
+        PreferencesManager.SMARTCAR_CAPABILITY_LIVE_ONLY -> {
+            val detail = lastSyncStatus?.trim()?.takeIf { it.isNotEmpty() }
+            if (syncTimeText != null && detail != null) {
+                "Live DC only • Checked $syncTimeText • $detail"
+            } else {
+                "Live DC fast-charge detection available (no history)"
+            }
+        }
+        PreferencesManager.SMARTCAR_CAPABILITY_CHARGE_RECORDS -> {
+            val detail = lastSyncStatus?.trim()?.takeIf { it.isNotEmpty() }
+            when {
+                syncTimeText != null && detail != null -> "Synced $syncTimeText • $detail"
+                syncTimeText != null -> "Synced $syncTimeText"
+                syncEnabled -> "Supported • Syncs with daily charging sync"
+                else -> "Supported • Auto-sync off"
+            }
+        }
+        else -> {
+            if (syncTimeText != null && !lastSyncStatus.isNullOrBlank()) {
+                "Checked $syncTimeText • ${lastSyncStatus.trim()}"
+            } else {
+                "Tap Check / Sync to probe vehicle DC charging support"
+            }
+        }
+    }
+}

@@ -8,6 +8,7 @@ import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.local.entity.UtilityBillEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.MaintenanceRecord
+import com.example.car_logger.services.ElectricityImportParser
 import kotlin.math.roundToInt
 
 enum class VehicleBentoTile {
@@ -35,6 +36,9 @@ data class VehicleBentoPeriodMetrics(
     val homeCost: Double = 0.0,
     val homePct: Int = 0,
     val homeEffectiveRate: Double = 0.16,
+    val workKwh: Double = 0.0,
+    val workPct: Int = 0,
+    val workAvoidedCost: Double = 0.0,
     val publicKwh: Double = 0.0,
     val publicCost: Double = 0.0,
     val publicPct: Int = 0,
@@ -260,12 +264,20 @@ object VehicleInsightsBentoCalculator {
 
         val elec = carState.electricityCost
         val totalKwh = elec.combinedTotalKwh
-        val homePct = if (totalKwh > 0.0) {
-            ((elec.homeTotalKwh / totalKwh) * 100.0).roundToInt().coerceIn(0, 100)
+        val (homePct, workPct, publicPct) = if (totalKwh > 0.0) {
+            val h = ((elec.homeTotalKwh / totalKwh) * 100.0).roundToInt().coerceIn(0, 100)
+            if (elec.workTotalKwh <= 0.0) {
+                Triple(h, 0, (100 - h).coerceIn(0, 100))
+            } else if (elec.publicTotalKwh <= 0.0) {
+                Triple(h, (100 - h).coerceIn(0, 100), 0)
+            } else {
+                val w = ((elec.workTotalKwh / totalKwh) * 100.0).roundToInt().coerceIn(0, 100 - h)
+                val p = (100 - h - w).coerceIn(0, 100)
+                Triple(h, w, p)
+            }
         } else {
-            0
+            Triple(0, 0, 0)
         }
-        val publicPct = if (totalKwh > 0.0) (100 - homePct).coerceIn(0, 100) else 0
 
         return VehicleBentoPeriodMetrics(
             granularity = granularity,
@@ -276,7 +288,7 @@ object VehicleInsightsBentoCalculator {
             dailyRate = carState.car1DailyRate,
             fleetSharePct = sharePct,
             activityBars = carState.activityBars,
-            hasChargingData = elec.hasHomeData || elec.hasPublicData || totalKwh > 0.0,
+            hasChargingData = elec.hasHomeData || elec.hasWorkData || elec.hasPublicData || totalKwh > 0.0,
             milesPerKwh = elec.combinedMilesPerKwh ?: elec.homeMilesPerKwh ?: elec.publicMilesPerKwh,
             energyCostPerMile = elec.combinedCostPerMile ?: elec.homeCostPerMile ?: elec.publicCostPerMile,
             totalKwh = totalKwh,
@@ -285,6 +297,9 @@ object VehicleInsightsBentoCalculator {
             homeCost = elec.homeTotalCost,
             homePct = homePct,
             homeEffectiveRate = elec.homeEffectiveRate,
+            workKwh = elec.workTotalKwh,
+            workPct = workPct,
+            workAvoidedCost = elec.workAvoidedHomeCost,
             publicKwh = elec.publicTotalKwh,
             publicCost = elec.publicTotalCost,
             publicPct = publicPct,
@@ -341,20 +356,21 @@ object VehicleInsightsBentoCalculator {
             }
             if (multiplier <= 0.0) continue
 
-            val isPublic = session.venue.equals("PUBLIC", ignoreCase = true)
-            val rawSessionCost = if (isPublic) {
-                session.directCost ?: 0.0
-            } else {
-                val midMs = (session.startDateMs + session.endDateMs) / 2
-                val rate = if (useCustomElectricityRate) {
-                    defaultElectricityRate.toDouble()
-                } else {
-                    val matchedBill = utilityBills
-                        .filter { midMs in it.startDateMs..it.endDateMs }
-                        .maxWithOrNull(compareBy<UtilityBillEntity> { it.uploadedAtMs }.thenBy { it.id })
-                    matchedBill?.effectiveRate ?: latestBillRate ?: defaultElectricityRate.toDouble()
+            val rawSessionCost = when (ElectricityImportParser.normalizeVenue(session.venue)) {
+                ElectricityImportParser.VENUE_WORK -> 0.0
+                ElectricityImportParser.VENUE_PUBLIC -> session.directCost ?: 0.0
+                else -> {
+                    val midMs = (session.startDateMs + session.endDateMs) / 2
+                    val rate = if (useCustomElectricityRate) {
+                        defaultElectricityRate.toDouble()
+                    } else {
+                        val matchedBill = utilityBills
+                            .filter { midMs in it.startDateMs..it.endDateMs }
+                            .maxWithOrNull(compareBy<UtilityBillEntity> { it.uploadedAtMs }.thenBy { it.id })
+                        matchedBill?.effectiveRate ?: latestBillRate ?: defaultElectricityRate.toDouble()
+                    }
+                    session.kwh * rate.coerceAtLeast(0.0)
                 }
-                session.kwh * rate.coerceAtLeast(0.0)
             }
             totalAttributedCost += rawSessionCost * multiplier
         }

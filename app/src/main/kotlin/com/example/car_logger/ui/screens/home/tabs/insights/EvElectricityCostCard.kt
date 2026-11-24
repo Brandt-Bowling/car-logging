@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.UploadFile
+import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -94,9 +97,15 @@ fun EvElectricityCostCard(
     onOpenManageSheet: () -> Unit,
     onSaveCustomRate: (Float) -> Unit = {},
     onSyncWallConnectors: () -> Unit = {},
+    onSyncWorkCharging: () -> Unit = {},
+    onSyncPublicCharging: () -> Unit = {},
     onOpenPeriodLogs: (ChargingVenue) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val isDark = isSystemInDarkTheme()
+    val workContainerColor = if (isDark) Color(0xFF0F4020) else Color(0xFFD3F5DC)
+    val workContentColor = if (isDark) Color(0xFF81E6A1) else Color(0xFF0B5F2A)
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
@@ -121,10 +130,10 @@ fun EvElectricityCostCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = if (selectedVenue == ChargingVenue.HOME) {
-                            "Home charging & electric rate"
-                        } else {
-                            "Public & fast charging"
+                        text = when (selectedVenue) {
+                            ChargingVenue.HOME -> "Home charging & electric rate"
+                            ChargingVenue.WORK -> "Free workplace J1772 charging"
+                            ChargingVenue.PUBLIC -> "Superchargers & DC fast charging"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -158,9 +167,11 @@ fun EvElectricityCostCard(
                 }
             }
 
-            // M3 Expressive Connected Button Group (Home charging | Public charging)
+            // M3 Expressive 3-Segment Connected Button Group (Home | Work | Public)
             VenueConnectedButtonGroup(
                 selectedVenue = selectedVenue,
+                workContainerColor = workContainerColor,
+                workContentColor = workContentColor,
                 onSelectVenue = onSelectVenue
             )
 
@@ -194,19 +205,25 @@ fun EvElectricityCostCard(
                 transitionSpec = { fadeIn() togetherWith fadeOut() },
                 label = "venue_content"
             ) { venue ->
-                val isHome = venue == ChargingVenue.HOME
-                val hasVenueData = if (isHome) data.hasHomeData else data.hasPublicData
+                val hasVenueData = when (venue) {
+                    ChargingVenue.HOME -> data.hasHomeData
+                    ChargingVenue.WORK -> data.hasWorkData
+                    ChargingVenue.PUBLIC -> data.hasPublicData
+                }
 
                 if (!hasVenueData) {
                     EmptyVenueState(
-                        isHome = isHome,
+                        venue = venue,
+                        workAccent = workContentColor,
                         data = data,
                         onOpenManualBillSheet = onOpenManualBillSheet,
                         onSaveCustomRate = onSaveCustomRate
                     )
                 } else {
                     PopulatedVenueContent(
-                        isHome = isHome,
+                        venue = venue,
+                        workContainerColor = workContainerColor,
+                        workContentColor = workContentColor,
                         data = data,
                         selectedCarId = selectedCarId,
                         car1Id = car1Id,
@@ -215,9 +232,7 @@ fun EvElectricityCostCard(
                         car2Name = car2Name,
                         onOpenManageSheet = onOpenManageSheet,
                         onSaveCustomRate = onSaveCustomRate,
-                        onOpenPeriodLogs = {
-                            onOpenPeriodLogs(if (isHome) ChargingVenue.HOME else ChargingVenue.PUBLIC)
-                        }
+                        onOpenPeriodLogs = { onOpenPeriodLogs(venue) }
                     )
                 }
             }
@@ -227,7 +242,9 @@ fun EvElectricityCostCard(
                 onPrimaryAction = onOpenManualChargerSheet,
                 onUploadChargerUsage = onUploadChargerUsage,
                 onOpenManualBillSheet = onOpenManualBillSheet,
-                onSyncWallConnectors = onSyncWallConnectors
+                onSyncWallConnectors = onSyncWallConnectors,
+                onSyncWorkCharging = onSyncWorkCharging,
+                onSyncPublicCharging = onSyncPublicCharging
             )
         }
     }
@@ -236,60 +253,57 @@ fun EvElectricityCostCard(
 @Composable
 private fun VenueConnectedButtonGroup(
     selectedVenue: ChargingVenue,
+    workContainerColor: Color,
+    workContentColor: Color,
     onSelectVenue: (ChargingVenue) -> Unit
 ) {
+    val venues = ChargingVenue.entries
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        ChargingVenue.entries.forEachIndexed { index, venue ->
+        venues.forEachIndexed { index, venue ->
             val selected = venue == selectedVenue
             val isFirst = index == 0
+            val isLast = index == venues.lastIndex
 
-            val startOuterRadius by animateDpAsState(
-                targetValue = 24.dp,
+            val startRadius by animateDpAsState(
+                targetValue = if (isFirst || selected) 24.dp else 6.dp,
                 animationSpec = spring(dampingRatio = 0.8f, stiffness = 380f),
-                label = "start_outer"
+                label = "venue_start_$index"
             )
-            val innerCornerRadius by animateDpAsState(
-                targetValue = if (selected) 24.dp else 6.dp,
+            val endRadius by animateDpAsState(
+                targetValue = if (isLast || selected) 24.dp else 6.dp,
                 animationSpec = spring(dampingRatio = 0.8f, stiffness = 380f),
-                label = "inner_corner"
+                label = "venue_end_$index"
             )
 
-            val shape = if (isFirst) {
-                RoundedCornerShape(
-                    topStart = startOuterRadius,
-                    bottomStart = startOuterRadius,
-                    topEnd = innerCornerRadius,
-                    bottomEnd = innerCornerRadius
-                )
-            } else {
-                RoundedCornerShape(
-                    topStart = innerCornerRadius,
-                    bottomStart = innerCornerRadius,
-                    topEnd = startOuterRadius,
-                    bottomEnd = startOuterRadius
-                )
-            }
+            val shape = RoundedCornerShape(
+                topStart = startRadius,
+                bottomStart = startRadius,
+                topEnd = endRadius,
+                bottomEnd = endRadius
+            )
 
             val containerColor by animateColorAsState(
                 targetValue = when {
                     selected && venue == ChargingVenue.HOME -> MaterialTheme.colorScheme.primaryContainer
+                    selected && venue == ChargingVenue.WORK -> workContainerColor
                     selected && venue == ChargingVenue.PUBLIC -> MaterialTheme.colorScheme.tertiaryContainer
                     else -> MaterialTheme.colorScheme.surfaceContainerHigh
                 },
                 animationSpec = ExpressiveMotionTokens.ColorSpring,
-                label = "venue_bg"
+                label = "venue_bg_$index"
             )
             val contentColor by animateColorAsState(
                 targetValue = when {
                     selected && venue == ChargingVenue.HOME -> MaterialTheme.colorScheme.onPrimaryContainer
+                    selected && venue == ChargingVenue.WORK -> workContentColor
                     selected && venue == ChargingVenue.PUBLIC -> MaterialTheme.colorScheme.onTertiaryContainer
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
                 animationSpec = ExpressiveMotionTokens.ColorSpring,
-                label = "venue_fg"
+                label = "venue_fg_$index"
             )
 
             Surface(
@@ -303,22 +317,22 @@ private fun VenueConnectedButtonGroup(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = if (venue == ChargingVenue.HOME) {
-                            Icons.Rounded.Home
-                        } else {
-                            Icons.Rounded.EvStation
+                        imageVector = when (venue) {
+                            ChargingVenue.HOME -> Icons.Rounded.Home
+                            ChargingVenue.WORK -> Icons.Rounded.Work
+                            ChargingVenue.PUBLIC -> Icons.Rounded.EvStation
                         },
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = venue.label,
+                        text = venue.shortLabel,
                         style = MaterialTheme.typography.labelLarge.copy(
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                         ),
@@ -333,11 +347,14 @@ private fun VenueConnectedButtonGroup(
 
 @Composable
 private fun EmptyVenueState(
-    isHome: Boolean,
+    venue: ChargingVenue,
+    workAccent: Color,
     data: ElectricityCostData,
     onOpenManualBillSheet: () -> Unit,
     onSaveCustomRate: (Float) -> Unit
 ) {
+    val isHome = venue == ChargingVenue.HOME
+    val isWork = venue == ChargingVenue.WORK
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(
             shape = RoundedCornerShape(20.dp),
@@ -353,15 +370,24 @@ private fun EmptyVenueState(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        imageVector = if (isHome) Icons.Rounded.ElectricBolt else Icons.Rounded.EvStation,
+                        imageVector = when (venue) {
+                            ChargingVenue.HOME -> Icons.Rounded.ElectricBolt
+                            ChargingVenue.WORK -> Icons.Rounded.Work
+                            ChargingVenue.PUBLIC -> Icons.Rounded.EvStation
+                        },
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
-                        tint = if (isHome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+                        tint = when (venue) {
+                            ChargingVenue.HOME -> MaterialTheme.colorScheme.primary
+                            ChargingVenue.WORK -> workAccent
+                            ChargingVenue.PUBLIC -> MaterialTheme.colorScheme.tertiary
+                        }
                     )
                     Text(
                         text = when {
-                            !data.hasAnyData -> "Track charging costs"
+                            !data.hasAnyData && isHome -> "Track charging costs"
                             isHome -> "No home charging in this period"
+                            isWork -> "No work charging in this period"
                             else -> "No public charging in this period"
                         },
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -370,9 +396,10 @@ private fun EmptyVenueState(
                 }
                 Text(
                     text = when {
-                        !data.hasAnyData -> "Add an electric bill or charging session to see efficiency and savings."
-                        isHome -> "Import a charger file or add a session for this period."
-                        else -> "Add public charging receipts to track them separately from home charging."
+                        !data.hasAnyData && isHome -> "Add an electric bill or charging session to see efficiency and savings."
+                        isHome -> "Sync your Wall Connectors, import a file, or add a home session."
+                        isWork -> "Sync your Tesla after work, import a Charge Stats screenshot, or add a free J1772 session."
+                        else -> "Sync Superchargers & DC charging, import a receipt screenshot, or add a session."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -398,7 +425,9 @@ private fun EmptyVenueState(
 
 @Composable
 private fun PopulatedVenueContent(
-    isHome: Boolean,
+    venue: ChargingVenue,
+    workContainerColor: Color,
+    workContentColor: Color,
     data: ElectricityCostData,
     selectedCarId: String?,
     car1Id: String?,
@@ -409,18 +438,39 @@ private fun PopulatedVenueContent(
     onSaveCustomRate: (Float) -> Unit,
     onOpenPeriodLogs: () -> Unit
 ) {
-    val totalCost = if (isHome) data.homeTotalCost else data.publicTotalCost
-    val totalKwh = if (isHome) data.homeTotalKwh else data.publicTotalKwh
-    val milesPerKwh = if (isHome) data.homeMilesPerKwh else data.publicMilesPerKwh
-    val costPerMile = if (isHome) data.homeCostPerMile else data.publicCostPerMile
-    val sessionCount = if (isHome) data.homeSessionCount else data.publicSessionCount
+    val isHome = venue == ChargingVenue.HOME
+    val isWork = venue == ChargingVenue.WORK
 
-    val heroBg = if (isHome) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
-    } else {
-        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.48f)
+    val totalCost = when (venue) {
+        ChargingVenue.HOME -> data.homeTotalCost
+        ChargingVenue.WORK -> 0.0
+        ChargingVenue.PUBLIC -> data.publicTotalCost
     }
-    val heroAccent = if (isHome) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+    val totalKwh = when (venue) {
+        ChargingVenue.HOME -> data.homeTotalKwh
+        ChargingVenue.WORK -> data.workTotalKwh
+        ChargingVenue.PUBLIC -> data.publicTotalKwh
+    }
+    val sessionCount = when (venue) {
+        ChargingVenue.HOME -> data.homeSessionCount
+        ChargingVenue.WORK -> data.workSessionCount
+        ChargingVenue.PUBLIC -> data.publicSessionCount
+    }
+
+    // Overall combined efficiency (Home + Work + Public) stays consistent and accurate across all 3 tabs
+    val milesPerKwh = data.combinedMilesPerKwh
+    val costPerMile = data.combinedCostPerMile
+
+    val heroBg = when (venue) {
+        ChargingVenue.HOME -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f)
+        ChargingVenue.WORK -> workContainerColor.copy(alpha = 0.72f)
+        ChargingVenue.PUBLIC -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.48f)
+    }
+    val heroAccent = when (venue) {
+        ChargingVenue.HOME -> MaterialTheme.colorScheme.primary
+        ChargingVenue.WORK -> workContentColor
+        ChargingVenue.PUBLIC -> MaterialTheme.colorScheme.tertiary
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // 20.dp Hero Tonal Highlight Container (tappable to view sessions for active period)
@@ -441,10 +491,14 @@ private fun PopulatedVenueContent(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = if (isHome) "HOME CHARGING" else "PUBLIC CHARGING",
+                            text = when (venue) {
+                                ChargingVenue.HOME -> "HOME CHARGING"
+                                ChargingVenue.WORK -> "WORK CHARGING"
+                                ChargingVenue.PUBLIC -> "PUBLIC CHARGING"
+                            },
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.8.sp
@@ -459,11 +513,32 @@ private fun PopulatedVenueContent(
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = String.format(Locale.US, "$%.2f", totalCost),
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = String.format(Locale.US, "$%.2f", totalCost),
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (isWork) {
+                            Surface(
+                                shape = CircleShape,
+                                color = workContentColor.copy(alpha = 0.16f)
+                            ) {
+                                Text(
+                                    text = "FREE",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 0.6.sp
+                                    ),
+                                    color = workContentColor,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                    }
                     val sessionLabel = if (sessionCount == 1) "1 session" else "$sessionCount sessions"
                     Text(
                         text = "${formatKwh(totalKwh)} kWh · $sessionLabel",
@@ -474,10 +549,10 @@ private fun PopulatedVenueContent(
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "EFFICIENCY",
+                        text = "OVERALL EFFICIENCY",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp
+                            letterSpacing = 0.6.sp
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -497,25 +572,117 @@ private fun PopulatedVenueContent(
         }
 
         // 16.dp Tonal Source & Rate Parameter Chips (equal height)
-        RateChipsRow(
-            rateValue = if (isHome) data.homeEffectiveRate else data.publicEffectiveRate,
-            rateSourceLabel = if (isHome) data.homeRateSourceLabel else data.publicRateSourceLabel,
-            isEstimated = isHome && data.homeIsEstimatedRate,
-            isEditable = isHome,
-            leftOverline = if (isHome) "ELECTRIC RATE" else "AVG RATE",
-            rightOverline = if (isHome) "SOURCE" else "RECEIPTS",
-            onSaveCustomRate = onSaveCustomRate,
-            onLeftClick = onOpenManageSheet,
-            onRightClick = onOpenManageSheet
-        )
+        if (isWork) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Max),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .expressiveBounceClick { onOpenPeriodLogs() },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "WORK RATE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "$0.000/kWh",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = workContentColor,
+                            maxLines = 1
+                        )
+                    }
+                }
 
-        // Cost by Vehicle Breakdown (when All selected and both cars exist)
-        val c1Cost = if (isHome) data.homeCar1Cost else data.publicCar1Cost
-        val c1Kwh = if (isHome) data.homeCar1Kwh else data.publicCar1Kwh
-        val c1Pct = if (isHome) data.homeCar1SharePct else data.publicCar1SharePct
-        val c2Cost = if (isHome) data.homeCar2Cost else data.publicCar2Cost
-        val c2Kwh = if (isHome) data.homeCar2Kwh else data.publicCar2Kwh
-        val c2Pct = if (isHome) data.homeCar2SharePct else data.publicCar2SharePct
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .expressiveBounceClick { onOpenManageSheet() },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "EST. SAVED VS. HOME",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "~$${String.format(Locale.US, "%.2f", data.workAvoidedHomeCost)}",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = workContentColor,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        } else {
+            RateChipsRow(
+                rateValue = if (isHome) data.homeEffectiveRate else data.publicEffectiveRate,
+                rateSourceLabel = if (isHome) data.homeRateSourceLabel else data.publicRateSourceLabel,
+                isEstimated = isHome && data.homeIsEstimatedRate,
+                isEditable = isHome,
+                leftOverline = if (isHome) "ELECTRIC RATE" else "AVG RATE",
+                rightOverline = if (isHome) "SOURCE" else "SESSIONS",
+                onSaveCustomRate = onSaveCustomRate,
+                onLeftClick = onOpenManageSheet,
+                onRightClick = onOpenManageSheet
+            )
+        }
+
+        // Cost / Energy by Vehicle Breakdown (when All selected and both cars exist)
+        val c1Cost = when (venue) {
+            ChargingVenue.HOME -> data.homeCar1Cost
+            ChargingVenue.WORK -> 0.0
+            ChargingVenue.PUBLIC -> data.publicCar1Cost
+        }
+        val c1Kwh = when (venue) {
+            ChargingVenue.HOME -> data.homeCar1Kwh
+            ChargingVenue.WORK -> data.workCar1Kwh
+            ChargingVenue.PUBLIC -> data.publicCar1Kwh
+        }
+        val c1Pct = when (venue) {
+            ChargingVenue.HOME -> data.homeCar1SharePct
+            ChargingVenue.WORK -> data.workCar1SharePct
+            ChargingVenue.PUBLIC -> data.publicCar1SharePct
+        }
+        val c2Cost = when (venue) {
+            ChargingVenue.HOME -> data.homeCar2Cost
+            ChargingVenue.WORK -> 0.0
+            ChargingVenue.PUBLIC -> data.publicCar2Cost
+        }
+        val c2Kwh = when (venue) {
+            ChargingVenue.HOME -> data.homeCar2Kwh
+            ChargingVenue.WORK -> data.workCar2Kwh
+            ChargingVenue.PUBLIC -> data.publicCar2Kwh
+        }
+        val c2Pct = when (venue) {
+            ChargingVenue.HOME -> data.homeCar2SharePct
+            ChargingVenue.WORK -> data.workCar2SharePct
+            ChargingVenue.PUBLIC -> data.publicCar2SharePct
+        }
 
         val showBreakdown = selectedCarId == null &&
             !car1Id.isNullOrBlank() &&
@@ -525,7 +692,7 @@ private fun PopulatedVenueContent(
         if (showBreakdown) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Cost by vehicle",
+                    text = if (isWork) "Energy by vehicle" else "Cost by vehicle",
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -573,6 +740,7 @@ private fun PopulatedVenueContent(
                         cost = c1Cost,
                         kwh = c1Kwh,
                         sharePct = c1Pct,
+                        isFree = isWork,
                         containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
                         accentColor = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f)
@@ -582,6 +750,7 @@ private fun PopulatedVenueContent(
                         cost = c2Cost,
                         kwh = c2Kwh,
                         sharePct = c2Pct,
+                        isFree = isWork,
                         containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
                         accentColor = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.weight(1f)
@@ -833,6 +1002,7 @@ private fun VehicleElectricitySubCard(
     sharePct: Int,
     containerColor: Color,
     accentColor: Color,
+    isFree: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -852,7 +1022,7 @@ private fun VehicleElectricitySubCard(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = String.format(Locale.US, "$%.2f", cost),
+                text = if (isFree) "Free" else String.format(Locale.US, "$%.2f", cost),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -871,7 +1041,9 @@ private fun ExpressiveChargingSplitButton(
     onPrimaryAction: () -> Unit,
     onUploadChargerUsage: () -> Unit,
     onOpenManualBillSheet: () -> Unit,
-    onSyncWallConnectors: () -> Unit = {}
+    onSyncWallConnectors: () -> Unit = {},
+    onSyncWorkCharging: () -> Unit = {},
+    onSyncPublicCharging: () -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -968,6 +1140,22 @@ private fun ExpressiveChargingSplitButton(
                 onClick = {
                     menuExpanded = false
                     onSyncWallConnectors()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Sync work charge") },
+                leadingIcon = { Icon(Icons.Rounded.Work, contentDescription = null) },
+                onClick = {
+                    menuExpanded = false
+                    onSyncWorkCharging()
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Sync Superchargers & DC") },
+                leadingIcon = { Icon(Icons.Rounded.Bolt, contentDescription = null) },
+                onClick = {
+                    menuExpanded = false
+                    onSyncPublicCharging()
                 }
             )
             DropdownMenuItem(

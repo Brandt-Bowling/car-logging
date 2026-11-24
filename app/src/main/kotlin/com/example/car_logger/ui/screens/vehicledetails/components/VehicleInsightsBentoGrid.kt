@@ -195,6 +195,7 @@ fun VehicleInsightsBentoGrid(
                                     EvEfficiencyDrawerContent(
                                         metrics = periodMetrics,
                                         granularity = granularity,
+                                        workAccent = savingsAccent,
                                         onSelectGranularity = onSelectGranularity
                                     )
                                 }
@@ -981,6 +982,7 @@ private fun DrivingPaceDrawerContent(
 private fun EvEfficiencyDrawerContent(
     metrics: VehicleBentoPeriodMetrics,
     granularity: InsightsTimeGranularity,
+    workAccent: Color,
     onSelectGranularity: (InsightsTimeGranularity) -> Unit
 ) {
     Row(
@@ -1012,7 +1014,11 @@ private fun EvEfficiencyDrawerContent(
     }
 
     if (metrics.totalKwh > 0.0) {
-        val homeWeight = (metrics.homePct / 100f).coerceIn(0.08f, 0.92f)
+        val activeSegments = listOfNotNull(
+            if (metrics.homeKwh > 0.0) Pair((metrics.homeKwh / metrics.totalKwh).toFloat().coerceAtLeast(0.08f), MaterialTheme.colorScheme.primary) else null,
+            if (metrics.workKwh > 0.0) Pair((metrics.workKwh / metrics.totalKwh).toFloat().coerceAtLeast(0.08f), workAccent) else null,
+            if (metrics.publicKwh > 0.0) Pair((metrics.publicKwh / metrics.totalKwh).toFloat().coerceAtLeast(0.08f), MaterialTheme.colorScheme.tertiary) else null
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1020,21 +1026,12 @@ private fun EvEfficiencyDrawerContent(
                 .clip(CircleShape),
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            if (metrics.homeKwh > 0.0) {
+            activeSegments.forEach { (weight, color) ->
                 Surface(
                     modifier = Modifier
-                        .weight(if (metrics.publicKwh > 0.0) homeWeight else 1f)
+                        .weight(weight)
                         .fillMaxHeight(),
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = CircleShape
-                ) {}
-            }
-            if (metrics.publicKwh > 0.0) {
-                Surface(
-                    modifier = Modifier
-                        .weight(if (metrics.homeKwh > 0.0) (1f - homeWeight).coerceAtLeast(0.08f) else 1f)
-                        .fillMaxHeight(),
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = color,
                     shape = CircleShape
                 ) {}
             }
@@ -1120,6 +1117,57 @@ private fun EvEfficiencyDrawerContent(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+
+    if (metrics.workKwh > 0.0) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "WORK (${metrics.workPct}%)",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = workAccent
+                    )
+                    Text(
+                        text = "Free",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "${String.format(Locale.US, "%.1f", metrics.workKwh)} kWh workplace J1772",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (metrics.workAvoidedCost > 0.0) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "~$${String.format(Locale.US, "%.2f", metrics.workAvoidedCost)}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = workAccent
+                        )
+                        Text(
+                            text = "saved vs. home",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     }

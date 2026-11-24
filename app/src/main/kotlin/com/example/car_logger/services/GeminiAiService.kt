@@ -86,6 +86,52 @@ class GeminiAiService(
             }
         }
 
+        internal fun parseChargerUsageJsonResponse(
+            rawJson: String,
+            fileName: String,
+            fallbackDateIso: String = LocalDate.now().toString()
+        ): List<ParsedChargingSessionDraft> {
+            val root = json.parseToJsonElement(rawJson).jsonObject
+            val sessionsArray = root["sessions"]?.jsonArray.orEmpty()
+
+            return sessionsArray.mapNotNull { item ->
+                val obj = item.jsonObject
+                val kwh = obj["kwh"]?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
+                if (kwh <= 0.0) return@mapNotNull null
+                val startIso = ElectricityImportParser.parseDateToLocalDate(
+                    obj["startDate"]?.jsonPrimitive?.contentOrNull
+                )?.toString() ?: fallbackDateIso
+                val endIso = ElectricityImportParser.parseDateToLocalDate(
+                    obj["endDate"]?.jsonPrimitive?.contentOrNull
+                )?.toString() ?: startIso
+                val chargerName = obj["chargerName"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                val parsedCost = obj["directCost"]?.jsonPrimitive?.doubleOrNull?.takeIf { it >= 0.0 }
+                val rawVenue = obj["venue"]?.jsonPrimitive?.contentOrNull?.uppercase()?.trim()
+                val venue = when (rawVenue) {
+                    ElectricityImportParser.VENUE_HOME,
+                    ElectricityImportParser.VENUE_WORK,
+                    ElectricityImportParser.VENUE_PUBLIC -> rawVenue
+                    else -> ElectricityImportParser.classifyVenue(chargerName, parsedCost)
+                }
+                val isSummary = obj["isSummary"]?.jsonPrimitive?.booleanOrNull
+                    ?: (endIso != startIso)
+
+                ParsedChargingSessionDraft(
+                    startDateIso = startIso,
+                    endDateIso = endIso,
+                    kwh = kwh,
+                    venue = venue,
+                    directCost = when (venue) {
+                        ElectricityImportParser.VENUE_WORK -> 0.0
+                        ElectricityImportParser.VENUE_PUBLIC -> parsedCost
+                        else -> null
+                    },
+                    chargerName = chargerName ?: fileName.substringBeforeLast("."),
+                    isSummary = isSummary
+                )
+            }
+        }
+
         internal fun parseUtilityBillJsonResponse(
             rawJson: String,
             fileName: String
@@ -561,9 +607,12 @@ class GeminiAiService(
         val prompt = """
             You are an EV charging data extractor. Analyze the attached charger export (screenshot, PDF, or CSV) and extract EV charging usage as JSON.
             - If individual charging sessions are listed, return one entry per session with startDate == endDate.
-            - If only a weekly/monthly/period total summary is shown, return a single entry with startDate and endDate covering that period and isSummary = true.
-            - Set venue to "HOME" for residential/home chargers and "PUBLIC" for commercial fast chargers (e.g., Supercharger, Electrify America, ChargePoint paid stations).
-            - Include directCost in USD only when a commercial/public session price is shown (null for home charging).
+            - If a period breakdown or summary is shown (such as the Tesla app "Charge Stats" screen showing Home, Work, Supercharger, and Other totals for a month or last 31 days), return one entry per non-zero category with startDate and endDate covering the displayed period and isSummary = true.
+            - Set venue to:
+              - "HOME" for residential/home chargers (e.g., Home, Wall Connector, Garage).
+              - "WORK" for free workplace/office/company J1772 charging or the "Work" category in Tesla Charge Stats (set directCost to 0.0, and for Charge Stats name it "Work (Tesla Charge Stats)").
+              - "PUBLIC" for commercial/public fast chargers (e.g., Tesla Supercharger, Electrify America, EVgo, ChargePoint, Shell Recharge, or paid "Other" sessions).
+            - Include directCost in USD for "PUBLIC" sessions (0.0 if free), 0.0 for "WORK" sessions, and null for "HOME" sessions.
 
             Return ONLY a valid JSON object matching:
             {
@@ -584,40 +633,7 @@ class GeminiAiService(
         try {
             val effectiveMime = if (looksLikeCsv) "text/plain" else mimeType
             val rawJson = executeMultimodalJsonRequest(apiKey, prompt, effectiveMime, fileBytes)
-            val root = json.parseToJsonElement(rawJson).jsonObject
-            val sessionsArray = root["sessions"]?.jsonArray.orEmpty()
-            val todayIso = LocalDate.now().toString()
-
-            val sessions = sessionsArray.mapNotNull { item ->
-                val obj = item.jsonObject
-                val kwh = obj["kwh"]?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
-                if (kwh <= 0.0) return@mapNotNull null
-                val startIso = ElectricityImportParser.parseDateToLocalDate(
-                    obj["startDate"]?.jsonPrimitive?.content
-                )?.toString() ?: todayIso
-                val endIso = ElectricityImportParser.parseDateToLocalDate(
-                    obj["endDate"]?.jsonPrimitive?.content
-                )?.toString() ?: startIso
-                val chargerName = obj["chargerName"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-                val directCost = obj["directCost"]?.jsonPrimitive?.doubleOrNull?.takeIf { it > 0.0 }
-                val rawVenue = obj["venue"]?.jsonPrimitive?.content?.uppercase()?.trim()
-                val venue = when (rawVenue) {
-                    "HOME", "PUBLIC" -> rawVenue
-                    else -> ElectricityImportParser.classifyVenue(chargerName, directCost)
-                }
-                val isSummary = obj["isSummary"]?.jsonPrimitive?.booleanOrNull
-                    ?: (endIso != startIso)
-
-                ParsedChargingSessionDraft(
-                    startDateIso = startIso,
-                    endDateIso = endIso,
-                    kwh = kwh,
-                    venue = venue,
-                    directCost = if (venue == "PUBLIC") directCost else null,
-                    chargerName = chargerName ?: fileName.substringBeforeLast("."),
-                    isSummary = isSummary
-                )
-            }
+            val sessions = parseChargerUsageJsonResponse(rawJson = rawJson, fileName = fileName)
 
             return@withContext ParsedChargerImportResult(
                 sessions = sessions,

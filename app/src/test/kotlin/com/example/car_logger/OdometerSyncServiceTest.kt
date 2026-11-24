@@ -12,8 +12,15 @@ import com.example.car_logger.data.model.Car
 import com.example.car_logger.services.ElectricityImportParser
 import com.example.car_logger.services.OdometerSyncResult
 import com.example.car_logger.services.OdometerSyncService
+import com.example.car_logger.services.SmartcarDcSyncResult
+import com.example.car_logger.services.SuperchargerSyncResult
+import com.example.car_logger.services.TeslaChargeSnapshot
+import com.example.car_logger.services.TeslaSuperchargerSession
 import com.example.car_logger.services.WallConnectorSyncResult
 import com.example.car_logger.services.WallConnectorType
+import com.example.car_logger.services.WorkChargeDecision
+import com.example.car_logger.services.WorkChargingSyncResult
+import com.example.car_logger.services.WorkLocationConfig
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -398,6 +405,149 @@ class OdometerSyncServiceTest {
 
         assertTrue(becameOnline)
         assertEquals("Should stop polling as soon as online is returned", 4, callCount)
+    }
+
+    @Test
+    fun `wakeAndPollUntilOnline sends at most one wake_up and polls state until online`() = runBlocking {
+        var wakeCalls = 0
+        var statePollCalls = 0
+        val pollStates = listOf("asleep", "waking", "online", "online")
+
+        val becameOnline = OdometerSyncService.wakeAndPollUntilOnline(
+            maxStatePolls = 6,
+            delayMs = 0L,
+            sendWake = {
+                wakeCalls++
+                "asleep"
+            },
+            pollState = {
+                val s = pollStates[statePollCalls]
+                statePollCalls++
+                s
+            }
+        )
+
+        assertTrue(becameOnline)
+        assertEquals("Must only send ONE paid POST /wake_up", 1, wakeCalls)
+        assertEquals("Should stop polling state as soon as online", 3, statePollCalls)
+    }
+
+    @Test
+    fun `syncDailyEndOfDay uses zero-wake vehicle_data_cached when asleep and falls back to single wake_up on cache miss`() = runBlocking {
+        val futureExp = Instant.now().epochSecond + 3600L
+        val token = createJwt(scp = listOf("openid", "vehicle_device_data"), expEpochSec = futureExp)
+        val m3 = Car(
+            id = "m3",
+            make = "Tesla",
+            model = "Model 3",
+            year = 2024,
+            odometer = 28000,
+            vin = "5YJ3E1EA1PF000001",
+            isEv = true
+        )
+
+        // 1) Asleep car + vehicle_data_cached 200 -> updates odometer with ZERO wake_up calls!
+        val prefsCached = createTestPreferencesManager("nightly_cached_ok")
+        prefsCached.setTeslaCredentials("cid", "csec", token)
+        val carDao1 = FakeCarDao().apply { insertCar(CarEntity.fromModel(m3)) }
+        val odoDao1 = FakeOdometerLogDao()
+        val urls1 = mutableListOf<String>()
+        val client1 = createMockClient { url, _ ->
+            urls1.add(url)
+            when {
+                url.endsWith("/api/1/vehicles") -> 200 to """{"response":[{"id":1,"vin":"5YJ3E1EA1PF000001","state":"asleep"}]}"""
+                url.contains("/vehicle_data_cached") -> 200 to """
+                    {
+                      "response": {
+                        "data": {
+                          "vehicle_state": { "odometer": 28142.4 },
+                          "charge_state": { "charge_energy_added": 0.0, "fast_charger_present": false }
+                        }
+                      }
+                    }
+                """.trimIndent()
+                else -> error("Unexpected url $url")
+            }
+        }
+        val service1 = OdometerSyncService(prefsCached, carDao1, odoDao1, FakeChargingSessionDao(), client1).apply {
+            wakePollDelayMs = 0L
+        }
+        val res1 = service1.syncDailyEndOfDay(listOf(m3))
+        assertEquals(1, res1.size)
+        assertTrue(res1[0] is OdometerSyncResult.Updated)
+        assertEquals(28142, (res1[0] as OdometerSyncResult.Updated).odometerMiles)
+        assertFalse("Should NOT call wake_up when vehicle_data_cached succeeds", urls1.any { it.contains("wake_up") })
+        assertFalse("Should NOT call live vehicle_data when cached succeeded", urls1.any { it.contains("/vehicle_data?") })
+
+        // 2) Asleep car + vehicle_data_cached 404 -> sends EXACTLY ONE wake_up + polls GET /vehicles/{vin} + reads live vehicle_data!
+        val prefsFallback = createTestPreferencesManager("nightly_cached_404_single_wake")
+        prefsFallback.setTeslaCredentials("cid", "csec", token)
+        val carDao2 = FakeCarDao().apply { insertCar(CarEntity.fromModel(m3)) }
+        val odoDao2 = FakeOdometerLogDao()
+        var wakeCount = 0
+        var statePollCount = 0
+        val client2 = createMockClient { url, _ ->
+            when {
+                url.endsWith("/api/1/vehicles") -> 200 to """{"response":[{"id":1,"vin":"5YJ3E1EA1PF000001","state":"asleep"}]}"""
+                url.contains("/vehicle_data_cached") -> 404 to """{"error":"no cached data"}"""
+                url.endsWith("/wake_up") -> {
+                    wakeCount++
+                    200 to """{"response":{"state":"asleep"}}"""
+                }
+                url.endsWith("/api/1/vehicles/5YJ3E1EA1PF000001") -> {
+                    statePollCount++
+                    val state = if (statePollCount >= 2) "online" else "asleep"
+                    200 to """{"response":{"state":"$state"}}"""
+                }
+                url.contains("/vehicle_data?") -> 200 to """
+                    {
+                      "response": {
+                        "vehicle_state": { "odometer": 28205.8 }
+                      }
+                    }
+                """.trimIndent()
+                else -> error("Unexpected url $url")
+            }
+        }
+        val service2 = OdometerSyncService(prefsFallback, carDao2, odoDao2, FakeChargingSessionDao(), client2).apply {
+            wakePollDelayMs = 0L
+        }
+        val res2 = service2.syncDailyEndOfDay(listOf(m3))
+        assertEquals(1, res2.size)
+        assertTrue(res2[0] is OdometerSyncResult.Updated)
+        assertEquals(28206, (res2[0] as OdometerSyncResult.Updated).odometerMiles)
+        assertEquals("Must send at most ONE paid POST /wake_up on fallback", 1, wakeCount)
+        assertEquals("Should poll GET /vehicles/{vin} until online", 2, statePollCount)
+
+        // 3) Manual "Wake & sync" (isManual = true, forceWake = true) bypasses cache, sends ONE wake_up, and reads live data
+        val prefsManual = createTestPreferencesManager("manual_single_wake")
+        prefsManual.setTeslaCredentials("cid", "csec", token)
+        val carDao3 = FakeCarDao().apply { insertCar(CarEntity.fromModel(m3)) }
+        var manualWakeCount = 0
+        var manualCacheCalled = false
+        val client3 = createMockClient { url, _ ->
+            when {
+                url.endsWith("/api/1/vehicles") -> 200 to """{"response":[{"id":1,"vin":"5YJ3E1EA1PF000001","state":"asleep"}]}"""
+                url.contains("/vehicle_data_cached") -> {
+                    manualCacheCalled = true
+                    200 to """{"response":{"data":{"vehicle_state":{"odometer":28000.0}}}}"""
+                }
+                url.endsWith("/wake_up") -> {
+                    manualWakeCount++
+                    200 to """{"response":{"state":"online"}}"""
+                }
+                url.contains("/vehicle_data?") -> 200 to """{"response":{"vehicle_state":{"odometer":28310.0}}}"""
+                else -> error("Unexpected url $url")
+            }
+        }
+        val service3 = OdometerSyncService(prefsManual, carDao3, FakeOdometerLogDao(), FakeChargingSessionDao(), client3).apply {
+            wakePollDelayMs = 0L
+        }
+        val res3 = service3.syncVehicle(m3, isManual = true, forceWake = true)
+        assertTrue(res3 is OdometerSyncResult.Updated)
+        assertEquals(28310, (res3 as OdometerSyncResult.Updated).odometerMiles)
+        assertFalse("Manual Wake & sync should fetch live data instead of cached", manualCacheCalled)
+        assertEquals("Manual Wake & sync must send at most ONE wake_up", 1, manualWakeCount)
     }
 
     @Test
@@ -1285,6 +1435,758 @@ class OdometerSyncServiceTest {
         assertFalse(requestedUrls.any { it.contains("/api/1/products") || it.contains("telemetry_history") })
         assertEquals(0L, prefs.getLastChargerSyncTime())
         assertEquals("Synced 1 vehicle", prefs.lastDailyPollStatusFlow.first())
+    }
+
+    // --- Optional Tesla OAuth Scopes ---
+
+    @Test
+    fun `buildTeslaAuthUrl keeps optional scopes opt-in and appends them independently or together`() {
+        val defaultUrl = OdometerSyncService.buildTeslaAuthUrl("client_123")
+        assertTrue(defaultUrl.contains("vehicle_device_data"))
+        assertTrue(defaultUrl.contains("energy_device_data"))
+        assertFalse(defaultUrl.contains("vehicle_location"))
+        assertFalse(defaultUrl.contains("vehicle_charging_cmds"))
+
+        val withLocation = OdometerSyncService.buildTeslaAuthUrl("client_123", includeLocationScope = true)
+        assertTrue(withLocation.contains("vehicle_location"))
+        assertFalse(withLocation.contains("vehicle_charging_cmds"))
+
+        val withCharging = OdometerSyncService.buildTeslaAuthUrl("client_123", includeChargingHistoryScope = true)
+        assertFalse(withCharging.contains("vehicle_location"))
+        assertTrue(withCharging.contains("vehicle_charging_cmds"))
+
+        val withBoth = OdometerSyncService.buildTeslaAuthUrl(
+            "client_123",
+            includeLocationScope = true,
+            includeChargingHistoryScope = true
+        )
+        assertTrue(withBoth.contains("vehicle_location"))
+        assertTrue(withBoth.contains("vehicle_charging_cmds"))
+    }
+
+    // --- Automated Tesla Work Charging ---
+
+    @Test
+    fun `parseTeslaChargeSnapshot parses both live vehicle_data and vehicle_data_cached payloads`() {
+        val liveJson = """
+            {
+              "response": {
+                "vehicle_state": { "odometer": 28450.7, "timestamp": 1762460000000 },
+                "charge_state": {
+                  "charge_energy_added": 21.45,
+                  "charging_state": "Complete",
+                  "fast_charger_present": false,
+                  "conn_charge_cable": "SAE",
+                  "battery_level": 80,
+                  "timestamp": 1762460100000
+                },
+                "drive_state": { "latitude": 42.3314, "longitude": -83.0458 }
+              }
+            }
+        """.trimIndent()
+        val live = OdometerSyncService.parseTeslaChargeSnapshot(liveJson, "5YJ3E1EA1PF000001", isCachedResponse = false)
+        assertTrue(live != null)
+        assertEquals(21.45, live!!.chargeEnergyAddedKwh, 0.001)
+        assertEquals("Complete", live.chargingState)
+        assertFalse(live.fastChargerPresent)
+        assertEquals("SAE", live.connChargeCable)
+        assertEquals(28451, live.odometerMiles)
+        assertEquals(42.3314, live.latitude!!, 0.0001)
+        assertEquals(-83.0458, live.longitude!!, 0.0001)
+        assertFalse(live.isCachedResponse)
+
+        val cachedJson = """
+            {
+              "response": {
+                "data": {
+                  "charge_state": {
+                    "charge_energy_added": 16.2,
+                    "charging_state": "Disconnected",
+                    "fast_charger_present": false
+                  }
+                }
+              }
+            }
+        """.trimIndent()
+        val cached = OdometerSyncService.parseTeslaChargeSnapshot(cachedJson, "5YJ3E1EA1PF000001", isCachedResponse = true)
+        assertTrue(cached != null)
+        assertEquals(16.2, cached!!.chargeEnergyAddedKwh, 0.001)
+        assertEquals("Disconnected", cached.chargingState)
+        assertTrue(cached.isCachedResponse)
+    }
+
+    @Test
+    fun `evaluateWorkChargeCandidate enforces all 5 filtering and deduplication rules`() {
+        val zone = ZoneId.of("America/New_York")
+        val nowMs = OffsetDateTime.parse("2026-11-11T16:30:00-05:00").toInstant().toEpochMilli()
+        val vin = "5YJ3E1EA1PF000001"
+        val workGps = WorkLocationConfig(latitude = 42.3314, longitude = -83.0458, radiusMeters = 500)
+
+        // Rule 1: Skip fast charger or < 0.5 kWh noise
+        val dcSkip = OdometerSyncService.evaluateWorkChargeCandidate(
+            snapshot = TeslaChargeSnapshot(vin = vin, chargeEnergyAddedKwh = 35.0, fastChargerPresent = true),
+            targetCarId = "m3",
+            existingSessions = emptyList(),
+            nowMs = nowMs,
+            zoneId = zone
+        )
+        assertTrue(dcSkip is WorkChargeDecision.Skip)
+        assertEquals(ElectricityImportParser.VENUE_PUBLIC, (dcSkip as WorkChargeDecision.Skip).watermarkVenue)
+
+        val noiseSkip = OdometerSyncService.evaluateWorkChargeCandidate(
+            snapshot = TeslaChargeSnapshot(vin = vin, chargeEnergyAddedKwh = 0.25, fastChargerPresent = false),
+            targetCarId = "m3",
+            existingSessions = emptyList(),
+            nowMs = nowMs,
+            zoneId = zone
+        )
+        assertTrue(noiseSkip is WorkChargeDecision.Skip)
+
+        // Rule 2: GPS geofence skips when plugged in away from work, verifies when inside radius
+        val awaySkip = OdometerSyncService.evaluateWorkChargeCandidate(
+            snapshot = TeslaChargeSnapshot(
+                vin = vin, chargeEnergyAddedKwh = 18.0, chargingState = "Charging",
+                latitude = 42.4000, longitude = -83.2000 // > 10km away
+            ),
+            targetCarId = "m3",
+            existingSessions = emptyList(),
+            workLocation = workGps,
+            nowMs = nowMs,
+            zoneId = zone
+        )
+        assertTrue(awaySkip is WorkChargeDecision.Skip)
+
+        val insideCapture = OdometerSyncService.evaluateWorkChargeCandidate(
+            snapshot = TeslaChargeSnapshot(
+                vin = vin, chargeEnergyAddedKwh = 18.0, chargingState = "Complete",
+                latitude = 42.3315, longitude = -83.0457 // ~14m away
+            ),
+            targetCarId = "m3",
+            existingSessions = emptyList(),
+            workLocation = workGps,
+            nowMs = nowMs,
+            zoneId = zone
+        )
+        assertTrue(insideCapture is WorkChargeDecision.CaptureNew)
+        assertTrue((insideCapture as WorkChargeDecision.CaptureNew).verifiedByGps)
+
+        // Left work early and plugged in at home waiting for overnight scheduled charging (Stopped, outside Work GPS)
+        val stoppedHomeScheduled = OdometerSyncService.evaluateWorkChargeCandidate(
+            snapshot = TeslaChargeSnapshot(
+                vin = vin, chargeEnergyAddedKwh = 18.0, chargingState = "Stopped",
+                latitude = 42.4000, longitude = -83.2000 // at home, waiting for off-peak
+            ),
+            targetCarId = "m3",
+            existingSessions = emptyList(),
+            workLocation = workGps,
+            nowMs = nowMs,
+            zoneId = zone
+        )
+        assertTrue(stoppedHomeScheduled is WorkChargeDecision.CaptureNew)
+        assertFalse((stoppedHomeScheduled as WorkChargeDecision.CaptureNew).verifiedByGps)
+
+        // Rule 3: 36h Home Wall Connector echo filter (0.75x - 1.12x kWh) skips home overnight charge
+        val homeWallConnectorSession = ChargingSessionEntity(
+            id = "twc_home_1",
+            carId = "m3",
+            startDateMs = nowMs - 14L * 3_600_000L,
+            endDateMs = nowMs - 11L * 3_600_000L,
+            kwh = 24.0,
+            venue = ElectricityImportParser.VENUE_HOME,
+            fingerprint = "fp_twc_home_1"
+        )
+        val homeEchoSkip = OdometerSyncService.evaluateWorkChargeCandidate(
+            snapshot = TeslaChargeSnapshot(vin = vin, chargeEnergyAddedKwh = 21.8, chargingState = "Disconnected"),
+            targetCarId = "m3",
+            existingSessions = listOf(homeWallConnectorSession),
+            nowMs = nowMs,
+            zoneId = zone
+        )
+        assertTrue(homeEchoSkip is WorkChargeDecision.Skip)
+        assertEquals(ElectricityImportParser.VENUE_HOME, (homeEchoSkip as WorkChargeDecision.Skip).watermarkVenue)
+
+        // Rule 4: Same-day progressive update vs already-logged idempotency
+        val existingTodayWork = ChargingSessionEntity(
+            id = "tesla_work_${vin}_2026-11-11",
+            carId = "m3",
+            startDateMs = nowMs - 3_600_000L,
+            endDateMs = nowMs - 3_600_000L,
+            kwh = 14.0,
+            venue = ElectricityImportParser.VENUE_WORK,
+            directCost = 0.0,
+            fingerprint = "fp_work_today"
+        )
+        val progressiveUpdate = OdometerSyncService.evaluateWorkChargeCandidate(
+            snapshot = TeslaChargeSnapshot(vin = vin, chargeEnergyAddedKwh = 19.5, chargingState = "Charging"),
+            targetCarId = "m3",
+            existingSessions = listOf(existingTodayWork),
+            nowMs = nowMs,
+            zoneId = zone
+        )
+        assertTrue(progressiveUpdate is WorkChargeDecision.UpdateExisting)
+        assertEquals(19.5, (progressiveUpdate as WorkChargeDecision.UpdateExisting).updatedEnergyKwh, 0.01)
+
+        val alreadyLogged = OdometerSyncService.evaluateWorkChargeCandidate(
+            snapshot = TeslaChargeSnapshot(vin = vin, chargeEnergyAddedKwh = 14.0, chargingState = "Complete"),
+            targetCarId = "m3",
+            existingSessions = listOf(existingTodayWork),
+            nowMs = nowMs,
+            zoneId = zone
+        )
+        assertTrue(alreadyLogged is WorkChargeDecision.AlreadyLogged)
+
+        // Rule 5: Cross-day stale watermark guard prevents re-logging yesterday's charge when disconnected
+        val staleSkip = OdometerSyncService.evaluateWorkChargeCandidate(
+            snapshot = TeslaChargeSnapshot(vin = vin, chargeEnergyAddedKwh = 19.5, chargingState = "Disconnected"),
+            targetCarId = "m3",
+            existingSessions = emptyList(),
+            lastWatermarkEnergy = 19.5,
+            lastWatermarkDateIso = "2026-11-10",
+            lastWatermarkVenue = ElectricityImportParser.VENUE_WORK,
+            nowMs = nowMs,
+            zoneId = zone
+        )
+        assertTrue(staleSkip is WorkChargeDecision.Skip)
+    }
+
+    @Test
+    fun `syncTeslaWorkCharging handles location 403 retry, zero-wake cached success, and cached 404 asleep`() = runBlocking {
+        val futureExp = Instant.now().epochSecond + 3600L
+        val m3 = Car(
+            id = "m3", make = "Tesla", model = "Model 3", year = 2024,
+            isEv = true, vin = "5YJ3E1EA1PF000001"
+        )
+
+        // 1) Online car with work GPS + location scope -> 403 on location_data -> graceful retry without location_data -> captures WORK session!
+        val prefs1 = createTestPreferencesManager("work_403_fallback")
+        val jwtWithLoc = createJwt(scp = listOf("openid", "vehicle_device_data", "vehicle_location"), expEpochSec = futureExp)
+        prefs1.setTeslaCredentials("cid", "csec", jwtWithLoc)
+        prefs1.setWorkLocation(42.3314, -83.0458, 500)
+        val dao1 = FakeChargingSessionDao()
+        val urls1 = mutableListOf<String>()
+        val client1 = createMockClient { url, _ ->
+            urls1.add(url)
+            when {
+                url.endsWith("/api/1/vehicles") -> 200 to """{"response":[{"id":1,"vin":"5YJ3E1EA1PF000001","state":"online"}]}"""
+                url.contains("location_data") -> 403 to """{"error":"missing vehicle_location"}"""
+                url.contains("/vehicle_data") -> 200 to """
+                    {
+                      "response": {
+                        "charge_state": {
+                          "charge_energy_added": 19.2,
+                          "charging_state": "Complete",
+                          "fast_charger_present": false
+                        }
+                      }
+                    }
+                """.trimIndent()
+                else -> error("Unexpected url $url")
+            }
+        }
+        val service1 = OdometerSyncService(prefs1, FakeCarDao(), FakeOdometerLogDao(), dao1, client1)
+        val res1 = service1.syncTeslaWorkCharging(listOf(m3), forceWake = false, syncHomeChargersFirst = false)
+        assertTrue(res1 is WorkChargingSyncResult.Captured)
+        assertEquals(19.2, (res1 as WorkChargingSyncResult.Captured).kwh, 0.01)
+        assertEquals(1, dao1.sessions.size)
+        assertEquals(ElectricityImportParser.VENUE_WORK, dao1.sessions[0].venue)
+        assertEquals(0.0, dao1.sessions[0].directCost!!, 0.001)
+        assertEquals(ElectricityImportParser.AUTO_WORK_CHARGING_BATCH_ID, dao1.sessions[0].uploadBatchId)
+        assertTrue(urls1.any { it.contains("location_data") })
+        assertTrue(urls1.any { it.contains("/vehicle_data") && !it.contains("location_data") })
+
+        // 2) Asleep car -> uses zero-wake vehicle_data_cached (no wake_up) -> captures WORK session!
+        val prefs2 = createTestPreferencesManager("work_cached_ok")
+        val jwtBasic = createJwt(scp = listOf("openid", "vehicle_device_data"), expEpochSec = futureExp)
+        prefs2.setTeslaCredentials("cid", "csec", jwtBasic)
+        val dao2 = FakeChargingSessionDao()
+        val urls2 = mutableListOf<String>()
+        val client2 = createMockClient { url, _ ->
+            urls2.add(url)
+            when {
+                url.endsWith("/api/1/vehicles") -> 200 to """{"response":[{"id":1,"vin":"5YJ3E1EA1PF000001","state":"asleep"}]}"""
+                url.contains("/vehicle_data_cached") -> 200 to """
+                    {
+                      "response": {
+                        "data": {
+                          "charge_state": {
+                            "charge_energy_added": 15.6,
+                            "charging_state": "Disconnected",
+                            "fast_charger_present": false
+                          }
+                        }
+                      }
+                    }
+                """.trimIndent()
+                else -> error("Unexpected url $url")
+            }
+        }
+        val service2 = OdometerSyncService(prefs2, FakeCarDao(), FakeOdometerLogDao(), dao2, client2)
+        val res2 = service2.syncTeslaWorkCharging(listOf(m3), forceWake = false, syncHomeChargersFirst = false)
+        assertTrue(res2 is WorkChargingSyncResult.Captured)
+        assertEquals(15.6, (res2 as WorkChargingSyncResult.Captured).kwh, 0.01)
+        assertFalse(urls2.any { it.contains("wake_up") })
+
+        // 3) Asleep car + vehicle_data_cached 404 + forceWake = false -> returns SkippedAsleep without waking!
+        val prefs3 = createTestPreferencesManager("work_cached_404")
+        prefs3.setTeslaCredentials("cid", "csec", jwtBasic)
+        val urls3 = mutableListOf<String>()
+        val client3 = createMockClient { url, _ ->
+            urls3.add(url)
+            when {
+                url.endsWith("/api/1/vehicles") -> 200 to """{"response":[{"id":1,"vin":"5YJ3E1EA1PF000001","state":"asleep"}]}"""
+                url.contains("/vehicle_data_cached") -> 404 to """{"error":"no cached data"}"""
+                else -> error("Unexpected url $url")
+            }
+        }
+        val service3 = OdometerSyncService(prefs3, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), client3)
+        val res3 = service3.syncTeslaWorkCharging(listOf(m3), forceWake = false, syncHomeChargersFirst = true)
+        assertTrue(res3 is WorkChargingSyncResult.SkippedAsleep)
+        assertFalse(urls3.any { it.contains("wake_up") })
+        assertFalse(urls3.any { it.contains("/api/1/products") })
+    }
+
+    // --- Automated Paid Tesla Supercharger Sync ---
+
+    @Test
+    fun `parseTeslaSuperchargerHistory prevents usageTier1 double-counting, sums all fee netDue, and skips tiny sessions`() {
+        // Real-world Tesla Fleet API JSON quirk: usageBase=7 (rateBase=0.39) + unbilled usageTier1=8 (rateTier1=0)
+        // Must parse 7.0 kWh (NOT 15.0 kWh!), and sum CHARGING netDue + PARKING idle netDue!
+        val realWorldJson = """
+            {
+              "response": {
+                "data": [
+                  {
+                    "sessionId": "88001",
+                    "vin": "5YJ3E1EA1PF000001",
+                    "vehicleMakeType": "TSLA",
+                    "siteLocationName": "Ann Arbor, MI",
+                    "chargeStartDateTime": "2026-11-10T14:00:00Z",
+                    "chargeStopDateTime": "2026-11-10T14:25:00Z",
+                    "fees": [
+                      {
+                        "feeType": "CHARGING",
+                        "uom": "kwh",
+                        "currencyCode": "USD",
+                        "usageBase": 7.0,
+                        "rateBase": 0.39,
+                        "totalBase": 2.73,
+                        "usageTier1": 8.0,
+                        "rateTier1": 0.0,
+                        "totalTier1": 0.0,
+                        "netDue": 2.73,
+                        "totalDue": 2.73
+                      },
+                      {
+                        "feeType": "PARKING",
+                        "uom": "min",
+                        "currencyCode": "USD",
+                        "usageBase": 3.0,
+                        "rateBase": 0.50,
+                        "netDue": 1.50,
+                        "totalDue": 1.50
+                      }
+                    ]
+                  },
+                  {
+                    "sessionId": "88002",
+                    "vin": "3GNKDCRJ8RS123456",
+                    "vehicleMakeType": "CHEVROLET",
+                    "siteLocationName": "Toledo, OH",
+                    "chargeStartDateTime": "2026-11-12T18:00:00Z",
+                    "chargeStopDateTime": "2026-11-12T18:40:00Z",
+                    "fees": [
+                      {
+                        "feeType": "CHARGING",
+                        "uom": "kwh",
+                        "currencyCode": "USD",
+                        "usageBase": 20.0,
+                        "rateBase": 0.35,
+                        "totalBase": 7.00,
+                        "usageTier1": 15.5,
+                        "rateTier1": 0.42,
+                        "totalTier1": 6.51,
+                        "netDue": 13.51
+                      }
+                    ]
+                  },
+                  {
+                    "sessionId": "88003_aborted",
+                    "vin": "5YJ3E1EA1PF000001",
+                    "siteLocationName": "Aborted Stop",
+                    "chargeStartDateTime": "2026-11-13T10:00:00Z",
+                    "chargeStopDateTime": "2026-11-13T10:01:00Z",
+                    "fees": [
+                      { "feeType": "CHARGING", "uom": "kwh", "usageBase": 0.05, "rateBase": 0.39, "netDue": 0.02 }
+                    ]
+                  }
+                ],
+                "hasMore": false
+              }
+            }
+        """.trimIndent()
+
+        val (sessions, hasMore) = OdometerSyncService.parseTeslaSuperchargerHistory(realWorldJson)
+        assertFalse(hasMore)
+        assertEquals(2, sessions.size) // Aborted 0.05 kWh stop skipped
+
+        // Session 1: 7.0 kWh (unbilled usageTier1=8 ignored!), totalPaidCost = $2.73 + $1.50 = $4.23
+        assertEquals("88001", sessions[0].sessionId)
+        assertEquals(7.0, sessions[0].energyKwh, 0.001)
+        assertEquals(4.23, sessions[0].totalPaidCost, 0.001)
+        assertEquals("Ann Arbor, MI", sessions[0].siteLocationName)
+
+        // Session 2: tiered paid usageTier1=15.5 IS included -> 20.0 + 15.5 = 35.5 kWh, $13.51
+        assertEquals("88002", sessions[1].sessionId)
+        assertEquals(35.5, sessions[1].energyKwh, 0.001)
+        assertEquals(13.51, sessions[1].totalPaidCost, 0.001)
+        assertEquals("CHEVROLET", sessions[1].vehicleMakeType)
+
+        // Root-level data envelope also supported
+        val rootEnvelope = """
+            {
+              "data": [
+                {
+                  "chargeSessionId": "99001",
+                  "siteLocationName": "Detroit, MI",
+                  "chargeStartDateTime": "2026-11-14T12:00:00Z",
+                  "chargeStopDateTime": "2026-11-14T12:20:00Z",
+                  "fees": [
+                    { "feeType": "CHARGING", "uom": "kwh", "usageBase": 25.0, "rateBase": 0.40, "netDue": 10.0 }
+                  ]
+                }
+              ],
+              "hasMore": true
+            }
+        """.trimIndent()
+        val (rootSessions, rootHasMore) = OdometerSyncService.parseTeslaSuperchargerHistory(rootEnvelope)
+        assertTrue(rootHasMore)
+        assertEquals(1, rootSessions.size)
+        assertEquals("99001", rootSessions[0].sessionId)
+    }
+
+    @Test
+    fun `buildSuperchargerSessionEntities attributes Model 3 and Blazer EV and dedupes by ID and overlap`() {
+        val m3 = Car(
+            id = "car_m3", make = "Tesla", model = "Model 3", year = 2024,
+            isEv = true, vin = "5YJ3E1EA1PF000001"
+        )
+        val blazer = Car(
+            id = "car_blazer", make = "Chevrolet", model = "Blazer EV", year = 2024,
+            isEv = true, vin = "3GNKDCRJ8RS123456"
+        )
+        val t1 = Instant.parse("2026-11-10T14:00:00Z").toEpochMilli()
+        val t2 = Instant.parse("2026-11-12T18:00:00Z").toEpochMilli()
+        val t3 = Instant.parse("2026-11-13T12:00:00Z").toEpochMilli()
+
+        val existingManualReceipt = ChargingSessionEntity(
+            id = "manual_sc_receipt",
+            carId = "car_m3",
+            startDateMs = t3 + 5 * 60_000L, // Within ±30 min
+            endDateMs = t3 + 25 * 60_000L,
+            kwh = 41.0, // Within ±10% of 40.0
+            venue = ElectricityImportParser.VENUE_PUBLIC,
+            directCost = 16.40,
+            fingerprint = "fp_manual_receipt"
+        )
+
+        val raw = listOf(
+            TeslaSuperchargerSession("sc1", "5YJ3E1EA1PF000001", "TSLA", "Ann Arbor", t1, t1 + 1_200_000L, 28.0, 11.20, "USD"),
+            // Blazer EV billed through Tesla app without VIN -> attributed via non-Tesla vehicleMakeType
+            TeslaSuperchargerSession("sc2", null, "NON_TESLA", "Toledo", t2, t2 + 2_400_000L, 45.0, 19.80, "USD"),
+            // Duplicate of manual receipt within ±30m & ±10% kWh -> skipped!
+            TeslaSuperchargerSession("sc3", "5YJ3E1EA1PF000001", "TSLA", "Lansing", t3, t3 + 1_800_000L, 40.0, 16.40, "USD")
+        )
+
+        val entities = OdometerSyncService.buildSuperchargerSessionEntities(
+            rawSessions = raw,
+            cars = listOf(m3, blazer),
+            existingSessions = listOf(existingManualReceipt)
+        )
+        assertEquals(2, entities.size)
+        assertEquals("sc_tesla_sc1", entities[0].id)
+        assertEquals("car_m3", entities[0].carId)
+        assertEquals("Supercharger · Ann Arbor", entities[0].chargerName)
+        assertEquals(11.20, entities[0].directCost!!, 0.01)
+        assertEquals(ElectricityImportParser.AUTO_SUPERCHARGER_BATCH_ID, entities[0].uploadBatchId)
+
+        assertEquals("sc_tesla_sc2", entities[1].id)
+        assertEquals("car_blazer", entities[1].carId)
+        assertEquals("Supercharger · Toledo", entities[1].chargerName)
+        assertEquals(19.80, entities[1].directCost!!, 0.01)
+    }
+
+    @Test
+    fun `syncTeslaSuperchargerCharging skips when scope missing, handles 403, and paginates`() = runBlocking {
+        val futureExp = Instant.now().epochSecond + 3600L
+        val m3 = Car(id = "car_m3", make = "Tesla", model = "Model 3", year = 2024, isEv = true, vin = "5YJ3E1EA1PF000001")
+
+        // 1) Missing vehicle_charging_cmds in JWT -> 0 HTTP requests, returns MissingScope
+        val prefsNoScope = createTestPreferencesManager("sc_no_scope")
+        prefsNoScope.setTeslaCredentials("cid", "csec", createJwt(scp = listOf("openid", "vehicle_device_data"), expEpochSec = futureExp))
+        var httpCalls = 0
+        val noCallClient = createMockClient { url, _ ->
+            httpCalls++
+            error("Should not have called $url")
+        }
+        val resNoScope = OdometerSyncService(prefsNoScope, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), noCallClient)
+            .syncTeslaSuperchargerCharging(listOf(m3))
+        assertTrue(resNoScope is SuperchargerSyncResult.MissingScope)
+        assertEquals(0, httpCalls)
+
+        // 2) HTTP 403 from endpoint -> MissingScope
+        val prefs403 = createTestPreferencesManager("sc_403")
+        val jwtWithSc = createJwt(scp = listOf("openid", "vehicle_device_data", "vehicle_charging_cmds"), expEpochSec = futureExp)
+        prefs403.setTeslaCredentials("cid", "csec", jwtWithSc)
+        val client403 = createMockClient { _, _ -> 403 to """{"error":"forbidden"}""" }
+        val res403 = OdometerSyncService(prefs403, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), client403)
+            .syncTeslaSuperchargerCharging(listOf(m3))
+        assertTrue(res403 is SuperchargerSyncResult.MissingScope)
+
+        // 3) Paginated 2-page sync -> inserts sessions from both pages
+        val prefsPaged = createTestPreferencesManager("sc_paged")
+        prefsPaged.setTeslaCredentials("cid", "csec", jwtWithSc)
+        val dao = FakeChargingSessionDao()
+        val requestedPages = mutableListOf<String>()
+        val clientPaged = createMockClient { url, _ ->
+            requestedPages.add(url)
+            when {
+                url.contains("pageNo=1") -> 200 to """
+                    {
+                      "response": {
+                        "data": [
+                          {
+                            "sessionId": "p1_s1",
+                            "vin": "5YJ3E1EA1PF000001",
+                            "siteLocationName": "Page 1 SC",
+                            "chargeStartDateTime": "2026-11-10T10:00:00Z",
+                            "chargeStopDateTime": "2026-11-10T10:25:00Z",
+                            "fees": [{ "feeType": "CHARGING", "uom": "kwh", "usageBase": 30.0, "rateBase": 0.40, "netDue": 12.0 }]
+                          }
+                        ],
+                        "hasMore": true
+                      }
+                    }
+                """.trimIndent()
+                url.contains("pageNo=2") -> 200 to """
+                    {
+                      "response": {
+                        "data": [
+                          {
+                            "sessionId": "p2_s1",
+                            "vin": "5YJ3E1EA1PF000001",
+                            "siteLocationName": "Page 2 SC",
+                            "chargeStartDateTime": "2026-11-11T10:00:00Z",
+                            "chargeStopDateTime": "2026-11-11T10:25:00Z",
+                            "fees": [{ "feeType": "CHARGING", "uom": "kwh", "usageBase": 20.0, "rateBase": 0.35, "netDue": 7.0 }]
+                          }
+                        ],
+                        "hasMore": false
+                      }
+                    }
+                """.trimIndent()
+                else -> error("Unexpected url $url")
+            }
+        }
+        val resPaged = OdometerSyncService(prefsPaged, FakeCarDao(), FakeOdometerLogDao(), dao, clientPaged)
+            .syncTeslaSuperchargerCharging(listOf(m3))
+        assertTrue(resPaged is SuperchargerSyncResult.Synced)
+        val synced = resPaged as SuperchargerSyncResult.Synced
+        assertEquals(2, synced.insertedCount)
+        assertEquals(50.0, synced.totalKwhAdded, 0.01)
+        assertEquals(19.0, synced.totalCostAdded, 0.01)
+        assertEquals(2, dao.sessions.size)
+        assertEquals(2, requestedPages.size)
+    }
+
+    // --- Capability-Aware Smartcar v3 DC Charging ---
+
+    @Test
+    fun `parseSmartcarChargeRecords keeps DC and public sessions, skips home AC, and sums cost`() {
+        val rawJson = """
+            {
+              "data": {
+                "attributes": {
+                  "body": {
+                    "values": [
+                      {
+                        "id": "rec_home_ac",
+                        "chargingType": "AC",
+                        "isPublicCharger": false,
+                        "energyAdded": 35.0,
+                        "startTime": "2026-11-10T01:00:00Z",
+                        "endTime": "2026-11-10T05:00:00Z"
+                      },
+                      {
+                        "id": "rec_ea_dc",
+                        "chargingType": "DC",
+                        "isPublicCharger": true,
+                        "energyAdded": 48.2,
+                        "startTime": "2026-11-11T15:00:00Z",
+                        "endTime": "2026-11-11T15:35:00Z",
+                        "cost": { "energyAmount": 22.10, "otherAmount": 1.50 },
+                        "location": { "name": "Electrify America - Meijer" }
+                      },
+                      {
+                        "id": "rec_public_unpriced",
+                        "chargingType": "DC",
+                        "isPublicCharger": true,
+                        "energyAdded": 25.0,
+                        "startTime": "2026-11-12T12:00:00Z",
+                        "endTime": "2026-11-12T12:20:00Z"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+        """.trimIndent()
+
+        val parsed = OdometerSyncService.parseSmartcarChargeRecords(rawJson)
+        assertEquals(2, parsed.size)
+        assertEquals("rec_ea_dc", parsed[0].id)
+        assertEquals(48.2, parsed[0].energyKwh, 0.01)
+        assertEquals(23.60, parsed[0].costTotal!!, 0.01)
+        assertEquals("Electrify America - Meijer", parsed[0].locationName)
+
+        assertEquals("rec_public_unpriced", parsed[1].id)
+        assertEquals(25.0, parsed[1].energyKwh, 0.01)
+        assertNull(parsed[1].costTotal)
+    }
+
+    @Test
+    fun `syncSmartcarDcCharging handles 200 records, 403 permission, cached UNSUPPORTED zero-call skip, and live DC probe`() = runBlocking {
+        val blazer = Car(
+            id = "car_blazer", make = "Chevrolet", model = "Blazer EV", year = 2024,
+            isEv = true, vin = "3GNKDCRJ8RS123456"
+        )
+
+        suspend fun initSmartcarPrefs(name: String): PreferencesManager {
+            val prefs = createTestPreferencesManager(name)
+            prefs.setSmartcarCredentials("client_test", "secret_test")
+            prefs.saveSmartcarTokens("sc_token", "sc_refresh", 3600L, "veh_blazer_1")
+            prefs.setSmartcarUserId("user_blazer_1")
+            return prefs
+        }
+
+        // 1) 200 OK on charge-chargerecords -> inserts new DC session & dedupes overlapping Tesla Supercharger stop!
+        val prefs1 = initSmartcarPrefs("smartcar_200")
+        val dao1 = FakeChargingSessionDao()
+        val scTime = Instant.parse("2026-11-11T15:00:00Z").toEpochMilli()
+        dao1.insertSession(
+            ChargingSessionEntity(
+                id = "sc_tesla_existing",
+                carId = "car_blazer",
+                startDateMs = scTime,
+                endDateMs = scTime + 30 * 60_000L,
+                kwh = 48.0,
+                venue = ElectricityImportParser.VENUE_PUBLIC,
+                directCost = 20.0,
+                fingerprint = "fp_existing_sc"
+            )
+        )
+        val client1 = createMockClient { url, _ ->
+            assertTrue(url.contains("/signals/charge-chargerecords"))
+            200 to """
+                {
+                  "data": {
+                    "attributes": {
+                      "body": {
+                        "values": [
+                          {
+                            "id": "dup_sc",
+                            "chargingType": "DC",
+                            "isPublicCharger": true,
+                            "energyAdded": 48.2,
+                            "startTime": "2026-11-11T15:05:00Z",
+                            "endTime": "2026-11-11T15:35:00Z",
+                            "location": { "name": "Tesla Supercharger" }
+                          },
+                          {
+                            "id": "new_evgo",
+                            "chargingType": "DC",
+                            "isPublicCharger": true,
+                            "energyAdded": 31.4,
+                            "startTime": "2026-11-12T18:00:00Z",
+                            "endTime": "2026-11-12T18:25:00Z",
+                            "cost": { "energyAmount": 16.20 },
+                            "location": { "name": "EVgo Fast Charge" }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+            """.trimIndent()
+        }
+        val res1 = OdometerSyncService(prefs1, FakeCarDao(), FakeOdometerLogDao(), dao1, client1)
+            .syncSmartcarDcCharging(listOf(blazer), forceCapabilityRecheck = true, allowLiveProbe = false)
+        assertTrue(res1 is SmartcarDcSyncResult.Synced)
+        assertEquals(1, (res1 as SmartcarDcSyncResult.Synced).insertedCount)
+        assertEquals(PreferencesManager.SMARTCAR_CAPABILITY_CHARGE_RECORDS, prefs1.getSmartcarDcCapability())
+        assertEquals(2, dao1.sessions.size)
+        assertEquals("EVgo Fast Charge", dao1.sessions.last().chargerName)
+
+        // 2) 403 / PERMISSION -> caches MISSING_PERMISSION
+        val prefs2 = initSmartcarPrefs("smartcar_403")
+        val client2 = createMockClient { _, _ ->
+            403 to """{"errors":[{"type":"PERMISSION","code":"FORBIDDEN","description":"Missing permission"}]}"""
+        }
+        val res2 = OdometerSyncService(prefs2, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), client2)
+            .syncSmartcarDcCharging(listOf(blazer), forceCapabilityRecheck = true, allowLiveProbe = false)
+        assertTrue(res2 is SmartcarDcSyncResult.MissingPermission)
+        assertEquals(PreferencesManager.SMARTCAR_CAPABILITY_MISSING_PERMISSION, prefs2.getSmartcarDcCapability())
+
+        // 3) VEHICLE_NOT_CAPABLE with allowLiveProbe = false -> caches UNSUPPORTED; second background call makes 0 HTTP requests!
+        val prefs3 = initSmartcarPrefs("smartcar_unsupported")
+        var callCount3 = 0
+        val client3 = createMockClient { _, _ ->
+            callCount3++
+            501 to """{"errors":[{"type":"COMPATIBILITY","code":"VEHICLE_NOT_CAPABLE","description":"Not capable"}]}"""
+        }
+        val service3 = OdometerSyncService(prefs3, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), client3)
+        val res3a = service3.syncSmartcarDcCharging(listOf(blazer), forceCapabilityRecheck = false, allowLiveProbe = false)
+        assertTrue(res3a is SmartcarDcSyncResult.UnsupportedByVehicle)
+        assertEquals(1, callCount3)
+        assertEquals(PreferencesManager.SMARTCAR_CAPABILITY_UNSUPPORTED, prefs3.getSmartcarDcCapability())
+
+        // Subsequent daily background call skips with 0 HTTP calls
+        val res3b = service3.syncSmartcarDcCharging(listOf(blazer), forceCapabilityRecheck = false, allowLiveProbe = false)
+        assertTrue(res3b is SmartcarDcSyncResult.UnsupportedByVehicle)
+        assertEquals(1, callCount3)
+
+        // 4) VEHICLE_NOT_CAPABLE on charge-chargerecords + allowLiveProbe = true -> probes live DC signals and logs PUBLIC session with null cost!
+        val prefs4 = initSmartcarPrefs("smartcar_live_dc")
+        val dao4 = FakeChargingSessionDao()
+        val client4 = createMockClient { url, _ ->
+            when {
+                url.contains("charge-chargerecords") -> 501 to """{"errors":[{"type":"COMPATIBILITY","code":"VEHICLE_NOT_CAPABLE"}]}"""
+                url.contains("charge-isfastchargerpresent") -> 200 to """{"data":{"attributes":{"body":{"value":true}}}}"""
+                url.contains("charge-energyadded") -> 200 to """{"data":{"attributes":{"body":{"value":27.4}}}}"""
+                url.contains("charge-wattage") -> 200 to """{"data":{"attributes":{"body":{"value":145000.0}}}}"""
+                url.contains("charge-fastchargertype") -> 200 to """{"data":{"attributes":{"body":{"value":"CCS"}}}}"""
+                else -> error("Unexpected Smartcar url $url")
+            }
+        }
+        val res4 = OdometerSyncService(prefs4, FakeCarDao(), FakeOdometerLogDao(), dao4, client4)
+            .syncSmartcarDcCharging(listOf(blazer), forceCapabilityRecheck = true, allowLiveProbe = true)
+        assertTrue(res4 is SmartcarDcSyncResult.Synced)
+        assertEquals(1, (res4 as SmartcarDcSyncResult.Synced).insertedCount)
+        assertEquals(PreferencesManager.SMARTCAR_CAPABILITY_LIVE_ONLY, prefs4.getSmartcarDcCapability())
+        assertEquals(1, dao4.sessions.size)
+        assertEquals(ElectricityImportParser.VENUE_PUBLIC, dao4.sessions[0].venue)
+        assertEquals(27.4, dao4.sessions[0].kwh, 0.01)
+        assertNull(dao4.sessions[0].directCost)
+        assertEquals("DC Fast Charger (CCS)", dao4.sessions[0].chargerName)
+
+        // 5) VEHICLE_NOT_CAPABLE on BOTH charge-chargerecords AND live DC signals (typical GM/OnStar) -> caches UNSUPPORTED
+        val prefs5 = initSmartcarPrefs("smartcar_gm_all_unsupported")
+        val client5 = createMockClient { _, _ ->
+            501 to """{"errors":[{"type":"COMPATIBILITY","code":"VEHICLE_NOT_CAPABLE"}]}"""
+        }
+        val res5 = OdometerSyncService(prefs5, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), client5)
+            .syncSmartcarDcCharging(listOf(blazer), forceCapabilityRecheck = true, allowLiveProbe = true)
+        assertTrue(res5 is SmartcarDcSyncResult.UnsupportedByVehicle)
+        assertEquals(PreferencesManager.SMARTCAR_CAPABILITY_UNSUPPORTED, prefs5.getSmartcarDcCapability())
     }
 
     private fun createTestPreferencesManager(name: String): PreferencesManager {
