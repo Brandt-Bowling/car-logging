@@ -5,9 +5,7 @@ import android.util.Log
 import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.migration.FlutterDataMigrator
-import com.example.car_logger.services.ChargerSyncScheduler
-import com.example.car_logger.services.DailyPollScheduler
-import com.example.car_logger.services.WorkChargingSyncScheduler
+import com.example.car_logger.di.AppContainer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,17 +15,19 @@ class CarLoggerApplication : Application() {
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    lateinit var database: AppDatabase
+    lateinit var container: AppContainer
         private set
 
-    lateinit var preferencesManager: PreferencesManager
-        private set
+    val database: AppDatabase
+        get() = container.database
+
+    val preferencesManager: PreferencesManager
+        get() = container.preferencesManager
 
     override fun onCreate() {
         super.onCreate()
 
-        database = AppDatabase.getInstance(this)
-        preferencesManager = PreferencesManager(this)
+        container = AppContainer(this)
 
         // Run automated migration on startup to preserve all existing user data from Flutter
         applicationScope.launch {
@@ -39,19 +39,18 @@ class CarLoggerApplication : Application() {
             }
 
             try {
+                val scheduler = container.syncSchedulerController
                 if (preferencesManager.getDailyPollEnabled()) {
-                    DailyPollScheduler.schedule(this@CarLoggerApplication)
+                    scheduler.scheduleDailyOdometerPoll()
                 }
                 if (preferencesManager.getChargerSyncEnabled()) {
-                    ChargerSyncScheduler.schedule(
-                        context = this@CarLoggerApplication,
+                    scheduler.scheduleChargerSync(
                         targetHour = preferencesManager.getChargerSyncHour(),
                         targetMinute = preferencesManager.getChargerSyncMinute()
                     )
                 }
                 if (preferencesManager.getWorkChargingSyncEnabled()) {
-                    WorkChargingSyncScheduler.schedule(
-                        context = this@CarLoggerApplication,
+                    scheduler.scheduleWorkChargingSync(
                         startHour = preferencesManager.getWorkChargingWindowStartHour(),
                         startMinute = preferencesManager.getWorkChargingWindowStartMinute(),
                         endHour = preferencesManager.getWorkChargingWindowEndHour(),

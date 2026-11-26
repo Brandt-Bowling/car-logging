@@ -3,6 +3,7 @@ package com.example.car_logger.services
 import android.util.Log
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.vehicle.VehicleData
+import com.example.car_logger.di.AppContainer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -15,7 +16,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.concurrent.TimeUnit
 
 @Serializable
 data class AutoDevVehicleInfo(
@@ -38,10 +38,10 @@ data class AutoDevVehicleInfo(
 
 class AutoDevService(
     private val preferencesManager: PreferencesManager,
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
+    internal val client: OkHttpClient = AppContainer.newSharedHttpClient(
+        connectTimeoutSeconds = AppContainer.AUTO_DEV_TIMEOUT_SECONDS,
+        readTimeoutSeconds = AppContainer.AUTO_DEV_TIMEOUT_SECONDS
+    )
 ) {
     companion object {
         private const val TAG = "AutoDevService"

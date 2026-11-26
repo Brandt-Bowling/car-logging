@@ -31,7 +31,22 @@ data class DriveFileItem(
     val isFolder: Boolean = false
 )
 
-class GoogleDriveService(private val context: Context) {
+open class GoogleDriveService private constructor(
+    private val context: Context?,
+    initialUser: GoogleSignInAccount?
+) {
+
+    constructor(context: Context) : this(
+        context = context.applicationContext ?: context,
+        initialUser = GoogleSignIn.getLastSignedInAccount(context.applicationContext ?: context)
+    )
+
+    internal constructor(
+        initialUser: GoogleSignInAccount? = null
+    ) : this(
+        context = null,
+        initialUser = initialUser
+    )
 
     companion object {
         private const val TAG = "GoogleDriveService"
@@ -41,39 +56,42 @@ class GoogleDriveService(private val context: Context) {
         )
     }
 
-    private val _currentUser = MutableStateFlow<GoogleSignInAccount?>(null)
-    val currentUser: StateFlow<GoogleSignInAccount?> = _currentUser.asStateFlow()
+    private val _currentUser = MutableStateFlow<GoogleSignInAccount?>(initialUser)
+    open val currentUser: StateFlow<GoogleSignInAccount?> = _currentUser.asStateFlow()
 
-    private val googleSignInClient: GoogleSignInClient by lazy {
+    private val googleSignInClient: GoogleSignInClient? by lazy {
+        val appContext = context ?: return@lazy null
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestScopes(Scope(DriveScopes.DRIVE_READONLY))
             .build()
-        GoogleSignIn.getClient(context, gso)
+        GoogleSignIn.getClient(appContext, gso)
     }
 
-    init {
-        _currentUser.value = GoogleSignIn.getLastSignedInAccount(context)
+    open fun getSignInIntent(): Intent {
+        val client = checkNotNull(googleSignInClient) {
+            "GoogleDriveService requires an Android Context to create a sign-in Intent"
+        }
+        return client.signInIntent
     }
 
-    fun getSignInIntent(): Intent = googleSignInClient.signInIntent
-
-    fun handleSignInResult(account: GoogleSignInAccount?) {
+    open fun handleSignInResult(account: GoogleSignInAccount?) {
         _currentUser.value = account
     }
 
-    suspend fun signOut(): Unit = withContext(Dispatchers.IO) {
+    open suspend fun signOut(): Unit = withContext(Dispatchers.IO) {
         try {
-            googleSignInClient.signOut()
+            googleSignInClient?.signOut()
             _currentUser.value = null
         } catch (e: Exception) {
             Log.e(TAG, "Sign out error: ${e.message}", e)
         }
     }
 
-    suspend fun checkSilentSignIn(): GoogleSignInAccount? = withContext(Dispatchers.IO) {
+    open suspend fun checkSilentSignIn(): GoogleSignInAccount? = withContext(Dispatchers.IO) {
+        val client = googleSignInClient ?: return@withContext null
         try {
-            val account = googleSignInClient.silentSignIn().result
+            val account = client.silentSignIn().result
             _currentUser.value = account
             account
         } catch (e: Exception) {
@@ -83,9 +101,10 @@ class GoogleDriveService(private val context: Context) {
     }
 
     private fun getDriveClient(): Drive? {
+        val appContext = context ?: return null
         val account = _currentUser.value ?: return null
         val credential = GoogleAccountCredential.usingOAuth2(
-            context,
+            appContext,
             Collections.singleton(DriveScopes.DRIVE_READONLY)
         )
         credential.selectedAccount = account.account
@@ -99,7 +118,10 @@ class GoogleDriveService(private val context: Context) {
             .build()
     }
 
-    suspend fun listFolders(parentId: String = "root", searchName: String? = null): List<DriveFileItem> = withContext(Dispatchers.IO) {
+    open suspend fun listFolders(
+        parentId: String = "root",
+        searchName: String? = null
+    ): List<DriveFileItem> = withContext(Dispatchers.IO) {
         val drive = getDriveClient() ?: return@withContext emptyList()
         try {
             val query = if (!searchName.isNullOrBlank()) {
@@ -130,7 +152,7 @@ class GoogleDriveService(private val context: Context) {
         }
     }
 
-    suspend fun listFiles(folderId: String): List<DriveFileItem> = withContext(Dispatchers.IO) {
+    open suspend fun listFiles(folderId: String): List<DriveFileItem> = withContext(Dispatchers.IO) {
         val drive = getDriveClient() ?: return@withContext emptyList()
         try {
             val query = "'$folderId' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false"
@@ -158,7 +180,7 @@ class GoogleDriveService(private val context: Context) {
         }
     }
 
-    suspend fun downloadFileBytes(fileId: String): ByteArray? = withContext(Dispatchers.IO) {
+    open suspend fun downloadFileBytes(fileId: String): ByteArray? = withContext(Dispatchers.IO) {
         val drive = getDriveClient() ?: return@withContext null
         try {
             val outputStream = ByteArrayOutputStream()
