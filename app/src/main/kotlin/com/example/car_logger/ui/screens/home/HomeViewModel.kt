@@ -1,16 +1,20 @@
 package com.example.car_logger.ui.screens.home
 
-import android.app.Application
 import android.net.Uri
-import android.provider.OpenableColumns
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.car_logger.data.insights.ChargingVenue
 import com.example.car_logger.data.insights.InsightsCalculationEngine
 import com.example.car_logger.data.insights.InsightsTimeGranularity
 import com.example.car_logger.data.insights.InsightsUiState
-import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
+import com.example.car_logger.data.local.UriContentReader
+import com.example.car_logger.data.local.dao.CarDao
+import com.example.car_logger.data.local.dao.ChargingSessionDao
+import com.example.car_logger.data.local.dao.MaintenanceRecordDao
+import com.example.car_logger.data.local.dao.OdometerLogDao
+import com.example.car_logger.data.local.dao.TireDao
+import com.example.car_logger.data.local.dao.UtilityBillDao
 import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import com.example.car_logger.data.local.entity.MaintenanceRecordEntity
@@ -52,20 +56,21 @@ data class ScheduledServiceItem(
     val isUrgent: Boolean // <= 500 miles
 )
 
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
+class HomeViewModel(
+    private val carDao: CarDao,
+    private val recordDao: MaintenanceRecordDao,
+    private val tireDao: TireDao,
+    val odometerLogDao: OdometerLogDao,
+    val utilityBillDao: UtilityBillDao,
+    val chargingSessionDao: ChargingSessionDao,
+    val preferencesManager: PreferencesManager,
+    val googleDriveService: GoogleDriveService,
+    val odometerSyncService: OdometerSyncService,
+    val vehicleImageRepository: VehicleImageRepository,
+    val geminiAiService: GeminiAiService,
+    private val uriContentReader: UriContentReader
+) : ViewModel() {
 
-    private val database = AppDatabase.getInstance(application)
-    private val carDao = database.carDao()
-    private val recordDao = database.maintenanceRecordDao()
-    private val tireDao = database.tireDao()
-    val odometerLogDao = database.odometerLogDao()
-    val utilityBillDao = database.utilityBillDao()
-    val chargingSessionDao = database.chargingSessionDao()
-    val preferencesManager = PreferencesManager(application)
-    val googleDriveService = GoogleDriveService(application)
-    val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao, chargingSessionDao)
-    val vehicleImageRepository = VehicleImageRepository(application, carDao)
-    val geminiAiService = GeminiAiService(preferencesManager)
     private var initialTelemetryChecked = false
 
     private val _toastMessage = MutableSharedFlow<String>(extraBufferCapacity = 2)
@@ -263,10 +268,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun readAndParseUtilityBill(uri: Uri): ParsedUtilityBillDraft {
-        val resolver = getApplication<Application>().contentResolver
-        val fileName = resolveFileName(uri) ?: "utility_bill"
-        val mimeType = resolveMimeType(uri, fileName)
-        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+        val fileName = uriContentReader.resolveFileName(uri) ?: "utility_bill"
+        val mimeType = uriContentReader.resolveMimeType(uri, fileName)
+        val bytes = uriContentReader.readBytes(uri)
             ?: return ParsedUtilityBillDraft(
                 providerName = "",
                 startDateIso = "",
@@ -299,10 +303,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun readAndParseChargerUsage(uri: Uri): ParsedChargerImportResult {
-        val resolver = getApplication<Application>().contentResolver
-        val fileName = resolveFileName(uri) ?: "charger_export"
-        val mimeType = resolveMimeType(uri, fileName)
-        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+        val fileName = uriContentReader.resolveFileName(uri) ?: "charger_export"
+        val mimeType = uriContentReader.resolveMimeType(uri, fileName)
+        val bytes = uriContentReader.readBytes(uri)
             ?: return ParsedChargerImportResult(
                 sessions = emptyList(),
                 fileName = fileName,
@@ -339,31 +342,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             mimeType = mimeType,
             fileBytes = bytes
         )
-    }
-
-    private fun resolveFileName(uri: Uri): String? {
-        val resolver = getApplication<Application>().contentResolver
-        return resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (idx >= 0 && cursor.moveToFirst()) cursor.getString(idx) else null
-        } ?: uri.lastPathSegment
-    }
-
-    private fun resolveMimeType(uri: Uri, fileName: String): String {
-        val resolver = getApplication<Application>().contentResolver
-        val reported = resolver.getType(uri)
-        if (!reported.isNullOrBlank() && reported != "application/octet-stream") {
-            return reported
-        }
-        val lower = fileName.lowercase(Locale.US)
-        return when {
-            lower.endsWith(".pdf") -> "application/pdf"
-            lower.endsWith(".csv") -> "text/csv"
-            lower.endsWith(".png") -> "image/png"
-            lower.endsWith(".webp") -> "image/webp"
-            lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
-            else -> "application/octet-stream"
-        }
     }
 
     fun saveUtilityBill(

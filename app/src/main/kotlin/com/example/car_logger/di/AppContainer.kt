@@ -5,6 +5,13 @@ import com.example.car_logger.data.local.AndroidUriContentReader
 import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.UriContentReader
+import com.example.car_logger.data.local.dao.CarDao
+import com.example.car_logger.data.local.dao.ChargingSessionDao
+import com.example.car_logger.data.local.dao.GloveboxDao
+import com.example.car_logger.data.local.dao.MaintenanceRecordDao
+import com.example.car_logger.data.local.dao.OdometerLogDao
+import com.example.car_logger.data.local.dao.TireDao
+import com.example.car_logger.data.local.dao.UtilityBillDao
 import com.example.car_logger.data.vehicle.VehicleImageRepository
 import com.example.car_logger.services.AndroidSyncSchedulerController
 import com.example.car_logger.services.AutoDevService
@@ -15,27 +22,74 @@ import com.example.car_logger.services.SyncSchedulerController
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
-class AppContainer(context: Context) {
-    private val appContext: Context = context.applicationContext ?: context
+class AppContainer private constructor(
+    context: Context?,
+    preferencesManagerOverride: PreferencesManager? = null,
+    uriContentReaderOverride: UriContentReader? = null,
+    syncSchedulerControllerOverride: SyncSchedulerController? = null,
+    googleDriveServiceOverride: GoogleDriveService? = null,
+    carDaoOverride: CarDao? = null,
+    maintenanceRecordDaoOverride: MaintenanceRecordDao? = null,
+    tireDaoOverride: TireDao? = null,
+    gloveboxDaoOverride: GloveboxDao? = null,
+    odometerLogDaoOverride: OdometerLogDao? = null,
+    utilityBillDaoOverride: UtilityBillDao? = null,
+    chargingSessionDaoOverride: ChargingSessionDao? = null,
+    vehicleImageRepositoryOverride: VehicleImageRepository? = null
+) {
+    constructor(context: Context) : this(context = context, preferencesManagerOverride = null)
+
+    private val appContext: Context? = context?.let { it.applicationContext ?: it }
+
+    private fun requireAppContext(): Context =
+        checkNotNull(appContext) { "AppContainer requires an Android Context for this dependency" }
 
     val httpClient: OkHttpClient by lazy { defaultHttpClient }
 
-    val database: AppDatabase by lazy { AppDatabase.getInstance(appContext) }
+    val database: AppDatabase by lazy { AppDatabase.getInstance(requireAppContext()) }
 
-    val preferencesManager: PreferencesManager by lazy { PreferencesManager(appContext) }
+    val carDao: CarDao by lazy { carDaoOverride ?: database.carDao() }
 
-    val uriContentReader: UriContentReader by lazy { AndroidUriContentReader(appContext) }
-
-    val syncSchedulerController: SyncSchedulerController by lazy {
-        AndroidSyncSchedulerController(appContext)
+    val maintenanceRecordDao: MaintenanceRecordDao by lazy {
+        maintenanceRecordDaoOverride ?: database.maintenanceRecordDao()
     }
 
-    val googleDriveService: GoogleDriveService by lazy { GoogleDriveService(appContext) }
+    val tireDao: TireDao by lazy { tireDaoOverride ?: database.tireDao() }
+
+    val gloveboxDao: GloveboxDao by lazy { gloveboxDaoOverride ?: database.gloveboxDao() }
+
+    val odometerLogDao: OdometerLogDao by lazy {
+        odometerLogDaoOverride ?: database.odometerLogDao()
+    }
+
+    val utilityBillDao: UtilityBillDao by lazy {
+        utilityBillDaoOverride ?: database.utilityBillDao()
+    }
+
+    val chargingSessionDao: ChargingSessionDao by lazy {
+        chargingSessionDaoOverride ?: database.chargingSessionDao()
+    }
+
+    val preferencesManager: PreferencesManager by lazy {
+        preferencesManagerOverride ?: PreferencesManager(requireAppContext())
+    }
+
+    val uriContentReader: UriContentReader by lazy {
+        uriContentReaderOverride ?: AndroidUriContentReader(requireAppContext())
+    }
+
+    val syncSchedulerController: SyncSchedulerController by lazy {
+        syncSchedulerControllerOverride ?: AndroidSyncSchedulerController(requireAppContext())
+    }
+
+    val googleDriveService: GoogleDriveService by lazy {
+        googleDriveServiceOverride ?: GoogleDriveService(requireAppContext())
+    }
 
     val vehicleImageRepository: VehicleImageRepository by lazy {
-        VehicleImageRepository(
-            context = appContext,
-            carDao = database.carDao(),
+        vehicleImageRepositoryOverride ?: VehicleImageRepository(
+            context = requireAppContext(),
+            carDao = carDao,
             uriContentReader = uriContentReader
         )
     }
@@ -63,9 +117,9 @@ class AppContainer(context: Context) {
     val odometerSyncService: OdometerSyncService by lazy {
         OdometerSyncService(
             preferencesManager = preferencesManager,
-            carDao = database.carDao(),
-            odometerLogDao = database.odometerLogDao(),
-            chargingSessionDao = database.chargingSessionDao(),
+            carDao = carDao,
+            odometerLogDao = odometerLogDao,
+            chargingSessionDao = chargingSessionDao,
             client = httpClient
         )
     }
@@ -94,5 +148,34 @@ class AppContainer(context: Context) {
             .readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
             .writeTimeout(writeTimeoutSeconds, TimeUnit.SECONDS)
             .build()
+
+        internal fun forTest(
+            preferencesManager: PreferencesManager,
+            carDao: CarDao,
+            maintenanceRecordDao: MaintenanceRecordDao,
+            tireDao: TireDao,
+            gloveboxDao: GloveboxDao,
+            odometerLogDao: OdometerLogDao,
+            utilityBillDao: UtilityBillDao,
+            chargingSessionDao: ChargingSessionDao,
+            uriContentReader: UriContentReader,
+            syncSchedulerController: SyncSchedulerController,
+            googleDriveService: GoogleDriveService,
+            vehicleImageRepository: VehicleImageRepository
+        ): AppContainer = AppContainer(
+            context = null,
+            preferencesManagerOverride = preferencesManager,
+            uriContentReaderOverride = uriContentReader,
+            syncSchedulerControllerOverride = syncSchedulerController,
+            googleDriveServiceOverride = googleDriveService,
+            carDaoOverride = carDao,
+            maintenanceRecordDaoOverride = maintenanceRecordDao,
+            tireDaoOverride = tireDao,
+            gloveboxDaoOverride = gloveboxDao,
+            odometerLogDaoOverride = odometerLogDao,
+            utilityBillDaoOverride = utilityBillDao,
+            chargingSessionDaoOverride = chargingSessionDao,
+            vehicleImageRepositoryOverride = vehicleImageRepository
+        )
     }
 }

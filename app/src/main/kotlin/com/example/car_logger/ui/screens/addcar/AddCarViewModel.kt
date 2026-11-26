@@ -1,9 +1,7 @@
 package com.example.car_logger.ui.screens.addcar
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.vehicle.VehicleData
 import com.example.car_logger.services.AutoDevService
@@ -14,10 +12,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-class AddCarViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val preferencesManager = PreferencesManager(application)
-    private val autoDevService = AutoDevService(preferencesManager)
+class AddCarViewModel(
+    private val autoDevService: AutoDevService
+) : ViewModel() {
 
     val vinInput = MutableStateFlow("")
     val isLoadingVin = MutableStateFlow(false)
