@@ -7,8 +7,21 @@ Before each task, read its **Global Constraints** and the matching **Task** sect
 
 - Branch: `refactor/android-architecture-modularization`. Never commit to `main`.
 - Work directly, one task at a time. Do not use multi-agent orchestration (budget constraint).
-- After **each** task, run `./gradlew testDebugUnitTest assembleDebug`. Add `lintDebug` once it passes cleanly.
-  Then commit only the files you touched (never `git add -A` / `git add .`).
+- After **each** task, run `./gradlew testDebugUnitTest lintDebug assembleDebug`. CI
+  (`.github/workflows/ci.yml`) already runs `testDebugUnitTest lintDebug` on PRs, so never skip lint.
+  Then commit only the files you touched (never `git add -A` / `git add .`). Use small commits, one per
+  extracted collaborator or file, so a failing step is easy to bisect and revert.
+- Refactor-only rule: each decomposition commit is a pure move/extract with no behavior changes.
+  The only intended behavior changes are the 2 confirmed fixes (`MaintenanceRecordDialog` delete
+  in Task 9, `generativeai` SDK removal in Task 13). Commit those separately with their own tests.
+- Before extracting logic that has no tests, add characterization tests on the original code first,
+  then extract.
+- PR cadence: open a PR for user review at each phase boundary instead of one giant PR at the end.
+  The boundaries are after item 3 (Phase 1A), item 10 (Phase 1B), item 14 (Phase 2), and item 17 (Phase 3).
+  Ask the user whether to merge each one before continuing.
+- The agent cannot run the app on a device. Before each PR, list the affected screens for the user's
+  manual smoke test (see the source plan's final checklist). This matters most for UI decompositions
+  (items 8–14), which have no UI tests.
 - Never change Room schema v6, DataStore preference key strings, or ADR 0001/0002 behavior.
 - Never delete or weaken an existing test assertion. When splitting large suites, move tests; don't drop them.
 - On a fresh clone or worktree, run `./scripts/setup_worktree.sh` first (see `AGENTS.md`).
@@ -30,8 +43,11 @@ Before each task, read its **Global Constraints** and the matching **Task** sect
 ### 1. Finish Task 1: plain ViewModels + `di/AppViewModelFactories.kt`
 
 - [ ] Convert `HomeViewModel`, `VehicleDetailsViewModel`, and `AddCarViewModel` to plain `ViewModel` with
-      constructor-injected dependencies. `HomeViewModel` should use `UriContentReader` instead of
-      `contentResolver`, and `SyncSchedulerController` instead of the scheduler objects.
+      constructor-injected dependencies. `HomeViewModel` should use `UriContentReader` in place of the 4
+      `getApplication<Application>().contentResolver` sites (~L265–352). No ViewModel calls the schedulers
+      today. `SettingsTab` calls `DailyPollScheduler` / `ChargerSyncScheduler` / `WorkChargingSyncScheduler`
+      directly from Composables (~L818–1640), so `SyncSchedulerController` is first used by
+      `SettingsViewModel` in Task 5 (item 8).
 - [ ] Create `di/AppViewModelFactories.kt`. Every `viewModel(...)` call in `MainActivity` gets an explicit `factory`.
 - [ ] Unit test the factories. `AppContainer(ContextWrapper(null))` is safe on pure JVM because everything is lazy.
 - [ ] Verify: `rg -n "AndroidViewModel" app/src/main/kotlin` returns nothing.
@@ -89,7 +105,10 @@ For each item: follow the matching Task in the source plan, verify, then commit.
 - [ ] 15. **Task 15**: `scripts/check_architecture_gates.sh` + `checkArchitectureGates` Gradle task.
 - [ ] 16. **Task 16**: Lint hardening + Slack `compose-lint-checks`.
 - [ ] 17. **Task 17**: Detekt 2.0 (`dev.detekt:2.0.0-alpha.6`, already checked as compatible with AGP 9.1.1) +
-      `compose-rules` + CI + `AGENTS.md` guardrails.
+      `compose-rules` + CI + `AGENTS.md` guardrails. Detekt 2.0 is still alpha: pin the exact version in
+      `libs.versions.toml` and generate a `detekt` baseline only for legacy files listed in the
+      architecture-gates allowlist. If the alpha turns out unstable with AGP 9 / Kotlin 2.2, stop and ask the
+      user rather than downgrading tooling silently.
 - Advisory: `HomeViewModel` (12 deps) and `VehicleDetailsViewModel` (13) exceed Detekt's
   `constructorThreshold: 8`. Group dependencies during Tasks 9/12, or allowlist them in Task 17.
 
