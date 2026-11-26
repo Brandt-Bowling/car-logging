@@ -102,15 +102,13 @@ For each item: follow the matching Task in the source plan, verify, then commit.
 - [ ] 12. **Task 10**: `ChargerUsageReviewSheet` / `UtilityBillReviewSheet` → `insights/review/*`.
 - [ ] 13. **Task 12**: `VehicleDetailsScreen` / ViewModel split + `DriveReceiptSyncUseCase`.
 - [ ] 14. **Task 14**: `InsightsTab` + `InsightsActions` + previews.
-- [ ] 15. **Task 15**: `scripts/check_architecture_gates.sh` + `checkArchitectureGates` Gradle task.
+- [ ] 15. **Task 15**: `scripts/check_architecture_gates.sh` + `checkArchitectureGates` Gradle task
+      (includes the 120-line `@Composable` cap).
 - [ ] 16. **Task 16**: Lint hardening + Slack `compose-lint-checks`.
-- [ ] 17. **Task 17**: Detekt 2.0 (`dev.detekt:2.0.0-alpha.6`, already checked as compatible with AGP 9.1.1) +
-      `compose-rules` + CI + `AGENTS.md` guardrails. Detekt 2.0 is still alpha: pin the exact version in
-      `libs.versions.toml` and generate a `detekt` baseline only for legacy files listed in the
-      architecture-gates allowlist. If the alpha turns out unstable with AGP 9 / Kotlin 2.2, stop and ask the
-      user rather than downgrading tooling silently.
-- Advisory: `HomeViewModel` (12 deps) and `VehicleDetailsViewModel` (13) exceed Detekt's
-  `constructorThreshold: 8`. Group dependencies during Tasks 9/12, or allowlist them in Task 17.
+- [ ] 17. **Task 17**: CI (`testDebugUnitTest lintDebug checkArchitectureGates`) + `AGENTS.md` guardrails.
+      **Detekt was dropped (2026-11-26) as redundant with Tasks 15/16. Do not add it.**
+- Advisory: `HomeViewModel` (12 deps) and `VehicleDetailsViewModel` (13) have long constructors. Consider
+  grouping their DAOs during Tasks 9/12 (guidance only, not enforced).
 
 ### 18. Final
 
