@@ -1,6 +1,8 @@
 package com.example.car_logger
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.example.car_logger.data.insights.InsightsCalculationEngine
+import com.example.car_logger.data.insights.InsightsTimeGranularity
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.dao.CarDao
 import com.example.car_logger.data.local.dao.ChargingSessionDao
@@ -21,10 +23,13 @@ import com.example.car_logger.services.WallConnectorType
 import com.example.car_logger.services.WorkChargeDecision
 import com.example.car_logger.services.WorkChargingSyncResult
 import com.example.car_logger.services.WorkLocationConfig
+import java.net.URLDecoder
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.Base64
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -1996,6 +2001,373 @@ class OdometerSyncServiceTest {
         assertEquals(19.0, synced.totalCostAdded, 0.01)
         assertEquals(2, dao.sessions.size)
         assertEquals(2, requestedPages.size)
+    }
+
+    @Test
+    fun `buildSuperchargerDateWindows never exceeds 364 days and chunks multi-year lookbacks`() {
+        val laZone = ZoneId.of("America/Los_Angeles")
+        val maxDuration = Duration.ofDays(OdometerSyncService.TESLA_CHARGING_HISTORY_MAX_WINDOW_DAYS.toLong())
+
+        // 1) Initial 364-day backfill at mid-day local time must be clamped (never midnight-rounded past 364d)
+        val middayEnd = Instant.parse("2026-11-24T17:53:08.999Z") // 09:53:08 PST
+        val initialWindows = OdometerSyncService.buildSuperchargerDateWindows(
+            endInstant = middayEnd,
+            lookbackDays = OdometerSyncService.DEFAULT_SUPERCHARGER_INITIAL_LOOKBACK_DAYS,
+            zoneId = laZone
+        )
+        assertEquals(1, initialWindows.size)
+        val (initStart, initEnd) = initialWindows.single()
+        assertEquals(Instant.parse("2026-11-24T17:53:08Z"), initEnd)
+        assertEquals(maxDuration, Duration.between(initStart, initEnd))
+        assertTrue(initStart.atZone(ZoneOffset.UTC).plusYears(1).isAfter(initEnd.atZone(ZoneOffset.UTC)))
+
+        // 2) Leap-year crossing (spans Feb 29, 2028) still stays strictly below 1 calendar year and <= 364 days
+        val leapEnd = Instant.parse("2028-03-15T20:15:30Z")
+        val leapWindows = OdometerSyncService.buildSuperchargerDateWindows(
+            endInstant = leapEnd,
+            lookbackDays = 364,
+            zoneId = laZone
+        )
+        assertEquals(1, leapWindows.size)
+        val (leapStart, leapEndTrunc) = leapWindows.single()
+        assertTrue(Duration.between(leapStart, leapEndTrunc) <= maxDuration)
+        assertTrue(leapStart.atZone(ZoneOffset.UTC).plusYears(1).isAfter(leapEndTrunc.atZone(ZoneOffset.UTC)))
+
+        // 3) Short 30-day incremental sync stays in 1 window starting at local midnight 30 days ago
+        val incWindows = OdometerSyncService.buildSuperchargerDateWindows(
+            endInstant = middayEnd,
+            lookbackDays = 30,
+            zoneId = laZone
+        )
+        assertEquals(1, incWindows.size)
+        val (incStart, incEnd) = incWindows.single()
+        val expectedMidnight = middayEnd.atZone(laZone).minusDays(30).toLocalDate().atStartOfDay(laZone).toInstant()
+        assertEquals(expectedMidnight, incStart)
+        assertTrue(Duration.between(incStart, incEnd) <= maxDuration)
+
+        // 4) Explicit 365-day or 730-day lookback splits into contiguous windows each <= 364 days with no gaps
+        for (days in listOf(365, 500, 730)) {
+            val windows = OdometerSyncService.buildSuperchargerDateWindows(
+                endInstant = middayEnd,
+                lookbackDays = days,
+                zoneId = laZone
+            )
+            assertTrue("Expected multiple windows for $days days", windows.size >= 2)
+            assertEquals(Instant.parse("2026-11-24T17:53:08Z"), windows.first().second)
+            assertEquals(
+                Instant.parse("2026-11-24T17:53:08Z").minusSeconds(days.toLong() * 86_400L),
+                windows.last().first
+            )
+            for (i in windows.indices) {
+                val (wStart, wEnd) = windows[i]
+                val span = Duration.between(wStart, wEnd)
+                assertTrue("Window $i span must be > 0", span > Duration.ZERO)
+                assertTrue("Window $i span $span exceeded max $maxDuration", span <= maxDuration)
+                if (i > 0) {
+                    // Contiguous newest-first: previous window's start equals this window's end
+                    assertEquals(windows[i - 1].first, wEnd)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `syncTeslaSuperchargerCharging stays within 1-year API limit, chunks multi-year lookbacks, and formats 400 errors`() = runBlocking {
+        val futureExp = Instant.now().epochSecond + 3600L
+        val jwtWithSc = createJwt(scp = listOf("openid", "vehicle_device_data", "vehicle_charging_cmds"), expEpochSec = futureExp)
+        val m3 = Car(id = "car_m3", make = "Tesla", model = "Model 3", year = 2024, isEv = true, vin = "5YJ3E1EA1PF000001")
+
+        fun parseQueryParam(url: String, name: String): String {
+            val query = url.substringAfter("?", "")
+            val raw = query.split("&").first { it.startsWith("$name=") }.substringAfter("=")
+            return URLDecoder.decode(raw, "UTF-8")
+        }
+
+        // 1) Default initial sync sends 1 UTC window with span <= 364 days (never triggers Tesla's 1-year 400 error)
+        val prefsInitial = createTestPreferencesManager("sc_initial_window")
+        prefsInitial.setTeslaCredentials("cid", "csec", jwtWithSc)
+        val initialUrls = mutableListOf<String>()
+        val clientInitial = createMockClient { url, _ ->
+            initialUrls.add(url)
+            200 to """{"response":{"data":[],"hasMore":false}}"""
+        }
+        val resInitial = OdometerSyncService(prefsInitial, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), clientInitial)
+            .syncTeslaSuperchargerCharging(listOf(m3))
+        assertTrue(resInitial is SuperchargerSyncResult.Synced)
+        assertEquals(1, initialUrls.size)
+        val startStr = parseQueryParam(initialUrls.single(), "startTime")
+        val endStr = parseQueryParam(initialUrls.single(), "endTime")
+        assertTrue("Expected UTC Z timestamp, got $startStr", startStr.endsWith("Z"))
+        assertTrue("Expected UTC Z timestamp, got $endStr", endStr.endsWith("Z"))
+        val span = Duration.between(Instant.parse(startStr), Instant.parse(endStr))
+        assertTrue("Initial window span $span must be <= 364 days", span <= Duration.ofDays(364))
+
+        // 2) Multi-year lookback (500d) queries 2 windows <= 364d each and dedupes boundary sessions
+        val prefsMulti = createTestPreferencesManager("sc_multi_window")
+        prefsMulti.setTeslaCredentials("cid", "csec", jwtWithSc)
+        val multiDao = FakeChargingSessionDao()
+        val multiUrls = mutableListOf<String>()
+        val clientMulti = createMockClient { url, _ ->
+            multiUrls.add(url)
+            val idx = multiUrls.size
+            when (idx) {
+                1 -> 200 to """
+                    {
+                      "response": {
+                        "data": [
+                          {
+                            "sessionId": "w1_s1",
+                            "vin": "5YJ3E1EA1PF000001",
+                            "siteLocationName": "Recent SC",
+                            "chargeStartDateTime": "2026-10-01T12:00:00Z",
+                            "chargeStopDateTime": "2026-10-01T12:20:00Z",
+                            "fees": [{ "feeType": "CHARGING", "uom": "kwh", "usageBase": 25.0, "netDue": 10.0 }]
+                          },
+                          {
+                            "sessionId": "boundary_s",
+                            "vin": "5YJ3E1EA1PF000001",
+                            "siteLocationName": "Boundary SC",
+                            "chargeStartDateTime": "2025-11-26T12:00:00Z",
+                            "chargeStopDateTime": "2025-11-26T12:20:00Z",
+                            "fees": [{ "feeType": "CHARGING", "uom": "kwh", "usageBase": 15.0, "netDue": 6.0 }]
+                          }
+                        ],
+                        "hasMore": false
+                      }
+                    }
+                """.trimIndent()
+                2 -> 200 to """
+                    {
+                      "response": {
+                        "data": [
+                          {
+                            "sessionId": "boundary_s",
+                            "vin": "5YJ3E1EA1PF000001",
+                            "siteLocationName": "Boundary SC",
+                            "chargeStartDateTime": "2025-11-26T12:00:00Z",
+                            "chargeStopDateTime": "2025-11-26T12:20:00Z",
+                            "fees": [{ "feeType": "CHARGING", "uom": "kwh", "usageBase": 15.0, "netDue": 6.0 }]
+                          },
+                          {
+                            "sessionId": "w2_s1",
+                            "vin": "5YJ3E1EA1PF000001",
+                            "siteLocationName": "Older SC",
+                            "chargeStartDateTime": "2025-08-10T12:00:00Z",
+                            "chargeStopDateTime": "2025-08-10T12:25:00Z",
+                            "fees": [{ "feeType": "CHARGING", "uom": "kwh", "usageBase": 30.0, "netDue": 12.0 }]
+                          }
+                        ],
+                        "hasMore": false
+                      }
+                    }
+                """.trimIndent()
+                else -> error("Unexpected request #$idx: $url")
+            }
+        }
+        val resMulti = OdometerSyncService(prefsMulti, FakeCarDao(), FakeOdometerLogDao(), multiDao, clientMulti)
+            .syncTeslaSuperchargerCharging(listOf(m3), lookbackDays = 500)
+        assertTrue(resMulti is SuperchargerSyncResult.Synced)
+        val syncedMulti = resMulti as SuperchargerSyncResult.Synced
+        assertEquals(2, multiUrls.size)
+        multiUrls.forEach { u ->
+            val wSpan = Duration.between(
+                Instant.parse(parseQueryParam(u, "startTime")),
+                Instant.parse(parseQueryParam(u, "endTime"))
+            )
+            assertTrue("Window span $wSpan must be <= 364 days", wSpan <= Duration.ofDays(364))
+        }
+        assertEquals(3, syncedMulti.insertedCount)
+        assertEquals(3, syncedMulti.totalSessionsScanned)
+        assertEquals(70.0, syncedMulti.totalKwhAdded, 0.01)
+        assertEquals(28.0, syncedMulti.totalCostAdded, 0.01)
+
+        // 3) HTTP 400 surfaces Tesla's error detail concisely
+        val prefs400 = createTestPreferencesManager("sc_400")
+        prefs400.setTeslaCredentials("cid", "csec", jwtWithSc)
+        val client400 = createMockClient { _, _ -> 400 to """{"error":"Date range cannot exceed 1 year"}""" }
+        val res400 = OdometerSyncService(prefs400, FakeCarDao(), FakeOdometerLogDao(), FakeChargingSessionDao(), client400)
+            .syncTeslaSuperchargerCharging(listOf(m3))
+        assertTrue(res400 is SuperchargerSyncResult.Error)
+        assertEquals(
+            "Supercharger sync failed: Tesla (400: Date range cannot exceed 1 year)",
+            OdometerSyncService.formatSuperchargerSyncMessage(res400)
+        )
+
+        // 4) Settings/auto-sync (default args) pulls incrementally from latest synced Supercharger session - 1d buffer
+        val prefsInc = createTestPreferencesManager("sc_incremental_latest")
+        prefsInc.setTeslaCredentials("cid", "csec", jwtWithSc)
+        val latestSessionEnd = Instant.now().minusSeconds(5L * 86_400L).truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+        val incDao = FakeChargingSessionDao().apply {
+            sessions.add(
+                ChargingSessionEntity(
+                    id = "sc_tesla_existing",
+                    carId = m3.id,
+                    startDateMs = latestSessionEnd.minusSeconds(1_800L).toEpochMilli(),
+                    endDateMs = latestSessionEnd.toEpochMilli(),
+                    kwh = 32.0,
+                    venue = ElectricityImportParser.VENUE_PUBLIC,
+                    directCost = 12.80,
+                    chargerName = "Supercharger · Existing",
+                    isSummary = false,
+                    fingerprint = "fp_existing_sc",
+                    uploadBatchId = ElectricityImportParser.AUTO_SUPERCHARGER_BATCH_ID,
+                    uploadedAtMs = latestSessionEnd.toEpochMilli()
+                )
+            )
+        }
+        val incUrls = mutableListOf<String>()
+        val clientInc = createMockClient { url, _ ->
+            incUrls.add(url)
+            200 to """{"response":{"data":[],"hasMore":false}}"""
+        }
+        val resInc = OdometerSyncService(prefsInc, FakeCarDao(), FakeOdometerLogDao(), incDao, clientInc)
+            .syncTeslaSuperchargerCharging(listOf(m3))
+        assertTrue(resInc is SuperchargerSyncResult.Synced)
+        assertEquals(1, incUrls.size)
+        val incStart = Instant.parse(parseQueryParam(incUrls.single(), "startTime"))
+        val incEnd = Instant.parse(parseQueryParam(incUrls.single(), "endTime"))
+        assertEquals(latestSessionEnd.minusSeconds(86_400L), incStart)
+        assertTrue(Duration.between(incStart, incEnd) <= Duration.ofDays(7))
+
+        // 5) Explicit Insights period range (startInstant/endInstant) queries only that exact period (clamped to now)
+        val prefsPeriod = createTestPreferencesManager("sc_explicit_period")
+        prefsPeriod.setTeslaCredentials("cid", "csec", jwtWithSc)
+        val periodStart = Instant.parse("2025-08-01T07:00:00Z")
+        val periodEnd = Instant.parse("2025-09-01T06:59:59Z")
+        val periodUrls = mutableListOf<String>()
+        val clientPeriod = createMockClient { url, _ ->
+            periodUrls.add(url)
+            200 to """{"response":{"data":[],"hasMore":false}}"""
+        }
+        val resPeriod = OdometerSyncService(prefsPeriod, FakeCarDao(), FakeOdometerLogDao(), incDao, clientPeriod)
+            .syncTeslaSuperchargerCharging(
+                cars = listOf(m3),
+                startInstant = periodStart,
+                endInstant = periodEnd
+            )
+        assertTrue(resPeriod is SuperchargerSyncResult.Synced)
+        assertEquals(1, periodUrls.size)
+        assertEquals(periodStart, Instant.parse(parseQueryParam(periodUrls.single(), "startTime")))
+        assertEquals(periodEnd, Instant.parse(parseQueryParam(periodUrls.single(), "endTime")))
+    }
+
+    @Test
+    fun `resolveIncrementalSuperchargerWindows and Insights period bounds handle initial, latest-date, stale, and full-year ranges`() {
+        val laZone = ZoneId.of("America/Los_Angeles")
+        val nowInstant = Instant.parse("2026-11-24T18:15:00Z") // Tue Nov 24, 2026 10:15 PST
+        val maxDuration = Duration.ofDays(OdometerSyncService.TESLA_CHARGING_HISTORY_MAX_WINDOW_DAYS.toLong())
+
+        // 1) No Supercharger sessions (even if Home Wall Connector sessions exist) -> 364d initial backfill
+        val homeOnlySession = ChargingSessionEntity(
+            id = "wc_1",
+            carId = "car_m3",
+            startDateMs = nowInstant.minusSeconds(2L * 86_400L).toEpochMilli(),
+            endDateMs = nowInstant.minusSeconds(2L * 86_400L).toEpochMilli(),
+            kwh = 20.0,
+            venue = ElectricityImportParser.VENUE_HOME,
+            directCost = null,
+            chargerName = "Wall Connector",
+            isSummary = false,
+            fingerprint = "fp_wc_1",
+            uploadBatchId = ElectricityImportParser.AUTO_WALL_CONNECTOR_BATCH_ID,
+            uploadedAtMs = nowInstant.toEpochMilli()
+        )
+        val initialWindows = OdometerSyncService.resolveIncrementalSuperchargerWindows(
+            existingSessions = listOf(homeOnlySession),
+            nowInstant = nowInstant,
+            zoneId = laZone
+        )
+        assertEquals(1, initialWindows.size)
+        assertEquals(maxDuration, Duration.between(initialWindows.single().first, initialWindows.single().second))
+
+        // 2) Existing synced Supercharger session -> starts at latest session end minus 1-day buffer
+        val latestScEnd = Instant.parse("2026-11-10T20:00:00Z")
+        val recentScSession = homeOnlySession.copy(
+            id = "sc_tesla_1",
+            startDateMs = latestScEnd.minusSeconds(1_200L).toEpochMilli(),
+            endDateMs = latestScEnd.toEpochMilli(),
+            venue = ElectricityImportParser.VENUE_PUBLIC,
+            uploadBatchId = ElectricityImportParser.AUTO_SUPERCHARGER_BATCH_ID
+        )
+        val incrementalWindows = OdometerSyncService.resolveIncrementalSuperchargerWindows(
+            existingSessions = listOf(homeOnlySession, recentScSession),
+            nowInstant = nowInstant,
+            zoneId = laZone
+        )
+        assertEquals(1, incrementalWindows.size)
+        assertEquals(Instant.parse("2026-11-09T20:00:00Z"), incrementalWindows.single().first)
+        assertEquals(nowInstant, incrementalWindows.single().second)
+
+        // 3) Stale Supercharger session (>364 days old) -> clamped to 364d so incremental sync stays 1 request
+        val staleScSession = recentScSession.copy(
+            id = "sc_tesla_old",
+            startDateMs = Instant.parse("2025-05-01T12:00:00Z").toEpochMilli(),
+            endDateMs = Instant.parse("2025-05-01T12:30:00Z").toEpochMilli()
+        )
+        val staleWindows = OdometerSyncService.resolveIncrementalSuperchargerWindows(
+            existingSessions = listOf(staleScSession),
+            nowInstant = nowInstant,
+            zoneId = laZone
+        )
+        assertEquals(1, staleWindows.size)
+        assertEquals(maxDuration, Duration.between(staleWindows.single().first, staleWindows.single().second))
+
+        // 4) Insights selected Week (current) clamps Sunday end down to now
+        val (weekStartMs, weekEndMs) = InsightsCalculationEngine.resolvePeriodBounds(
+            granularity = InsightsTimeGranularity.WEEKLY,
+            periodOffset = 0,
+            nowMs = nowInstant.toEpochMilli(),
+            zoneId = laZone
+        )
+        val weekWindows = OdometerSyncService.buildSuperchargerDateWindowsForRange(
+            startInstant = Instant.ofEpochMilli(weekStartMs),
+            endInstant = Instant.ofEpochMilli(weekEndMs),
+            nowInstant = nowInstant
+        )
+        assertEquals(1, weekWindows.size)
+        assertEquals(LocalDate.of(2026, 11, 23).atStartOfDay(laZone).toInstant(), weekWindows.single().first)
+        assertEquals(nowInstant, weekWindows.single().second)
+
+        // 5) Insights selected past Month (September 2026) queries exact month bounds
+        val (sepStartMs, sepEndMs) = InsightsCalculationEngine.resolvePeriodBounds(
+            granularity = InsightsTimeGranularity.MONTHLY,
+            periodOffset = -2,
+            nowMs = nowInstant.toEpochMilli(),
+            zoneId = laZone
+        )
+        val sepWindows = OdometerSyncService.buildSuperchargerDateWindowsForRange(
+            startInstant = Instant.ofEpochMilli(sepStartMs),
+            endInstant = Instant.ofEpochMilli(sepEndMs),
+            nowInstant = nowInstant
+        )
+        assertEquals(1, sepWindows.size)
+        assertEquals(LocalDate.of(2026, 9, 1).atStartOfDay(laZone).toInstant(), sepWindows.single().first)
+        assertEquals(
+            LocalDate.of(2026, 9, 30).atTime(23, 59, 59).atZone(laZone).toInstant(),
+            sepWindows.single().second
+        )
+
+        // 6) Insights selected past full Year (2024 leap year) splits cleanly into 2 windows <= 364 days
+        val (yr2024StartMs, yr2024EndMs) = InsightsCalculationEngine.resolvePeriodBounds(
+            granularity = InsightsTimeGranularity.YTD,
+            periodOffset = -2,
+            nowMs = nowInstant.toEpochMilli(),
+            zoneId = laZone
+        )
+        val yr2024Windows = OdometerSyncService.buildSuperchargerDateWindowsForRange(
+            startInstant = Instant.ofEpochMilli(yr2024StartMs),
+            endInstant = Instant.ofEpochMilli(yr2024EndMs),
+            nowInstant = nowInstant
+        )
+        assertEquals(2, yr2024Windows.size)
+        yr2024Windows.forEach { (wStart, wEnd) ->
+            assertTrue(Duration.between(wStart, wEnd) <= maxDuration)
+        }
+        assertEquals(LocalDate.of(2024, 1, 1).atStartOfDay(laZone).toInstant(), yr2024Windows.last().first)
+        assertEquals(
+            LocalDate.of(2024, 12, 31).atTime(23, 59, 59).atZone(laZone).toInstant(),
+            yr2024Windows.first().second
+        )
     }
 
     // --- Capability-Aware Smartcar v3 DC Charging ---

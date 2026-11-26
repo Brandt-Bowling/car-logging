@@ -1106,6 +1106,40 @@ object InsightsCalculationEngine {
         val endMs: Long
     )
 
+    fun resolvePeriodBounds(
+        granularity: InsightsTimeGranularity,
+        periodOffset: Int = 0,
+        nowMs: Long = System.currentTimeMillis(),
+        zoneId: ZoneId = this.zoneId
+    ): Pair<Long, Long> {
+        val now = Instant.ofEpochMilli(nowMs).atZone(zoneId).toLocalDate()
+        return when (granularity) {
+            InsightsTimeGranularity.WEEKLY -> {
+                val targetWeekStart = now.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                    .plusWeeks(periodOffset.toLong())
+                val targetWeekEnd = targetWeekStart.plusDays(6)
+                Pair(
+                    targetWeekStart.atStartOfDay(zoneId).toInstant().toEpochMilli(),
+                    targetWeekEnd.atTime(23, 59, 59, 999_000_000).atZone(zoneId).toInstant().toEpochMilli()
+                )
+            }
+            InsightsTimeGranularity.MONTHLY -> {
+                val targetYm = YearMonth.from(now).plusMonths(periodOffset.toLong())
+                Pair(
+                    targetYm.atDay(1).atStartOfDay(zoneId).toInstant().toEpochMilli(),
+                    targetYm.atEndOfMonth().atTime(23, 59, 59, 999_000_000).atZone(zoneId).toInstant().toEpochMilli()
+                )
+            }
+            InsightsTimeGranularity.YTD -> {
+                val targetYear = now.year + periodOffset
+                Pair(
+                    LocalDate.of(targetYear, 1, 1).atStartOfDay(zoneId).toInstant().toEpochMilli(),
+                    LocalDate.of(targetYear, 12, 31).atTime(23, 59, 59, 999_000_000).atZone(zoneId).toInstant().toEpochMilli()
+                )
+            }
+        }
+    }
+
     private fun generateIntervals(
         granularity: InsightsTimeGranularity,
         periodOffset: Int,

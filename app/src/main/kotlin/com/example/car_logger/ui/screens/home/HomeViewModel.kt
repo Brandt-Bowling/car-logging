@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Instant
 import java.util.Locale
 import java.util.UUID
 
@@ -666,7 +667,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun syncPublicCharging() {
         viewModelScope.launch {
             val currentCars = cars.value.ifEmpty { carDao.getAllCarsList().map { it.toModel() } }
-            val scResult = odometerSyncService.syncTeslaSuperchargerCharging(currentCars)
+            val (periodStartMs, periodEndMs) = InsightsCalculationEngine.resolvePeriodBounds(
+                granularity = insightsGranularity.value,
+                periodOffset = insightsPeriodOffset.value,
+                nowMs = System.currentTimeMillis()
+            )
+            val scResult = odometerSyncService.syncTeslaSuperchargerCharging(
+                cars = currentCars,
+                startInstant = Instant.ofEpochMilli(periodStartMs),
+                endInstant = Instant.ofEpochMilli(periodEndMs)
+            )
             val smartcarResult = odometerSyncService.syncSmartcarDcCharging(
                 cars = currentCars,
                 forceCapabilityRecheck = true,
