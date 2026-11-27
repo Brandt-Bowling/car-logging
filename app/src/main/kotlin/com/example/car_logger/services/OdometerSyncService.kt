@@ -13,6 +13,15 @@ import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.di.AppContainer
+import com.example.car_logger.services.telemetry.TelemetryJsonUtils
+import com.example.car_logger.services.telemetry.TelemetryStatusFormatters
+import com.example.car_logger.services.telemetry.TelemetrySyncStateSink
+import com.example.car_logger.services.telemetry.asBooleanOrNull
+import com.example.car_logger.services.telemetry.asDoubleOrNull
+import com.example.car_logger.services.telemetry.asIntOrNull
+import com.example.car_logger.services.telemetry.asLongOrNull
+import com.example.car_logger.services.telemetry.asStringOrNull
+import com.example.car_logger.services.telemetry.telemetryJson
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -57,171 +66,6 @@ import kotlin.math.roundToLong
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-enum class WallConnectorType(val label: String, val defaultChargerName: String) {
-    GEN_3("Gen 3 Wall Connector", "Tesla Wall Connector (Gen 3)"),
-    UNIVERSAL("Universal Wall Connector", "Tesla Universal Wall Connector")
-}
-
-data class TeslaWallConnectorDevice(
-    val energySiteId: String,
-    val din: String? = null,
-    val partNumber: String? = null,
-    val siteName: String? = null,
-    val connectorType: WallConnectorType
-)
-
-data class TeslaWallConnectorChargeSession(
-    val energySiteId: String,
-    val din: String? = null,
-    val vin: String? = null,
-    val startDateMs: Long,
-    val endDateMs: Long,
-    val energyWh: Double
-)
-
-sealed class WallConnectorSyncResult {
-    data class Synced(
-        val insertedCount: Int,
-        val totalKwhAdded: Double,
-        val totalSessionsScanned: Int
-    ) : WallConnectorSyncResult()
-    data object NotConfigured : WallConnectorSyncResult()
-    data class NoDevices(val message: String = "No Wall Connectors found on Tesla account") : WallConnectorSyncResult()
-    data class MissingScope(val message: String) : WallConnectorSyncResult()
-    data class Error(val message: String) : WallConnectorSyncResult()
-}
-
-data class TeslaChargeSnapshot(
-    val vin: String,
-    val chargeEnergyAddedKwh: Double,
-    val chargingState: String? = null,
-    val fastChargerPresent: Boolean = false,
-    val fastChargerType: String? = null,
-    val connChargeCable: String? = null,
-    val batteryLevel: Int? = null,
-    val timestampMs: Long? = null,
-    val odometerMiles: Int? = null,
-    val latitude: Double? = null,
-    val longitude: Double? = null,
-    val isCachedResponse: Boolean = false
-)
-
-data class WorkLocationConfig(
-    val latitude: Double,
-    val longitude: Double,
-    val radiusMeters: Int = PreferencesManager.DEFAULT_WORK_LOCATION_RADIUS_METERS
-)
-
-sealed class WorkChargeDecision {
-    data class CaptureNew(
-        val energyKwh: Double,
-        val sessionId: String,
-        val verifiedByGps: Boolean
-    ) : WorkChargeDecision()
-
-    data class UpdateExisting(
-        val existingSession: ChargingSessionEntity,
-        val updatedEnergyKwh: Double,
-        val verifiedByGps: Boolean
-    ) : WorkChargeDecision()
-
-    data class AlreadyLogged(val energyKwh: Double) : WorkChargeDecision()
-
-    data class Skip(
-        val reason: String,
-        val watermarkVenue: String?
-    ) : WorkChargeDecision()
-}
-
-sealed class WorkChargingSyncResult {
-    data class Captured(
-        val kwh: Double,
-        val updatedExisting: Boolean,
-        val verifiedByGps: Boolean
-    ) : WorkChargingSyncResult()
-
-    data class UpToDate(val message: String) : WorkChargingSyncResult()
-    data class SkippedAsleep(val message: String = "Tesla asleep (zero-wake check skipped)") : WorkChargingSyncResult()
-    data object NotConfigured : WorkChargingSyncResult()
-    data class Error(val message: String) : WorkChargingSyncResult()
-}
-
-sealed class WorkLocationCaptureResult {
-    data class Saved(val latitude: Double, val longitude: Double) : WorkLocationCaptureResult()
-    data class MissingScope(val message: String) : WorkLocationCaptureResult()
-    data class SkippedAsleep(val message: String = "Tesla is asleep — wake vehicle to save work location") : WorkLocationCaptureResult()
-    data object NotConfigured : WorkLocationCaptureResult()
-    data class Error(val message: String) : WorkLocationCaptureResult()
-}
-
-data class TeslaSuperchargerSession(
-    val sessionId: String,
-    val vin: String? = null,
-    val vehicleMakeType: String? = null,
-    val siteLocationName: String? = null,
-    val startDateMs: Long,
-    val endDateMs: Long,
-    val energyKwh: Double,
-    val totalPaidCost: Double,
-    val currencyCode: String? = null
-)
-
-sealed class SuperchargerSyncResult {
-    data class Synced(
-        val insertedCount: Int,
-        val totalKwhAdded: Double,
-        val totalCostAdded: Double,
-        val totalSessionsScanned: Int
-    ) : SuperchargerSyncResult()
-
-    data object NotConfigured : SuperchargerSyncResult()
-    data class MissingScope(val message: String) : SuperchargerSyncResult()
-    data class Error(val message: String) : SuperchargerSyncResult()
-}
-
-data class SmartcarChargeRecord(
-    val id: String,
-    val startDateMs: Long,
-    val endDateMs: Long,
-    val energyKwh: Double,
-    val chargingType: String? = null,
-    val isPublicCharger: Boolean? = null,
-    val costTotal: Double? = null,
-    val locationName: String? = null
-)
-
-data class SmartcarLiveDcSnapshot(
-    val isFastChargerPresent: Boolean? = null,
-    val fastChargerType: String? = null,
-    val wattageWatts: Double? = null,
-    val energyAddedKwh: Double? = null,
-    val isCharging: Boolean? = null
-)
-
-sealed class SmartcarDcSyncResult {
-    data class Synced(
-        val insertedCount: Int,
-        val totalKwhAdded: Double,
-        val totalCostAdded: Double,
-        val source: String
-    ) : SmartcarDcSyncResult()
-
-    data object NotConfigured : SmartcarDcSyncResult()
-    data class MissingPermission(val message: String) : SmartcarDcSyncResult()
-    data class UnsupportedByVehicle(val message: String) : SmartcarDcSyncResult()
-    data class NotCurrentlyFastCharging(val message: String) : SmartcarDcSyncResult()
-    data class Error(val message: String) : SmartcarDcSyncResult()
-}
-
-sealed class OdometerSyncResult {
-    data class Updated(val carId: String, val odometerMiles: Int, val provider: String) : OdometerSyncResult()
-    data class SkippedAsleep(val carId: String) : OdometerSyncResult()
-    data class SkippedCooldown(val carId: String, val hoursRemaining: Int) : OdometerSyncResult()
-    data class SkippedPolicy(val carId: String, val policy: WakeProtectionPolicy) : OdometerSyncResult()
-    data class NotConfigured(val carId: String) : OdometerSyncResult()
-    data class Error(val carId: String, val message: String) : OdometerSyncResult()
-}
-
 class OdometerSyncService(
     private val preferencesManager: PreferencesManager,
     private val carDao: CarDao,
@@ -230,13 +74,15 @@ class OdometerSyncService(
     internal val client: OkHttpClient = AppContainer.defaultHttpClient
 ) {
     internal suspend fun recordOdometerReading(carId: String, odometer: Int, provider: String, syncTime: Long) {
-        recordOdometerReading(carDao, odometerLogDao, carId, odometer, provider, syncTime)
+        TelemetryJsonUtils.recordOdometerReading(carDao, odometerLogDao, carId, odometer, provider, syncTime)
     }
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
     private val _lastSyncMessage = MutableStateFlow<String?>(null)
     val lastSyncMessage: StateFlow<String?> = _lastSyncMessage.asStateFlow()
+
+    internal val stateSink = TelemetrySyncStateSink(_isSyncing, _lastSyncMessage)
 
     companion object {
         private const val TAG = "OdometerSyncService"
@@ -248,56 +94,7 @@ class OdometerSyncService(
             odometer: Int,
             provider: String,
             syncTime: Long
-        ) {
-            val existingCar = carDao.getCarById(carId)
-            val prevOdo = existingCar?.odometer
-            val prevSyncTime = existingCar?.lastOdometerSyncTime
-
-            carDao.updateOdometerFromTelemetry(
-                carId = carId,
-                odometer = odometer,
-                provider = provider,
-                status = "Synced",
-                syncTime = syncTime
-            )
-            try {
-                val latest = odometerLogDao?.getLatestLogForCar(carId)
-                if (latest == null) {
-                    // If there were no prior logs for this car, record baseline if car had a prior verified odometer
-                    if (prevOdo != null && prevOdo > 0 && prevOdo < odometer) {
-                        val baselineTime = if (prevSyncTime != null && prevSyncTime < syncTime) prevSyncTime else (syncTime - 86_400_000L)
-                        odometerLogDao?.insertLog(
-                            OdometerLogEntity(
-                                id = UUID.randomUUID().toString(),
-                                carId = carId,
-                                odometer = prevOdo,
-                                timestamp = baselineTime,
-                                source = provider
-                            )
-                        )
-                    }
-                    odometerLogDao?.insertLog(
-                        OdometerLogEntity(
-                            id = UUID.randomUUID().toString(),
-                            carId = carId,
-                            odometer = odometer,
-                            timestamp = syncTime,
-                            source = provider
-                        )
-                    )
-                } else if (shouldRecordOdometerLog(latest, odometer, syncTime)) {
-                    odometerLogDao?.insertLog(
-                        OdometerLogEntity(
-                            id = UUID.randomUUID().toString(),
-                            carId = carId,
-                            odometer = odometer,
-                            timestamp = syncTime,
-                            source = provider
-                        )
-                    )
-                }
-            } catch (_: Exception) {}
-        }
+        ) = TelemetryJsonUtils.recordOdometerReading(carDao, odometerLogDao, carId, odometer, provider, syncTime)
 
         const val PROVIDER_SMARTCAR = "SMARTCAR"
         const val PROVIDER_TESLA = "TESLA_FLEET"
@@ -336,66 +133,22 @@ class OdometerSyncService(
         internal const val DEFAULT_SUPERCHARGER_INITIAL_LOOKBACK_DAYS = 364
         internal const val SUPERCHARGER_INCREMENTAL_OVERLAP_DAYS = 1
 
-        private val json = Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-        }
+        private val json get() = telemetryJson
 
-        private fun JsonElement?.asStringOrNull(): String? =
-            (this as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        internal fun parseJwtClaims(token: String): JsonObject? =
+            TelemetryJsonUtils.parseJwtClaims(token)
 
-        private fun JsonElement?.asDoubleOrNull(): Double? =
-            (this as? JsonPrimitive)?.doubleOrNull
+        internal fun extractJwtExpiryMs(token: String): Long? =
+            TelemetryJsonUtils.extractJwtExpiryMs(token)
 
-        private fun JsonElement?.asLongOrNull(): Long? =
-            (this as? JsonPrimitive)?.longOrNull
+        internal fun extractJwtScopes(token: String): Set<String>? =
+            TelemetryJsonUtils.extractJwtScopes(token)
 
-        private fun JsonElement?.asIntOrNull(): Int? =
-            (this as? JsonPrimitive)?.intOrNull
+        fun hasTeslaLocationScope(token: String?): Boolean =
+            TelemetryJsonUtils.hasTeslaLocationScope(token)
 
-        private fun JsonElement?.asBooleanOrNull(): Boolean? =
-            (this as? JsonPrimitive)?.booleanOrNull
-
-        internal fun parseJwtClaims(token: String): JsonObject? {
-            val parts = token.trim().split(".")
-            if (parts.size != 3 || parts[1].isBlank()) return null
-            return try {
-                val decoded = java.util.Base64.getUrlDecoder().decode(parts[1])
-                json.parseToJsonElement(String(decoded, Charsets.UTF_8)) as? JsonObject
-            } catch (_: Exception) {
-                null
-            }
-        }
-
-        internal fun extractJwtExpiryMs(token: String): Long? {
-            val expSec = parseJwtClaims(token)?.get("exp").asLongOrNull() ?: return null
-            return if (expSec > 0L) expSec * 1000L else null
-        }
-
-        internal fun extractJwtScopes(token: String): Set<String>? {
-            val claims = parseJwtClaims(token) ?: return null
-            val scpElem = claims["scp"] ?: claims["scope"] ?: return null
-            val scopes = when (scpElem) {
-                is JsonArray -> scpElem.mapNotNull { it.asStringOrNull() }
-                is JsonPrimitive -> scpElem.contentOrNull
-                    ?.split(Regex("[\\s,]+"))
-                    ?.map { it.trim() }
-                    ?.filter { it.isNotEmpty() }
-                    ?: emptyList()
-                else -> emptyList()
-            }
-            return scopes.toSet().takeIf { it.isNotEmpty() }
-        }
-
-        fun hasTeslaLocationScope(token: String?): Boolean {
-            if (token.isNullOrBlank()) return false
-            return extractJwtScopes(token)?.contains(TESLA_SCOPE_VEHICLE_LOCATION) == true
-        }
-
-        fun hasTeslaChargingHistoryScope(token: String?): Boolean {
-            if (token.isNullOrBlank()) return false
-            return extractJwtScopes(token)?.contains(TESLA_SCOPE_VEHICLE_CHARGING_CMDS) == true
-        }
+        fun hasTeslaChargingHistoryScope(token: String?): Boolean =
+            TelemetryJsonUtils.hasTeslaChargingHistoryScope(token)
 
         internal fun parseTeslaErrorDetail(rawBody: String): String? {
             val trimmed = rawBody.trim()
@@ -436,32 +189,16 @@ class OdometerSyncService(
             lastSyncMs: Long?,
             cooldownHours: Int,
             nowMs: Long = System.currentTimeMillis()
-        ): Boolean {
-            if (lastSyncMs == null || lastSyncMs <= 0L || cooldownHours <= 0) return false
-            val elapsedMs = nowMs - lastSyncMs
-            return elapsedMs in 0 until (cooldownHours * 3_600_000L)
-        }
+        ): Boolean = TelemetryJsonUtils.isCooldownActive(lastSyncMs, cooldownHours, nowMs)
 
         fun remainingCooldownHours(
             lastSyncMs: Long?,
             cooldownHours: Int,
             nowMs: Long = System.currentTimeMillis()
-        ): Int {
-            if (!isCooldownActive(lastSyncMs, cooldownHours, nowMs)) return 0
-            val remainingMs = (cooldownHours * 3_600_000L) - (nowMs - (lastSyncMs ?: 0L))
-            return ceil(remainingMs / 3_600_000.0).toInt().coerceAtLeast(1)
-        }
+        ): Int = TelemetryJsonUtils.remainingCooldownHours(lastSyncMs, cooldownHours, nowMs)
 
-        fun formatRelativeTime(timestampMs: Long?, nowMs: Long = System.currentTimeMillis()): String? {
-            if (timestampMs == null || timestampMs <= 0L) return null
-            val diffMinutes = ((nowMs - timestampMs) / 60_000L).coerceAtLeast(0L)
-            return when {
-                diffMinutes < 1 -> "just now"
-                diffMinutes < 60 -> "${diffMinutes}m ago"
-                diffMinutes < 1440 -> "${diffMinutes / 60}h ago"
-                else -> "${diffMinutes / 1440}d ago"
-            }
-        }
+        fun formatRelativeTime(timestampMs: Long?, nowMs: Long = System.currentTimeMillis()): String? =
+            TelemetryJsonUtils.formatRelativeTime(timestampMs, nowMs)
 
         fun parseSmartcarOdometerMiles(jsonBody: String): Int? {
             return try {
@@ -593,85 +330,17 @@ class OdometerSyncService(
             }
         }
 
-        fun formatSyncResultMessage(car: Car, result: OdometerSyncResult): String {
-            val name = car.displayName
-            return when (result) {
-                is OdometerSyncResult.Updated -> {
-                    val formatted = java.text.NumberFormat.getNumberInstance(java.util.Locale.US).format(result.odometerMiles)
-                    "Synced $name: $formatted mi"
-                }
-                is OdometerSyncResult.SkippedAsleep ->
-                    "$name is asleep"
-                is OdometerSyncResult.SkippedCooldown ->
-                    "$name synced recently (${result.hoursRemaining}h cooldown)"
-                is OdometerSyncResult.SkippedPolicy ->
-                    "$name sync skipped (${result.policy.label})"
-                is OdometerSyncResult.NotConfigured ->
-                    "$name isn't connected — set up in Settings"
-                is OdometerSyncResult.Error ->
-                    "Couldn't sync $name: ${result.message}"
-            }
-        }
+        fun formatSyncResultMessage(car: Car, result: OdometerSyncResult): String =
+            TelemetryStatusFormatters.formatSyncResultMessage(car, result)
 
         fun formatDailyPollSummary(
             cars: List<Car>,
             results: List<OdometerSyncResult>,
             chargerResult: WallConnectorSyncResult? = null
-        ): String {
-            if (cars.isEmpty() && results.isEmpty()) {
-                return "No vehicles set up"
-            }
-            val updatedCount = results.count { it is OdometerSyncResult.Updated }
-            val baseSummary = if (updatedCount == results.size && updatedCount > 0) {
-                if (updatedCount == 1) "Synced 1 vehicle" else "Synced $updatedCount vehicles"
-            } else {
-                val carMap = cars.associateBy { it.id }
-                val details = results.mapNotNull { res ->
-                    when (res) {
-                        is OdometerSyncResult.Updated -> carMap[res.carId]?.model?.let { "$it: synced" }
-                        is OdometerSyncResult.SkippedAsleep -> carMap[res.carId]?.model?.let { "$it: asleep" }
-                        is OdometerSyncResult.NotConfigured -> carMap[res.carId]?.model?.let { "$it: not connected" }
-                        is OdometerSyncResult.Error -> carMap[res.carId]?.model?.let { "$it: error" }
-                        else -> null
-                    }
-                }
-                if (details.isNotEmpty()) details.joinToString(", ") else "Daily sync completed"
-            }
+        ): String = TelemetryStatusFormatters.formatDailyPollSummary(cars, results, chargerResult)
 
-            return if (chargerResult is WallConnectorSyncResult.Synced && chargerResult.insertedCount > 0) {
-                val kwhStr = String.format(Locale.US, "%.1f", chargerResult.totalKwhAdded)
-                "$baseSummary • +$kwhStr kWh"
-            } else {
-                baseSummary
-            }
-        }
-
-        fun formatWallConnectorSyncMessage(result: WallConnectorSyncResult): String {
-            return when (result) {
-                is WallConnectorSyncResult.Synced -> {
-                    when {
-                        result.insertedCount > 0 -> {
-                            val kwhStr = String.format(Locale.US, "%.1f", result.totalKwhAdded)
-                            val label = if (result.insertedCount == 1) "session" else "sessions"
-                            "Synced ${result.insertedCount} Wall Connector $label (+$kwhStr kWh)"
-                        }
-                        result.totalSessionsScanned > 0 -> {
-                            val label = if (result.totalSessionsScanned == 1) "session" else "sessions"
-                            "Wall Connectors up to date (${result.totalSessionsScanned} $label checked)"
-                        }
-                        else -> "Wall Connectors synced (no new sessions)"
-                    }
-                }
-                is WallConnectorSyncResult.NotConfigured ->
-                    "Tesla isn't connected — set up in Settings"
-                is WallConnectorSyncResult.NoDevices ->
-                    result.message
-                is WallConnectorSyncResult.MissingScope ->
-                    result.message
-                is WallConnectorSyncResult.Error ->
-                    "Wall Connector sync failed: ${result.message}"
-            }
-        }
+        fun formatWallConnectorSyncMessage(result: WallConnectorSyncResult): String =
+            TelemetryStatusFormatters.formatWallConnectorSyncMessage(result)
 
         private fun extractPartNumberFromDin(din: String?): String? {
             if (din.isNullOrBlank()) return null
@@ -992,72 +661,11 @@ class OdometerSyncService(
             }
         }
 
-        private fun parseFlexibleTimestampMs(raw: JsonElement?): Long? {
-            if (raw is JsonObject) {
-                val secElem = raw["seconds"]
-                    ?: raw["epoch_seconds"]
-                    ?: raw["unix"]
-                    ?: raw["timestamp"]
-                    ?: raw["ms"]
-                    ?: raw["millis"]
-                    ?: raw["value"]
-                    ?: raw["iso"]
-                    ?: raw["date"]
-                val baseMs = parseFlexibleTimestampMs(secElem) ?: return null
-                val nanos = raw["nanos"].asLongOrNull()
-                    ?: raw["nanoseconds"].asLongOrNull()
-                    ?: 0L
-                return baseMs + (nanos / 1_000_000L)
-            }
-            val prim = raw as? JsonPrimitive ?: return null
-            prim.longOrNull?.let { num ->
-                // Distinguish epoch seconds vs epoch milliseconds
-                return if (num < 100_000_000_000L) num * 1000L else num
-            }
-            val text = prim.contentOrNull?.trim().orEmpty()
-            if (text.isEmpty()) return null
-            text.toLongOrNull()?.let { num ->
-                return if (num < 100_000_000_000L) num * 1000L else num
-            }
-            (prim.doubleOrNull ?: text.toDoubleOrNull())?.let { num ->
-                if (num.isFinite() && num > 0.0) {
-                    return if (num < 100_000_000_000.0) (num * 1000.0).roundToLong() else num.roundToLong()
-                }
-            }
-            return runCatching { Instant.parse(text).toEpochMilli() }.getOrNull()
-                ?: runCatching { OffsetDateTime.parse(text).toInstant().toEpochMilli() }.getOrNull()
-                ?: runCatching { ZonedDateTime.parse(text).toInstant().toEpochMilli() }.getOrNull()
-                ?: ElectricityImportParser.parseDateToStartOfDayMs(text)
-        }
+        private fun parseFlexibleTimestampMs(raw: JsonElement?): Long? =
+            TelemetryJsonUtils.parseFlexibleTimestampMs(raw)
 
-        private fun parseFlexibleDurationSeconds(raw: JsonElement?): Long? {
-            if (raw is JsonObject) {
-                val sec = raw["seconds"].asDoubleOrNull()
-                    ?: raw["value"].asDoubleOrNull()
-                    ?: raw["duration_seconds"].asDoubleOrNull()
-                    ?: raw["duration"].asDoubleOrNull()
-                if (sec != null && sec.isFinite() && sec >= 0.0) {
-                    val nanos = raw["nanos"].asLongOrNull()
-                        ?: raw["nanoseconds"].asLongOrNull()
-                        ?: 0L
-                    return (sec + (nanos / 1_000_000_000.0)).roundToLong().takeIf { it >= 0L }
-                }
-                val nested = raw["seconds"] ?: raw["value"] ?: raw["duration"]
-                return parseFlexibleDurationSeconds(nested)
-            }
-            val prim = raw as? JsonPrimitive ?: return null
-            prim.longOrNull?.let { num -> return num.takeIf { it >= 0L } }
-            prim.doubleOrNull?.let { num ->
-                if (num.isFinite() && num >= 0.0) return num.roundToLong()
-            }
-            val text = prim.contentOrNull?.trim().orEmpty()
-            if (text.isEmpty()) return null
-            text.toLongOrNull()?.let { return it.takeIf { v -> v >= 0L } }
-            text.toDoubleOrNull()?.let { num ->
-                if (num.isFinite() && num >= 0.0) return num.roundToLong()
-            }
-            return runCatching { java.time.Duration.parse(text).seconds }.getOrNull()?.takeIf { it >= 0L }
-        }
+        private fun parseFlexibleDurationSeconds(raw: JsonElement?): Long? =
+            TelemetryJsonUtils.parseFlexibleDurationSeconds(raw)
 
         fun parseTeslaWallConnectorChargeHistory(
             jsonBody: String,
@@ -1361,38 +969,13 @@ class OdometerSyncService(
             newOdometer: Int,
             syncTimeMs: Long,
             zoneId: ZoneId = ZoneId.systemDefault()
-        ): Boolean {
-            if (latestLog == null) return true
-            if (newOdometer > latestLog.odometer) return true
-            if (newOdometer < latestLog.odometer) return false
-            if (syncTimeMs <= latestLog.timestamp) return false
+        ): Boolean = TelemetryJsonUtils.shouldRecordOdometerLog(latestLog, newOdometer, syncTimeMs, zoneId)
 
-            val prevDate = Instant.ofEpochMilli(latestLog.timestamp).atZone(zoneId).toLocalDate()
-            val newDate = Instant.ofEpochMilli(syncTimeMs).atZone(zoneId).toLocalDate()
-            return newDate != prevDate || (syncTimeMs - latestLog.timestamp) >= 3_600_000L
-        }
+        fun resolveProviderForCar(car: Car): String? =
+            TelemetryJsonUtils.resolveProviderForCar(car)
 
-        fun resolveProviderForCar(car: Car): String? {
-            if (!car.telemetryProvider.isNullOrBlank()) return car.telemetryProvider
-            val makeLower = car.make.lowercase()
-            return when {
-                makeLower.contains("tesla") -> PROVIDER_TESLA
-                makeLower.contains("chevrolet") || makeLower.contains("chevy") ||
-                    makeLower.contains("gmc") || makeLower.contains("cadillac") -> PROVIDER_SMARTCAR
-                else -> null
-            }
-        }
-
-        fun haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
-            val earthRadiusMeters = 6_371_000.0
-            val dLat = Math.toRadians(lat2 - lat1)
-            val dLng = Math.toRadians(lng2 - lng1)
-            val a = sin(dLat / 2.0) * sin(dLat / 2.0) +
-                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-                sin(dLng / 2.0) * sin(dLng / 2.0)
-            val c = 2.0 * atan2(sqrt(a), sqrt(1.0 - a))
-            return earthRadiusMeters * c
-        }
+        fun haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double =
+            TelemetryJsonUtils.haversineMeters(lat1, lng1, lat2, lng2)
 
         fun parseTeslaChargeSnapshot(
             jsonBody: String,
@@ -1544,21 +1127,8 @@ class OdometerSyncService(
             )
         }
 
-        fun formatWorkChargingSyncMessage(result: WorkChargingSyncResult): String = when (result) {
-            is WorkChargingSyncResult.Captured -> {
-                val kwhStr = String.format(Locale.US, "%.1f", result.kwh)
-                val suffix = if (result.verifiedByGps) " · GPS verified" else ""
-                if (result.updatedExisting) {
-                    "Updated work charge: $kwhStr kWh (Free$suffix)"
-                } else {
-                    "Logged work charge: $kwhStr kWh (Free$suffix)"
-                }
-            }
-            is WorkChargingSyncResult.UpToDate -> result.message
-            is WorkChargingSyncResult.SkippedAsleep -> result.message
-            WorkChargingSyncResult.NotConfigured -> "Connect Tesla in Settings to capture work charging"
-            is WorkChargingSyncResult.Error -> "Work charge sync failed: ${result.message}"
-        }
+        fun formatWorkChargingSyncMessage(result: WorkChargingSyncResult): String =
+            TelemetryStatusFormatters.formatWorkChargingSyncMessage(result)
 
         internal fun buildSuperchargerDateWindows(
             endInstant: Instant,
@@ -1873,21 +1443,8 @@ class OdometerSyncService(
             return entities
         }
 
-        fun formatSuperchargerSyncMessage(result: SuperchargerSyncResult): String = when (result) {
-            is SuperchargerSyncResult.Synced -> {
-                if (result.insertedCount > 0) {
-                    val label = if (result.insertedCount == 1) "session" else "sessions"
-                    val costStr = String.format(Locale.US, "$%.2f", result.totalCostAdded)
-                    val kwhStr = String.format(Locale.US, "%.1f", result.totalKwhAdded)
-                    "Synced ${result.insertedCount} Supercharger $label ($kwhStr kWh · $costStr)"
-                } else {
-                    "Superchargers up to date"
-                }
-            }
-            SuperchargerSyncResult.NotConfigured -> "Connect Tesla in Settings to sync Superchargers"
-            is SuperchargerSyncResult.MissingScope -> result.message
-            is SuperchargerSyncResult.Error -> "Supercharger sync failed: ${result.message}"
-        }
+        fun formatSuperchargerSyncMessage(result: SuperchargerSyncResult): String =
+            TelemetryStatusFormatters.formatSuperchargerSyncMessage(result)
 
         fun parseSmartcarV3ErrorCode(rawBody: String): Pair<String?, String?> {
             return try {
@@ -2086,27 +1643,8 @@ class OdometerSyncService(
             return entities
         }
 
-        fun formatSmartcarDcSyncMessage(result: SmartcarDcSyncResult): String = when (result) {
-            is SmartcarDcSyncResult.Synced -> {
-                if (result.insertedCount > 0) {
-                    val label = if (result.insertedCount == 1) "DC session" else "DC sessions"
-                    val kwhStr = String.format(Locale.US, "%.1f", result.totalKwhAdded)
-                    val costPart = if (result.totalCostAdded > 0.0) {
-                        " · ${String.format(Locale.US, "$%.2f", result.totalCostAdded)}"
-                    } else {
-                        ""
-                    }
-                    "Synced ${result.insertedCount} Smartcar $label ($kwhStr kWh$costPart)"
-                } else {
-                    "Smartcar DC charging up to date"
-                }
-            }
-            SmartcarDcSyncResult.NotConfigured -> "Connect Smartcar in Settings to check DC charging"
-            is SmartcarDcSyncResult.MissingPermission -> result.message
-            is SmartcarDcSyncResult.UnsupportedByVehicle -> result.message
-            is SmartcarDcSyncResult.NotCurrentlyFastCharging -> result.message
-            is SmartcarDcSyncResult.Error -> "Smartcar DC check failed: ${result.message}"
-        }
+        fun formatSmartcarDcSyncMessage(result: SmartcarDcSyncResult): String =
+            TelemetryStatusFormatters.formatSmartcarDcSyncMessage(result)
 
         fun buildSmartcarAuthUrl(clientOrAppId: String): String {
             val trimmed = clientOrAppId.trim()
