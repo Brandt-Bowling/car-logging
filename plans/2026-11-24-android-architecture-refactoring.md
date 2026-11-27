@@ -114,14 +114,14 @@ flowchart TD
 - Modify: `app/src/main/kotlin/com/example/car_logger/ui/screens/addcar/AddCarViewModel.kt`
 
 **Steps:**
-- [ ] Create `UriContentReader` (interface + `AndroidUriContentReader(appContext)`) moving `resolveFileName`, `resolveMimeType`, and `readBytes` out of `HomeViewModel`.
-- [ ] Create `SyncSchedulerController` (interface + `AndroidSyncSchedulerController(appContext)`) wrapping `DailyPollScheduler`, `ChargerSyncScheduler`, and `WorkChargingSyncScheduler` so ViewModels never hold a `Context`.
-- [ ] Update `AutoDevService` constructor to accept `client: OkHttpClient = defaultClient` so it shares the container's `OkHttpClient`.
-- [ ] Create `AppContainer(appContext: Context)` lazily instantiating one shared `OkHttpClient`, `AppDatabase`, `PreferencesManager`, `GoogleDriveService`, `VehicleImageRepository`, `AutoDevService`, `GeminiAiService`, `OdometerSyncService`, `UriContentReader`, and `SyncSchedulerController`.
-- [ ] Expose `lateinit var container: AppContainer` on `CarLoggerApplication` (keeping `database` and `preferencesManager` delegating to `container`).
-- [ ] Update all 3 WorkManager workers to pull shared dependencies from `(applicationContext as? CarLoggerApplication)?.container` with safe fallback for `TestListenableWorkerBuilder`.
-- [ ] Convert `HomeViewModel`, `VehicleDetailsViewModel`, and `AddCarViewModel` from `AndroidViewModel` to plain `ViewModel` with constructor-injected dependencies, wired through `AppViewModelFactories` in `MainActivity`.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug` and `rg -n "AndroidViewModel" app/src/main/kotlin` returns zero matches.
+- [x] Create `UriContentReader` (interface + `AndroidUriContentReader(appContext)`) moving `resolveFileName`, `resolveMimeType`, and `readBytes` out of `HomeViewModel`.
+- [x] Create `SyncSchedulerController` (interface + `AndroidSyncSchedulerController(appContext)`) wrapping `DailyPollScheduler`, `ChargerSyncScheduler`, and `WorkChargingSyncScheduler` so ViewModels never hold a `Context`.
+- [x] Update `AutoDevService` constructor to accept `client: OkHttpClient = defaultClient` so it shares the container's `OkHttpClient`.
+- [x] Create `AppContainer(appContext: Context)` lazily instantiating one shared `OkHttpClient`, `AppDatabase`, `PreferencesManager`, `GoogleDriveService`, `VehicleImageRepository`, `AutoDevService`, `GeminiAiService`, `OdometerSyncService`, `UriContentReader`, and `SyncSchedulerController`.
+- [x] Expose `lateinit var container: AppContainer` on `CarLoggerApplication` (keeping `database` and `preferencesManager` delegating to `container`).
+- [x] Update all 3 WorkManager workers to pull shared dependencies from `(applicationContext as? CarLoggerApplication)?.container` with safe fallback for `TestListenableWorkerBuilder`.
+- [x] Convert `HomeViewModel`, `VehicleDetailsViewModel`, and `AddCarViewModel` from `AndroidViewModel` to plain `ViewModel` with constructor-injected dependencies, wired through `AppViewModelFactories` in `MainActivity`.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug` and `rg -n "AndroidViewModel" app/src/main/kotlin` returns zero matches.
 
 ---
 
@@ -139,10 +139,10 @@ flowchart TD
 - Modify: `app/src/main/kotlin/com/example/car_logger/ui/screens/addcar/AddCarViewModel.kt`
 
 **Steps:**
-- [ ] Replace all **79** `collectAsState(...)` calls across the 6 UI files with `androidx.lifecycle.compose.collectAsStateWithLifecycle(...)`.
-- [ ] Encapsulate all public `MutableStateFlow` properties in `HomeViewModel`, `VehicleDetailsViewModel`, and `AddCarViewModel` behind private `_field` + public `val field: StateFlow<T> = _field.asStateFlow()` with explicit intent setter methods where needed (e.g., `AddCarViewModel` form field setters).
-- [ ] Remove redundant `.combine(currentTab)` on `cars`, `allRecords`, and `hasUrgentService` in `HomeViewModel.kt` (replace with `.map { ... }`).
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug` and `rg -n "collectAsState\(" app/src/main/kotlin` returns zero matches.
+- [x] Replace all **79** `collectAsState(...)` calls across the 6 UI files with `androidx.lifecycle.compose.collectAsStateWithLifecycle(...)`.
+- [x] Encapsulate all public `MutableStateFlow` properties in `HomeViewModel`, `VehicleDetailsViewModel`, and `AddCarViewModel` behind private `_field` + public `val field: StateFlow<T> = _field.asStateFlow()` with explicit intent setter methods where needed (e.g., `AddCarViewModel` form field setters).
+- [x] Remove redundant `.combine(currentTab)` on `cars`, `allRecords`, and `hasUrgentService` in `HomeViewModel.kt` (replace with `.map { ... }`).
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug` and `rg -n "collectAsState\(" app/src/main/kotlin` returns zero matches.
 
 ---
 
@@ -159,10 +159,10 @@ flowchart TD
 - Modify: `app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/SettingsTab.kt`
 
 **Steps:**
-- [ ] Add light/dark savings & workplace green constants to `Color.kt` (`SavingsContainerLight`/`Dark`, `SavingsAccentLight`/`Dark`, `SavingsTextLight`/`Dark`, `WorkIconContainerLight`/`Dark`, `WorkIconTintLight`/`Dark`).
-- [ ] Expose `@Composable @ReadOnlyComposable` semantic properties on `ExpressiveThemeTokens` in `Theme.kt`.
-- [ ] Replace the 6 hardcoded `isSystemInDarkTheme()` hex color blocks across the UI files with `ExpressiveThemeTokens.*`.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug`.
+- [x] Add light/dark savings & workplace green constants to `Color.kt` (`SavingsContainerLight`/`Dark`, `SavingsAccentLight`/`Dark`, `SavingsTextLight`/`Dark`, `WorkIconContainerLight`/`Dark`, `WorkIconTintLight`/`Dark`).
+- [x] Expose `@Composable @ReadOnlyComposable` semantic properties on `ExpressiveThemeTokens` in `Theme.kt`.
+- [x] Replace the 6 hardcoded `isSystemInDarkTheme()` hex color blocks across the UI files with `ExpressiveThemeTokens.*`.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug`.
 
 ---
 

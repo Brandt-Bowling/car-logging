@@ -42,15 +42,15 @@ Before each task, read its **Global Constraints** and the matching **Task** sect
 
 ### 1. Finish Task 1: plain ViewModels + `di/AppViewModelFactories.kt`
 
-- [ ] Convert `HomeViewModel`, `VehicleDetailsViewModel`, and `AddCarViewModel` to plain `ViewModel` with
+- [x] Convert `HomeViewModel`, `VehicleDetailsViewModel`, and `AddCarViewModel` to plain `ViewModel` with
       constructor-injected dependencies. `HomeViewModel` should use `UriContentReader` in place of the 4
       `getApplication<Application>().contentResolver` sites (~L265–352). No ViewModel calls the schedulers
       today. `SettingsTab` calls `DailyPollScheduler` / `ChargerSyncScheduler` / `WorkChargingSyncScheduler`
       directly from Composables (~L818–1640), so `SyncSchedulerController` is first used by
       `SettingsViewModel` in Task 5 (item 8).
-- [ ] Create `di/AppViewModelFactories.kt`. Every `viewModel(...)` call in `MainActivity` gets an explicit `factory`.
-- [ ] Unit test the factories. `AppContainer(ContextWrapper(null))` is safe on pure JVM because everything is lazy.
-- [ ] Verify: `rg -n "AndroidViewModel" app/src/main/kotlin` returns nothing.
+- [x] Create `di/AppViewModelFactories.kt`. Every `viewModel(...)` call in `MainActivity` gets an explicit `factory`.
+- [x] Unit test the factories. `AppContainer(ContextWrapper(null))` is safe on pure JVM because everything is lazy.
+- [x] Verify: `rg -n "AndroidViewModel" app/src/main/kotlin` returns nothing.
 - Gotchas:
   - Implement factories as `object : ViewModelProvider.Factory { override fun <T : ViewModel> create(modelClass: Class<T>): T }`.
     `InitializerViewModelFactory` throws `UnsupportedOperationException` on the 1-arg `create(Class)`.
@@ -67,20 +67,20 @@ Before each task, read its **Global Constraints** and the matching **Task** sect
 
 ### 2. Task 2: `collectAsStateWithLifecycle` + `StateFlow` encapsulation
 
-- [ ] Replace all 79 `collectAsState(` calls (`MainActivity` 1, `HomeScreen` 14, `SettingsTab` 37,
+- [x] Replace all 79 `collectAsState(` calls (`MainActivity` 1, `HomeScreen` 14, `SettingsTab` 37,
       `VehicleDetailsScreen` 14, `GloveboxTab` 1, `AddCarModalSheet` 12). Import
       `androidx.lifecycle.compose.collectAsStateWithLifecycle` and remove the stale
       `androidx.compose.runtime.collectAsState` import.
-- [ ] Encapsulate the 22 public `MutableStateFlow`s (`HomeViewModel` 6, `VehicleDetailsViewModel` 4,
+- [x] Encapsulate the 22 public `MutableStateFlow`s (`HomeViewModel` 6, `VehicleDetailsViewModel` 4,
       `AddCarViewModel` 12) as `private val _x` + `val x: StateFlow<T> = _x.asStateFlow()`. Add intent
       setters, and update the 6 `.value =` writes in `AddCarModalSheet.kt`.
-- [ ] Replace the 3 redundant `.combine(currentTab)` calls (`cars`, `allRecords`, `hasUrgentService`) in
+- [x] Replace the 3 redundant `.combine(currentTab)` calls (`cars`, `allRecords`, `hasUrgentService`) in
       `HomeViewModel` with `.map`.
-- [ ] Verify: `rg -n "collectAsState\(" app/src/main/kotlin` returns nothing.
+- [x] Verify: `rg -n "collectAsState\(" app/src/main/kotlin` returns nothing.
 
 ### 3. Task 3: `ExpressiveThemeTokens`
 
-- [ ] Follow Task 3 in the plan. Hex values (light / dark):
+- [x] Follow Task 3 in the plan. Hex values (light / dark):
       savingsContainer `0xFFD3F5DC` / `0xFF0F4020`, savingsAccent `0xFF0B5F2A` / `0xFF81E6A1`,
       savingsText `0xFF072711` / `0xFFC6F7D4`, workIconContainer `0xFFDFF7E8` / `0xFF0A2E1A`,
       workIconTint `0xFF15803D` / `0xFF4ADE80`.
