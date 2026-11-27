@@ -77,7 +77,6 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -98,6 +97,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.car_logger.BuildConfig
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.WakeProtectionPolicy
@@ -128,16 +128,16 @@ fun SettingsTab(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val isDark = isSystemInDarkTheme()
-    val garageName by preferencesManager.garageNameFlow.collectAsState(initial = PreferencesManager.DEFAULT_GARAGE_NAME)
-    val geminiKey by preferencesManager.geminiApiKeyFlow.collectAsState(initial = null)
-    val autoDevKey by preferencesManager.autoDevApiKeyFlow.collectAsState(initial = null)
-    val currentUser by googleDriveService.currentUser.collectAsState()
+    val garageName by preferencesManager.garageNameFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.DEFAULT_GARAGE_NAME)
+    val geminiKey by preferencesManager.geminiApiKeyFlow.collectAsStateWithLifecycle(initialValue = null)
+    val autoDevKey by preferencesManager.autoDevApiKeyFlow.collectAsStateWithLifecycle(initialValue = null)
+    val currentUser by googleDriveService.currentUser.collectAsStateWithLifecycle()
 
-    val wakePolicy by preferencesManager.wakePolicyFlow.collectAsState(initial = WakeProtectionPolicy.AWAKE_ONLY)
-    val cooldownHours by preferencesManager.syncCooldownHoursFlow.collectAsState(initial = PreferencesManager.DEFAULT_COOLDOWN_HOURS)
-    val smartcarConnected by preferencesManager.smartcarConnectedFlow.collectAsState(initial = false)
-    val teslaConnected by preferencesManager.teslaConnectedFlow.collectAsState(initial = false)
-    val teslaAccessToken by preferencesManager.teslaAccessTokenFlow.collectAsState(initial = null)
+    val wakePolicy by preferencesManager.wakePolicyFlow.collectAsStateWithLifecycle(initialValue = WakeProtectionPolicy.AWAKE_ONLY)
+    val cooldownHours by preferencesManager.syncCooldownHoursFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.DEFAULT_COOLDOWN_HOURS)
+    val smartcarConnected by preferencesManager.smartcarConnectedFlow.collectAsStateWithLifecycle(initialValue = false)
+    val teslaConnected by preferencesManager.teslaConnectedFlow.collectAsStateWithLifecycle(initialValue = false)
+    val teslaAccessToken by preferencesManager.teslaAccessTokenFlow.collectAsStateWithLifecycle(initialValue = null)
     val hasTeslaLocationScope = remember(teslaAccessToken) {
         OdometerSyncService.hasTeslaLocationScope(teslaAccessToken)
     }
@@ -145,37 +145,37 @@ fun SettingsTab(
         OdometerSyncService.hasTeslaChargingHistoryScope(teslaAccessToken)
     }
 
-    val dailyPollEnabled by preferencesManager.dailyPollEnabledFlow.collectAsState(initial = true)
-    val lastDailyPollTime by preferencesManager.lastDailyPollTimeFlow.collectAsState(initial = 0L)
-    val lastDailyPollStatus by preferencesManager.lastDailyPollStatusFlow.collectAsState(initial = null)
-    val wallConnectorGen3CarId by preferencesManager.wallConnectorGen3CarIdFlow.collectAsState(initial = null)
-    val wallConnectorUniversalCarId by preferencesManager.wallConnectorUniversalCarIdFlow.collectAsState(initial = null)
-    val chargerSyncEnabled by preferencesManager.chargerSyncEnabledFlow.collectAsState(initial = true)
-    val chargerSyncHour by preferencesManager.chargerSyncHourFlow.collectAsState(initial = PreferencesManager.DEFAULT_CHARGER_SYNC_HOUR)
-    val chargerSyncMinute by preferencesManager.chargerSyncMinuteFlow.collectAsState(initial = PreferencesManager.DEFAULT_CHARGER_SYNC_MINUTE)
-    val lastChargerSyncTime by preferencesManager.lastChargerSyncTimeFlow.collectAsState(initial = 0L)
-    val lastChargerSyncStatus by preferencesManager.lastChargerSyncStatusFlow.collectAsState(initial = null)
+    val dailyPollEnabled by preferencesManager.dailyPollEnabledFlow.collectAsStateWithLifecycle(initialValue = true)
+    val lastDailyPollTime by preferencesManager.lastDailyPollTimeFlow.collectAsStateWithLifecycle(initialValue = 0L)
+    val lastDailyPollStatus by preferencesManager.lastDailyPollStatusFlow.collectAsStateWithLifecycle(initialValue = null)
+    val wallConnectorGen3CarId by preferencesManager.wallConnectorGen3CarIdFlow.collectAsStateWithLifecycle(initialValue = null)
+    val wallConnectorUniversalCarId by preferencesManager.wallConnectorUniversalCarIdFlow.collectAsStateWithLifecycle(initialValue = null)
+    val chargerSyncEnabled by preferencesManager.chargerSyncEnabledFlow.collectAsStateWithLifecycle(initialValue = true)
+    val chargerSyncHour by preferencesManager.chargerSyncHourFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.DEFAULT_CHARGER_SYNC_HOUR)
+    val chargerSyncMinute by preferencesManager.chargerSyncMinuteFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.DEFAULT_CHARGER_SYNC_MINUTE)
+    val lastChargerSyncTime by preferencesManager.lastChargerSyncTimeFlow.collectAsStateWithLifecycle(initialValue = 0L)
+    val lastChargerSyncStatus by preferencesManager.lastChargerSyncStatusFlow.collectAsStateWithLifecycle(initialValue = null)
 
-    val workChargingSyncEnabled by preferencesManager.workChargingSyncEnabledFlow.collectAsState(initial = true)
-    val workWindowStartHour by preferencesManager.workChargingWindowStartHourFlow.collectAsState(initial = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_START_HOUR)
-    val workWindowStartMinute by preferencesManager.workChargingWindowStartMinuteFlow.collectAsState(initial = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_START_MINUTE)
-    val workWindowEndHour by preferencesManager.workChargingWindowEndHourFlow.collectAsState(initial = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_END_HOUR)
-    val workWindowEndMinute by preferencesManager.workChargingWindowEndMinuteFlow.collectAsState(initial = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_END_MINUTE)
-    val workChargingWeekdaysOnly by preferencesManager.workChargingWeekdaysOnlyFlow.collectAsState(initial = true)
-    val lastWorkChargingSyncTime by preferencesManager.lastWorkChargingSyncTimeFlow.collectAsState(initial = 0L)
-    val lastWorkChargingSyncStatus by preferencesManager.lastWorkChargingSyncStatusFlow.collectAsState(initial = null)
-    val workLocationLat by preferencesManager.workLocationLatFlow.collectAsState(initial = null)
-    val workLocationLng by preferencesManager.workLocationLngFlow.collectAsState(initial = null)
-    val workLocationRadiusMeters by preferencesManager.workLocationRadiusMetersFlow.collectAsState(initial = PreferencesManager.DEFAULT_WORK_LOCATION_RADIUS_METERS)
+    val workChargingSyncEnabled by preferencesManager.workChargingSyncEnabledFlow.collectAsStateWithLifecycle(initialValue = true)
+    val workWindowStartHour by preferencesManager.workChargingWindowStartHourFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_START_HOUR)
+    val workWindowStartMinute by preferencesManager.workChargingWindowStartMinuteFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_START_MINUTE)
+    val workWindowEndHour by preferencesManager.workChargingWindowEndHourFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_END_HOUR)
+    val workWindowEndMinute by preferencesManager.workChargingWindowEndMinuteFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.DEFAULT_WORK_CHARGING_WINDOW_END_MINUTE)
+    val workChargingWeekdaysOnly by preferencesManager.workChargingWeekdaysOnlyFlow.collectAsStateWithLifecycle(initialValue = true)
+    val lastWorkChargingSyncTime by preferencesManager.lastWorkChargingSyncTimeFlow.collectAsStateWithLifecycle(initialValue = 0L)
+    val lastWorkChargingSyncStatus by preferencesManager.lastWorkChargingSyncStatusFlow.collectAsStateWithLifecycle(initialValue = null)
+    val workLocationLat by preferencesManager.workLocationLatFlow.collectAsStateWithLifecycle(initialValue = null)
+    val workLocationLng by preferencesManager.workLocationLngFlow.collectAsStateWithLifecycle(initialValue = null)
+    val workLocationRadiusMeters by preferencesManager.workLocationRadiusMetersFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.DEFAULT_WORK_LOCATION_RADIUS_METERS)
 
-    val superchargerSyncEnabled by preferencesManager.superchargerSyncEnabledFlow.collectAsState(initial = true)
-    val lastSuperchargerSyncTime by preferencesManager.lastSuperchargerSyncTimeFlow.collectAsState(initial = 0L)
-    val lastSuperchargerSyncStatus by preferencesManager.lastSuperchargerSyncStatusFlow.collectAsState(initial = null)
+    val superchargerSyncEnabled by preferencesManager.superchargerSyncEnabledFlow.collectAsStateWithLifecycle(initialValue = true)
+    val lastSuperchargerSyncTime by preferencesManager.lastSuperchargerSyncTimeFlow.collectAsStateWithLifecycle(initialValue = 0L)
+    val lastSuperchargerSyncStatus by preferencesManager.lastSuperchargerSyncStatusFlow.collectAsStateWithLifecycle(initialValue = null)
 
-    val smartcarDcSyncEnabled by preferencesManager.smartcarDcSyncEnabledFlow.collectAsState(initial = true)
-    val smartcarDcCapability by preferencesManager.smartcarDcCapabilityFlow.collectAsState(initial = PreferencesManager.SMARTCAR_CAPABILITY_UNKNOWN)
-    val lastSmartcarDcSyncTime by preferencesManager.lastSmartcarDcSyncTimeFlow.collectAsState(initial = 0L)
-    val lastSmartcarDcSyncStatus by preferencesManager.lastSmartcarDcSyncStatusFlow.collectAsState(initial = null)
+    val smartcarDcSyncEnabled by preferencesManager.smartcarDcSyncEnabledFlow.collectAsStateWithLifecycle(initialValue = true)
+    val smartcarDcCapability by preferencesManager.smartcarDcCapabilityFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.SMARTCAR_CAPABILITY_UNKNOWN)
+    val lastSmartcarDcSyncTime by preferencesManager.lastSmartcarDcSyncTimeFlow.collectAsStateWithLifecycle(initialValue = 0L)
+    val lastSmartcarDcSyncStatus by preferencesManager.lastSmartcarDcSyncStatusFlow.collectAsStateWithLifecycle(initialValue = null)
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner, odometerSyncService, cars) {

@@ -43,7 +43,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.Tire
@@ -94,19 +94,19 @@ fun VehicleDetailsScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val car by viewModel.car.collectAsState()
-    val records by viewModel.records.collectAsState()
-    val filteredRecords by viewModel.filteredRecords.collectAsState()
-    val costHistory by viewModel.costHistory.collectAsState()
-    val bentoState by viewModel.vehicleBentoState.collectAsState()
-    val bentoGranularity by viewModel.bentoGranularity.collectAsState()
-    val activeTire by viewModel.activeTire.collectAsState()
-    val glovebox by viewModel.glovebox.collectAsState()
-    val currentSubView by viewModel.currentSubView.collectAsState()
-    val isSyncingDrive by viewModel.isSyncingDrive.collectAsState()
-    val isSyncingOdometer by viewModel.isSyncingOdometer.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val selectedYearFilter by viewModel.selectedYearFilter.collectAsState()
+    val car by viewModel.car.collectAsStateWithLifecycle()
+    val records by viewModel.records.collectAsStateWithLifecycle()
+    val filteredRecords by viewModel.filteredRecords.collectAsStateWithLifecycle()
+    val costHistory by viewModel.costHistory.collectAsStateWithLifecycle()
+    val bentoState by viewModel.vehicleBentoState.collectAsStateWithLifecycle()
+    val bentoGranularity by viewModel.bentoGranularity.collectAsStateWithLifecycle()
+    val activeTire by viewModel.activeTire.collectAsStateWithLifecycle()
+    val glovebox by viewModel.glovebox.collectAsStateWithLifecycle()
+    val currentSubView by viewModel.currentSubView.collectAsStateWithLifecycle()
+    val isSyncingDrive by viewModel.isSyncingDrive.collectAsStateWithLifecycle()
+    val isSyncingOdometer by viewModel.isSyncingOdometer.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val selectedYearFilter by viewModel.selectedYearFilter.collectAsStateWithLifecycle()
 
     var showFolderPickerSheet by remember { mutableStateOf(false) }
     val folderPickerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -152,7 +152,7 @@ fun VehicleDetailsScreen(
 
     val carItem = car!!
     val currentOdo = carItem.odometer ?: 0
-    val cooldownHours by viewModel.cooldownHoursFlow.collectAsState()
+    val cooldownHours by viewModel.cooldownHoursFlow.collectAsStateWithLifecycle()
     var showWakeConfirmDialog by remember { mutableStateOf(false) }
 
     // Wake Vehicle Confirmation Dialog

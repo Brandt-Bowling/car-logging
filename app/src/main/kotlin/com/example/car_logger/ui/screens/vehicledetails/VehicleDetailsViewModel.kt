@@ -65,11 +65,17 @@ class VehicleDetailsViewModel(
         PreferencesManager.DEFAULT_COOLDOWN_HOURS
     )
 
-    val currentSubView = MutableStateFlow(VehicleSubView.VEHICLE)
-    val bentoGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
+    private val _currentSubView = MutableStateFlow(VehicleSubView.VEHICLE)
+    val currentSubView: StateFlow<VehicleSubView> = _currentSubView.asStateFlow()
 
-    val searchQuery = MutableStateFlow("")
-    val selectedYearFilter = MutableStateFlow<Int?>(null)
+    private val _bentoGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
+    val bentoGranularity: StateFlow<InsightsTimeGranularity> = _bentoGranularity.asStateFlow()
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _selectedYearFilter = MutableStateFlow<Int?>(null)
+    val selectedYearFilter: StateFlow<Int?> = _selectedYearFilter.asStateFlow()
 
     private val _isSyncingDrive = MutableStateFlow(false)
     val isSyncingDrive: StateFlow<Boolean> = _isSyncingDrive.asStateFlow()
@@ -172,7 +178,7 @@ class VehicleDetailsViewModel(
     )
 
     fun setBentoGranularity(granularity: InsightsTimeGranularity) {
-        bentoGranularity.value = granularity
+        _bentoGranularity.value = granularity
     }
 
     val filteredRecords: StateFlow<List<MaintenanceRecord>> = combine(records, searchQuery, selectedYearFilter) { recs, query, year ->
@@ -191,11 +197,11 @@ class VehicleDetailsViewModel(
     )
 
     fun setSearchQuery(query: String) {
-        searchQuery.value = query
+        _searchQuery.value = query
     }
 
     fun setSelectedYearFilter(year: Int?) {
-        selectedYearFilter.value = year
+        _selectedYearFilter.value = year
     }
 
     suspend fun generateVehicleAiImage(
@@ -252,7 +258,7 @@ class VehicleDetailsViewModel(
     )
 
     fun setSubView(subView: VehicleSubView) {
-        currentSubView.value = subView
+        _currentSubView.value = subView
     }
 
     fun toggleArchive() {

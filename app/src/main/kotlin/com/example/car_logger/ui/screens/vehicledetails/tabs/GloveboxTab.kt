@@ -43,7 +43,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +54,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Glovebox
 import com.example.car_logger.services.GoogleDriveService
@@ -76,7 +76,7 @@ fun GloveboxTab(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val currentUser by googleDriveService.currentUser.collectAsState()
+    val currentUser by googleDriveService.currentUser.collectAsStateWithLifecycle()
     var showEditOdometerDialog by remember { mutableStateOf(false) }
 
     // File pickers

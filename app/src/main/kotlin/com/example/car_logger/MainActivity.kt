@@ -13,13 +13,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.di.AppViewModelFactories
@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
                     contentColor = MaterialTheme.colorScheme.onBackground
                 ) {
                     val coroutineScope = rememberCoroutineScope()
-                    val cars by homeViewModel.cars.collectAsState()
+                    val cars by homeViewModel.cars.collectAsStateWithLifecycle()
 
                     LaunchedEffect(homeViewModel) {
                         homeViewModel.toastMessage.collect { msg ->

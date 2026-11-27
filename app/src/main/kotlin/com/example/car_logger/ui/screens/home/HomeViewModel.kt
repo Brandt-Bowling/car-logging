@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,8 +77,11 @@ class HomeViewModel(
     private val _toastMessage = MutableSharedFlow<String>(extraBufferCapacity = 2)
     val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
 
-    val currentTab = MutableStateFlow(GarageNavigationTab.GARAGE)
-    val isSpeedDialOpen = MutableStateFlow(false)
+    private val _currentTab = MutableStateFlow(GarageNavigationTab.GARAGE)
+    val currentTab: StateFlow<GarageNavigationTab> = _currentTab.asStateFlow()
+
+    private val _isSpeedDialOpen = MutableStateFlow(false)
+    val isSpeedDialOpen: StateFlow<Boolean> = _isSpeedDialOpen.asStateFlow()
 
     val garageName: StateFlow<String> = preferencesManager.garageNameFlow.stateIn(
         viewModelScope,
@@ -85,7 +89,7 @@ class HomeViewModel(
         PreferencesManager.DEFAULT_GARAGE_NAME
     )
 
-    val cars: StateFlow<List<Car>> = carDao.getAllCars().combine(currentTab) { entities, _ ->
+    val cars: StateFlow<List<Car>> = carDao.getAllCars().map { entities ->
         val models = entities.map { it.toModel() }
         if (!initialTelemetryChecked && models.isNotEmpty()) {
             initialTelemetryChecked = true
@@ -101,7 +105,7 @@ class HomeViewModel(
         emptyList()
     )
 
-    val allRecords: StateFlow<List<MaintenanceRecord>> = recordDao.getAllRecords().combine(currentTab) { entities, _ ->
+    val allRecords: StateFlow<List<MaintenanceRecord>> = recordDao.getAllRecords().map { entities ->
         entities.map { it.toModel() }
     }.stateIn(
         viewModelScope,
@@ -164,7 +168,7 @@ class HomeViewModel(
         emptyList()
     )
 
-    val hasUrgentService: StateFlow<Boolean> = scheduledServices.combine(currentTab) { services, _ ->
+    val hasUrgentService: StateFlow<Boolean> = scheduledServices.map { services ->
         services.any { it.isUrgent }
     }.stateIn(
         viewModelScope,
@@ -172,10 +176,17 @@ class HomeViewModel(
         false
     )
 
-    val insightsVehicleFilter = MutableStateFlow<String?>(null)
-    val insightsGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
-    val insightsPeriodOffset = MutableStateFlow(0)
-    val insightsChargingVenue = MutableStateFlow(ChargingVenue.HOME)
+    private val _insightsVehicleFilter = MutableStateFlow<String?>(null)
+    val insightsVehicleFilter: StateFlow<String?> = _insightsVehicleFilter.asStateFlow()
+
+    private val _insightsGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
+    val insightsGranularity: StateFlow<InsightsTimeGranularity> = _insightsGranularity.asStateFlow()
+
+    private val _insightsPeriodOffset = MutableStateFlow(0)
+    val insightsPeriodOffset: StateFlow<Int> = _insightsPeriodOffset.asStateFlow()
+
+    private val _insightsChargingVenue = MutableStateFlow(ChargingVenue.HOME)
+    val insightsChargingVenue: StateFlow<ChargingVenue> = _insightsChargingVenue.asStateFlow()
 
     private val _isParsingElectricityFile = MutableStateFlow(false)
     val isParsingElectricityFile: StateFlow<Boolean> = _isParsingElectricityFile.asStateFlow()
@@ -232,7 +243,7 @@ class HomeViewModel(
     )
 
     fun setInsightsChargingVenue(venue: ChargingVenue) {
-        insightsChargingVenue.value = venue
+        _insightsChargingVenue.value = venue
     }
 
     fun openManualUtilityBillSheet() {
@@ -498,26 +509,26 @@ class HomeViewModel(
     }
 
     fun setInsightsVehicleFilter(carId: String?) {
-        insightsVehicleFilter.value = carId
+        _insightsVehicleFilter.value = carId
     }
 
     fun setInsightsGranularity(granularity: InsightsTimeGranularity) {
-        insightsGranularity.value = granularity
-        insightsPeriodOffset.value = 0
+        _insightsGranularity.value = granularity
+        _insightsPeriodOffset.value = 0
     }
 
     fun navigateInsightsPreviousPeriod() {
-        insightsPeriodOffset.value -= 1
+        _insightsPeriodOffset.value -= 1
     }
 
     fun navigateInsightsNextPeriod() {
-        if (insightsPeriodOffset.value < 0) {
-            insightsPeriodOffset.value += 1
+        if (_insightsPeriodOffset.value < 0) {
+            _insightsPeriodOffset.value += 1
         }
     }
 
     fun resetInsightsPeriod() {
-        insightsPeriodOffset.value = 0
+        _insightsPeriodOffset.value = 0
     }
 
     fun updateComparisonGasPrice(price: Float) {
@@ -533,16 +544,16 @@ class HomeViewModel(
     }
 
     fun setTab(tab: GarageNavigationTab) {
-        currentTab.value = tab
-        isSpeedDialOpen.value = false
+        _currentTab.value = tab
+        _isSpeedDialOpen.value = false
     }
 
     fun toggleSpeedDial() {
-        isSpeedDialOpen.value = !isSpeedDialOpen.value
+        _isSpeedDialOpen.value = !_isSpeedDialOpen.value
     }
 
     fun closeSpeedDial() {
-        isSpeedDialOpen.value = false
+        _isSpeedDialOpen.value = false
     }
 
     fun updateGarageName(newName: String) {
