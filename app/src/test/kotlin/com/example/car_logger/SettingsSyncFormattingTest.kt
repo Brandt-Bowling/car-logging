@@ -1,13 +1,13 @@
 package com.example.car_logger
 
 import com.example.car_logger.data.local.PreferencesManager
-import com.example.car_logger.ui.screens.home.tabs.formatSmartcarDcSubtitle
-import com.example.car_logger.ui.screens.home.tabs.formatSuperchargerSubtitle
-import com.example.car_logger.ui.screens.home.tabs.formatVehicleSyncSubtitle
-import com.example.car_logger.ui.screens.home.tabs.formatWallConnectorSubtitle
-import com.example.car_logger.ui.screens.home.tabs.formatWorkChargingSubtitle
-import com.example.car_logger.ui.screens.home.tabs.isSuperchargerScopeError
-import com.example.car_logger.ui.screens.home.tabs.isWallConnectorErrorStatus
+import com.example.car_logger.ui.screens.home.tabs.settings.formatSmartcarDcSubtitle
+import com.example.car_logger.ui.screens.home.tabs.settings.formatSuperchargerSubtitle
+import com.example.car_logger.ui.screens.home.tabs.settings.formatVehicleSyncSubtitle
+import com.example.car_logger.ui.screens.home.tabs.settings.formatWallConnectorSubtitle
+import com.example.car_logger.ui.screens.home.tabs.settings.formatWorkChargingSubtitle
+import com.example.car_logger.ui.screens.home.tabs.settings.isSuperchargerScopeError
+import com.example.car_logger.ui.screens.home.tabs.settings.isWallConnectorErrorStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

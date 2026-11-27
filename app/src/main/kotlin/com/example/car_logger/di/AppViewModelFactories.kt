@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.ui.screens.addcar.AddCarViewModel
 import com.example.car_logger.ui.screens.home.HomeViewModel
+import com.example.car_logger.ui.screens.home.tabs.settings.SettingsViewModel
 import com.example.car_logger.ui.screens.vehicledetails.VehicleDetailsViewModel
 
 object AppViewModelFactories {
@@ -69,6 +70,23 @@ object AppViewModelFactories {
                 if (modelClass.isAssignableFrom(AddCarViewModel::class.java)) {
                     return AddCarViewModel(
                         autoDevService = container.autoDevService
+                    ) as T
+                }
+                throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
+            }
+        }
+
+    fun settings(container: AppContainer): ViewModelProvider.Factory =
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
+                    return SettingsViewModel(
+                        carDao = container.carDao,
+                        preferencesManager = container.preferencesManager,
+                        googleDriveService = container.googleDriveService,
+                        odometerSyncService = container.odometerSyncService,
+                        syncSchedulerController = container.syncSchedulerController
                     ) as T
                 }
                 throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

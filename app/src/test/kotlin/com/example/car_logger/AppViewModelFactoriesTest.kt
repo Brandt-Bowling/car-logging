@@ -30,6 +30,7 @@ import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.SyncSchedulerController
 import com.example.car_logger.ui.screens.addcar.AddCarViewModel
 import com.example.car_logger.ui.screens.home.HomeViewModel
+import com.example.car_logger.ui.screens.home.tabs.settings.SettingsViewModel
 import com.example.car_logger.ui.screens.vehicledetails.VehicleDetailsViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -81,10 +82,12 @@ class AppViewModelFactoriesTest {
         val homeFactory = AppViewModelFactories.home(container)
         val detailsFactory = AppViewModelFactories.vehicleDetails(container, carId = "car-1")
         val addCarFactory = AppViewModelFactories.addCar(container)
+        val settingsFactory = AppViewModelFactories.settings(container)
 
         assertNotNull(homeFactory)
         assertNotNull(detailsFactory)
         assertNotNull(addCarFactory)
+        assertNotNull(settingsFactory)
     }
 
     @Test
@@ -93,7 +96,8 @@ class AppViewModelFactoriesTest {
         val factories = listOf(
             AppViewModelFactories.home(container),
             AppViewModelFactories.vehicleDetails(container, carId = "car-1"),
-            AppViewModelFactories.addCar(container)
+            AppViewModelFactories.addCar(container),
+            AppViewModelFactories.settings(container)
         )
 
         factories.forEach { factory ->
@@ -124,6 +128,7 @@ class AppViewModelFactoriesTest {
         val detailsVm = AppViewModelFactories.vehicleDetails(container, "car-42", initialCar)
             .create(VehicleDetailsViewModel::class.java, CreationExtras.Empty)
         val addCarVm = AppViewModelFactories.addCar(container).create(AddCarViewModel::class.java)
+        val settingsVm = AppViewModelFactories.settings(container).create(SettingsViewModel::class.java)
 
         assertSame(container.preferencesManager, homeVm.preferencesManager)
         assertSame(container.googleDriveService, homeVm.googleDriveService)
@@ -141,6 +146,7 @@ class AppViewModelFactoriesTest {
         assertSame(container.geminiAiService, detailsVm.geminiAiService)
 
         assertNotNull(addCarVm)
+        assertNotNull(settingsVm)
     }
 
     @Test
