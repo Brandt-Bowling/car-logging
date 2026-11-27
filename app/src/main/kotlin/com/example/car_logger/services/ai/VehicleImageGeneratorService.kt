@@ -1,6 +1,5 @@
 package com.example.car_logger.services.ai
 
-import android.util.Base64
 import android.util.Log
 import com.example.car_logger.data.local.PreferencesManager
 import kotlinx.coroutines.Dispatchers
@@ -8,6 +7,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.util.Base64
 
 internal class VehicleImageGeneratorService(
     private val preferencesManager: PreferencesManager? = null,
@@ -95,7 +95,7 @@ internal class VehicleImageGeneratorService(
                     return@withContext Result.failure(Exception("No image returned from Gemini AI$detail"))
                 }
 
-                val imageBytes = Base64.decode(base64Bytes, Base64.DEFAULT)
+                val imageBytes = Base64.getMimeDecoder().decode(base64Bytes)
                 return@withContext Result.success(imageBytes)
             }
         } catch (e: Exception) {

@@ -143,9 +143,6 @@ dependencies {
     implementation(libs.google.api.services.drive)
     implementation(libs.google.auth.library.oauth2.http)
 
-    // Gemini AI
-    implementation(libs.google.generativeai)
-
     // Coil for Compose
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)

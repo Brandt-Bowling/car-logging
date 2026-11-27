@@ -1,6 +1,5 @@
 package com.example.car_logger.services.ai
 
-import android.util.Base64
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -15,6 +14,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import java.util.Base64
 
 internal class GeminiHttpClient(
     internal val client: OkHttpClient
@@ -110,7 +110,7 @@ internal class GeminiHttpClient(
         fileBytes: ByteArray
     ): String {
         val url = "$GEMINI_BASE_URL/$MODEL_NAME:generateContent?key=$apiKey"
-        val base64Data = Base64.encodeToString(fileBytes, Base64.NO_WRAP)
+        val base64Data = Base64.getEncoder().encodeToString(fileBytes)
         val normalizedMime = mimeType.ifBlank { "application/octet-stream" }
 
         val requestJson = buildJsonObject {

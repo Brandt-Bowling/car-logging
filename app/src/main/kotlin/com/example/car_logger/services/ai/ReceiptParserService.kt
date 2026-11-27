@@ -1,15 +1,11 @@
 package com.example.car_logger.services.ai
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.Log
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.services.ParsedReceiptResult
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.content
-import com.google.ai.client.generativeai.type.generationConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
@@ -18,7 +14,8 @@ import java.time.LocalDate
 import java.util.regex.Pattern
 
 internal class ReceiptParserService(
-    private val preferencesManager: PreferencesManager? = null
+    private val preferencesManager: PreferencesManager? = null,
+    private val httpClient: GeminiHttpClient
 ) {
     companion object {
         private const val TAG = "ReceiptParserService"
@@ -86,11 +83,11 @@ internal class ReceiptParserService(
         internal fun parseReceiptJsonResponse(rawJson: String): ParsedReceiptResult {
             val cleanedText = GeminiHttpClient.stripMarkdownCodeFences(rawJson)
             val root = GeminiHttpClient.json.parseToJsonElement(cleanedText).jsonObject
-            val title = root["title"]?.jsonPrimitive?.content ?: "Maintenance Service"
-            val date = root["date"]?.jsonPrimitive?.content ?: LocalDate.now().toString()
+            val title = root["title"]?.jsonPrimitive?.contentOrNull ?: "Maintenance Service"
+            val date = root["date"]?.jsonPrimitive?.contentOrNull ?: LocalDate.now().toString()
             val odometer = root["odometer"]?.jsonPrimitive?.intOrNull ?: 0
             val cost = root["cost"]?.jsonPrimitive?.doubleOrNull
-            val description = root["description"]?.jsonPrimitive?.content
+            val description = root["description"]?.jsonPrimitive?.contentOrNull
 
             return ParsedReceiptResult(
                 title = title,
@@ -123,20 +120,11 @@ internal class ReceiptParserService(
         return@withContext parseFromFileName(fileName)
     }
 
-    private suspend fun parseWithGemini(
+    private fun parseWithGemini(
         apiKey: String,
         mimeType: String,
         fileBytes: ByteArray
     ): ParsedReceiptResult {
-        val config = generationConfig {
-            responseMimeType = "application/json"
-        }
-        val generativeModel = GenerativeModel(
-            modelName = GeminiHttpClient.MODEL_NAME,
-            apiKey = apiKey,
-            generationConfig = config
-        )
-
         val systemPrompt = """
             You are an expert car maintenance assistant. Analyze the provided receipt image or document and extract the relevant service fields as a structured JSON object.
             
@@ -156,21 +144,7 @@ internal class ReceiptParserService(
             }
         """.trimIndent()
 
-        val bitmap: Bitmap? = if (mimeType.startsWith("image/")) {
-            BitmapFactory.decodeByteArray(fileBytes, 0, fileBytes.size)
-        } else {
-            null
-        }
-
-        val promptContent = content {
-            text(systemPrompt)
-            if (bitmap != null) {
-                image(bitmap)
-            }
-        }
-
-        val response = generativeModel.generateContent(promptContent)
-        val text = response.text?.trim() ?: throw IllegalStateException("Empty response from Gemini")
-        return parseReceiptJsonResponse(text)
+        val rawJson = httpClient.executeMultimodalJsonRequest(apiKey, systemPrompt, mimeType, fileBytes)
+        return parseReceiptJsonResponse(rawJson)
     }
 }

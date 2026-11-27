@@ -29,7 +29,7 @@ class GeminiAiService(
     )
 ) {
     private val httpClient = GeminiHttpClient(client)
-    private val receiptParserService = ReceiptParserService(preferencesManager)
+    private val receiptParserService = ReceiptParserService(preferencesManager, httpClient)
     private val vehicleImageGeneratorService = VehicleImageGeneratorService(preferencesManager, httpClient)
     private val electricityAiParserService = ElectricityAiParserService(preferencesManager, httpClient)
 
@@ -49,6 +49,9 @@ class GeminiAiService(
             fileName: String
         ): ParsedUtilityBillDraft =
             ElectricityAiParserService.parseUtilityBillJsonResponse(rawJson, fileName)
+
+        internal fun parseReceiptJsonResponse(rawJson: String): ParsedReceiptResult =
+            ReceiptParserService.parseReceiptJsonResponse(rawJson)
 
         fun parseFromFileName(fileName: String): ParsedReceiptResult =
             ReceiptParserService.parseFromFileName(fileName)
