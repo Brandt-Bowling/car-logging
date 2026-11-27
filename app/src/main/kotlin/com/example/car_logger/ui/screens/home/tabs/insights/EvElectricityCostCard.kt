@@ -11,7 +11,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,6 +74,7 @@ import androidx.compose.ui.unit.sp
 import com.example.car_logger.data.insights.ChargingVenue
 import com.example.car_logger.data.insights.ElectricityCostData
 import com.example.car_logger.ui.theme.ExpressiveMotionTokens
+import com.example.car_logger.ui.theme.ExpressiveThemeTokens
 import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.util.Locale
 
@@ -102,9 +102,8 @@ fun EvElectricityCostCard(
     onOpenPeriodLogs: (ChargingVenue) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val isDark = isSystemInDarkTheme()
-    val workContainerColor = if (isDark) Color(0xFF0F4020) else Color(0xFFD3F5DC)
-    val workContentColor = if (isDark) Color(0xFF81E6A1) else Color(0xFF0B5F2A)
+    val workContainerColor = ExpressiveThemeTokens.savingsContainer
+    val workContentColor = ExpressiveThemeTokens.savingsAccent
 
     Surface(
         modifier = modifier.fillMaxWidth(),

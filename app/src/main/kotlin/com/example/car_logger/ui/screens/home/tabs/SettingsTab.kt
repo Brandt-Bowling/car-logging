@@ -10,7 +10,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -110,6 +109,7 @@ import com.example.car_logger.services.WallConnectorType
 import com.example.car_logger.services.WorkChargingSyncResult
 import com.example.car_logger.services.WorkChargingSyncScheduler
 import com.example.car_logger.services.WorkLocationCaptureResult
+import com.example.car_logger.ui.theme.ExpressiveThemeTokens
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -127,7 +127,6 @@ fun SettingsTab(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val isDark = isSystemInDarkTheme()
     val garageName by preferencesManager.garageNameFlow.collectAsStateWithLifecycle(initialValue = PreferencesManager.DEFAULT_GARAGE_NAME)
     val geminiKey by preferencesManager.geminiApiKeyFlow.collectAsStateWithLifecycle(initialValue = null)
     val autoDevKey by preferencesManager.autoDevApiKeyFlow.collectAsStateWithLifecycle(initialValue = null)
@@ -1518,8 +1517,8 @@ fun SettingsTab(
 
         // Work charging section (Free Tesla J1772 auto-capture)
         item {
-            val workIconContainer = if (isDark) Color(0xFF0A2E1A) else Color(0xFFDFF7E8)
-            val workIconTint = if (isDark) Color(0xFF4ADE80) else Color(0xFF15803D)
+            val workIconContainer = ExpressiveThemeTokens.workIconContainer
+            val workIconTint = ExpressiveThemeTokens.workIconTint
             val workStatusText = formatWorkChargingSubtitle(
                 teslaConnected = teslaConnected,
                 lastSyncTimeMs = lastWorkChargingSyncTime.takeIf { it > 0L },

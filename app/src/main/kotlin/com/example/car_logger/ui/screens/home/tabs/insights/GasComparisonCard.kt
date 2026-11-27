@@ -1,6 +1,5 @@
 package com.example.car_logger.ui.screens.home.tabs.insights
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,12 +27,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.car_logger.data.insights.GasComparisonData
 import com.example.car_logger.ui.theme.AmberUrgent
+import com.example.car_logger.ui.theme.ExpressiveThemeTokens
 import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.text.NumberFormat
 import java.util.Locale
@@ -138,22 +137,21 @@ fun GasComparisonCard(
             // Net Savings vs. Gas banner (shown when EV charging data exists in period)
             val netSavings = gasComparison.netFuelSavings
             if (netSavings != null) {
-                val isDark = isSystemInDarkTheme()
                 val isPositive = netSavings >= 0.0
-                val bannerBg = when {
-                    !isPositive -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
-                    isDark -> Color(0xFF0F4020)
-                    else -> Color(0xFFD3F5DC)
+                val bannerBg = if (isPositive) {
+                    ExpressiveThemeTokens.savingsContainer
+                } else {
+                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
                 }
-                val bannerAccent = when {
-                    !isPositive -> MaterialTheme.colorScheme.onErrorContainer
-                    isDark -> Color(0xFF81E6A1)
-                    else -> Color(0xFF0B5F2A)
+                val bannerAccent = if (isPositive) {
+                    ExpressiveThemeTokens.savingsAccent
+                } else {
+                    MaterialTheme.colorScheme.onErrorContainer
                 }
-                val bannerValueColor = when {
-                    !isPositive -> MaterialTheme.colorScheme.onErrorContainer
-                    isDark -> Color(0xFFC6F7D4)
-                    else -> Color(0xFF072711)
+                val bannerValueColor = if (isPositive) {
+                    ExpressiveThemeTokens.savingsText
+                } else {
+                    MaterialTheme.colorScheme.onErrorContainer
                 }
                 val formattedDiff = if (isPositive) {
                     "+$${String.format(Locale.US, "%.2f", netSavings)}"

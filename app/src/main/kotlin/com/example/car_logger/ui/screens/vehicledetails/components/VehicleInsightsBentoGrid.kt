@@ -14,7 +14,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import com.example.car_logger.data.insights.InsightsTimeGranularity
 import com.example.car_logger.ui.theme.AmberUrgent
 import com.example.car_logger.ui.theme.ExpressiveMotionTokens
+import com.example.car_logger.ui.theme.ExpressiveThemeTokens
 import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.text.NumberFormat
 import java.util.Locale
@@ -67,11 +67,9 @@ fun VehicleInsightsBentoGrid(
     var inspectedBarIndex by remember(granularity) { mutableStateOf<Int?>(null) }
     val periodMetrics = remember(state, granularity) { state.metricsFor(granularity) }
     val numberFormat = remember { NumberFormat.getNumberInstance(Locale.US) }
-    val isDark = isSystemInDarkTheme()
-
-    val savingsBg = if (isDark) Color(0xFF0F4020) else Color(0xFFD3F5DC)
-    val savingsAccent = if (isDark) Color(0xFF81E6A1) else Color(0xFF0B5F2A)
-    val savingsText = if (isDark) Color(0xFFC6F7D4) else Color(0xFF072711)
+    val savingsBg = ExpressiveThemeTokens.savingsContainer
+    val savingsAccent = ExpressiveThemeTokens.savingsAccent
+    val savingsText = ExpressiveThemeTokens.savingsText
 
     Column(
         modifier = modifier.fillMaxWidth(),
