@@ -5,16 +5,17 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
-import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.car_logger.data.local.prefs.ChargingSyncPreferencesStore
+import com.example.car_logger.data.local.prefs.GeneralPreferencesStore
+import com.example.car_logger.data.local.prefs.PricingPreferencesStore
+import com.example.car_logger.data.local.prefs.TelemetryPreferencesStore
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 
 enum class WakeProtectionPolicy(val key: String, val label: String) {
     AWAKE_ONLY("awake_only", "When awake"),
@@ -32,6 +33,11 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "ca
 class PreferencesManager internal constructor(private val dataStore: DataStore<Preferences>) {
 
     constructor(context: Context) : this(context.dataStore)
+
+    private val generalStore = GeneralPreferencesStore(dataStore)
+    private val telemetryStore = TelemetryPreferencesStore(dataStore)
+    private val chargingSyncStore = ChargingSyncPreferencesStore(dataStore)
+    private val pricingStore = PricingPreferencesStore(dataStore)
 
     companion object {
         val KEY_GARAGE_NAME = stringPreferencesKey("garage_name")
@@ -127,664 +133,151 @@ class PreferencesManager internal constructor(private val dataStore: DataStore<P
         const val SMARTCAR_CAPABILITY_UNSUPPORTED = "UNSUPPORTED"
     }
 
-    val gasPriceFlow: Flow<Float> = dataStore.data.map { prefs ->
-        prefs[KEY_GAS_PRICE] ?: DEFAULT_GAS_PRICE
-    }
-
-    val baselineMpgFlow: Flow<Float> = dataStore.data.map { prefs ->
-        prefs[KEY_BASELINE_MPG] ?: DEFAULT_BASELINE_MPG
-    }
-
-    val defaultElectricityRateFlow: Flow<Float> = dataStore.data.map { prefs ->
-        prefs[KEY_DEFAULT_ELECTRICITY_RATE] ?: DEFAULT_ELECTRICITY_RATE
-    }
-
-    val useCustomElectricityRateFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_USE_CUSTOM_ELECTRICITY_RATE] ?: false
-    }
-
-    val garageNameFlow: Flow<String> = dataStore.data.map { prefs ->
-        prefs[KEY_GARAGE_NAME] ?: DEFAULT_GARAGE_NAME
-    }
-
-    val syncFolderIdFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_SYNC_FOLDER_ID]
-    }
-
-    val syncFolderNameFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_SYNC_FOLDER_NAME]
-    }
-
-    val geminiApiKeyFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_GEMINI_API_KEY]
-    }
-
-    val autoDevApiKeyFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_AUTO_DEV_API_KEY]
-    }
-
-    val importedFileIdsFlow: Flow<Set<String>> = dataStore.data.map { prefs ->
-        prefs[KEY_IMPORTED_FILE_IDS] ?: emptySet()
-    }
-
-    val isMigrationCompleteFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_MIGRATION_V1_COMPLETE] ?: false
-    }
-
-    val isMigrationV2CompleteFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_MIGRATION_V2_COMPLETE] ?: false
-    }
-
-    val isMigrationV3CompleteFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_MIGRATION_V3_COMPLETE] ?: false
-    }
-
-    suspend fun getGarageName(): String = garageNameFlow.first()
-    suspend fun getSyncFolderId(): String? = syncFolderIdFlow.first()
-    suspend fun getSyncFolderName(): String? = syncFolderNameFlow.first()
-    suspend fun getGeminiApiKey(): String? = geminiApiKeyFlow.first()
-    suspend fun getAutoDevApiKey(): String? = autoDevApiKeyFlow.first()
-    suspend fun getImportedFileIds(): Set<String> = importedFileIdsFlow.first()
-    suspend fun isMigrationComplete(): Boolean = isMigrationCompleteFlow.first()
-    suspend fun isMigrationV2Complete(): Boolean = isMigrationV2CompleteFlow.first()
-    suspend fun isMigrationV3Complete(): Boolean = isMigrationV3CompleteFlow.first()
-
-    suspend fun setGarageName(name: String) {
-        val trimmed = name.trim()
-        dataStore.edit { prefs ->
-            if (trimmed.isEmpty() || trimmed == DEFAULT_GARAGE_NAME) {
-                prefs.remove(KEY_GARAGE_NAME)
-            } else {
-                prefs[KEY_GARAGE_NAME] = trimmed
-            }
-        }
-    }
-
-    suspend fun setSyncFolder(folderId: String?, folderName: String?) {
-        dataStore.edit { prefs ->
-            if (folderId == null) {
-                prefs.remove(KEY_SYNC_FOLDER_ID)
-                prefs.remove(KEY_SYNC_FOLDER_NAME)
-            } else {
-                prefs[KEY_SYNC_FOLDER_ID] = folderId
-                folderName?.let { prefs[KEY_SYNC_FOLDER_NAME] = it }
-            }
-        }
-    }
-
-    suspend fun setGeminiApiKey(key: String?) {
-        dataStore.edit { prefs ->
-            if (key.isNullOrBlank()) {
-                prefs.remove(KEY_GEMINI_API_KEY)
-            } else {
-                prefs[KEY_GEMINI_API_KEY] = key.trim()
-            }
-        }
-    }
-
-    suspend fun setAutoDevApiKey(key: String?) {
-        dataStore.edit { prefs ->
-            if (key.isNullOrBlank()) {
-                prefs.remove(KEY_AUTO_DEV_API_KEY)
-            } else {
-                prefs[KEY_AUTO_DEV_API_KEY] = key.trim()
-            }
-        }
-    }
-
-    suspend fun markFileAsImported(fileId: String) {
-        dataStore.edit { prefs ->
-            val current = prefs[KEY_IMPORTED_FILE_IDS]?.toMutableSet() ?: mutableSetOf()
-            current.add(fileId)
-            prefs[KEY_IMPORTED_FILE_IDS] = current
-        }
-    }
-
-    suspend fun unmarkFileAsImported(fileId: String) {
-        dataStore.edit { prefs ->
-            val current = prefs[KEY_IMPORTED_FILE_IDS]?.toMutableSet() ?: mutableSetOf()
-            if (current.remove(fileId)) {
-                prefs[KEY_IMPORTED_FILE_IDS] = current
-            }
-        }
-    }
-
-    suspend fun setImportedFileIds(fileIds: Set<String>) {
-        dataStore.edit { prefs ->
-            prefs[KEY_IMPORTED_FILE_IDS] = fileIds
-        }
-    }
-
-    suspend fun setMigrationComplete(complete: Boolean = true) {
-        dataStore.edit { prefs ->
-            prefs[KEY_MIGRATION_V1_COMPLETE] = complete
-        }
-    }
-
-    suspend fun setMigrationV2Complete(complete: Boolean = true) {
-        dataStore.edit { prefs ->
-            prefs[KEY_MIGRATION_V2_COMPLETE] = complete
-        }
-    }
-
-    suspend fun setMigrationV3Complete(complete: Boolean = true) {
-        dataStore.edit { prefs ->
-            prefs[KEY_MIGRATION_V3_COMPLETE] = complete
-        }
-    }
-
-    // Telemetry Flows & Accessors
-    val wakePolicyFlow: Flow<WakeProtectionPolicy> = dataStore.data.map { prefs ->
-        WakeProtectionPolicy.fromKey(prefs[KEY_WAKE_POLICY])
-    }
-
-    val syncCooldownHoursFlow: Flow<Int> = dataStore.data.map { prefs ->
-        prefs[KEY_SYNC_COOLDOWN_HOURS] ?: DEFAULT_COOLDOWN_HOURS
-    }
-
-    val dailyPollEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_DAILY_POLL_ENABLED] ?: true
-    }
-
-    val lastDailyPollTimeFlow: Flow<Long> = dataStore.data.map { prefs ->
-        prefs[KEY_LAST_DAILY_POLL_TIME] ?: 0L
-    }
-
-    val lastDailyPollStatusFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_LAST_DAILY_POLL_STATUS]
-    }
-
-    val wallConnectorGen3CarIdFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_WALL_CONNECTOR_GEN3_CAR_ID]
-    }
-
-    val wallConnectorUniversalCarIdFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID]
-    }
-
-    val chargerSyncEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_CHARGER_SYNC_ENABLED] ?: true
-    }
-
-    val chargerSyncHourFlow: Flow<Int> = dataStore.data.map { prefs ->
-        (prefs[KEY_CHARGER_SYNC_HOUR] ?: DEFAULT_CHARGER_SYNC_HOUR).coerceIn(0, 23)
-    }
-
-    val chargerSyncMinuteFlow: Flow<Int> = dataStore.data.map { prefs ->
-        (prefs[KEY_CHARGER_SYNC_MINUTE] ?: DEFAULT_CHARGER_SYNC_MINUTE).coerceIn(0, 59)
-    }
-
-    val lastChargerSyncTimeFlow: Flow<Long> = dataStore.data.map { prefs ->
-        prefs[KEY_LAST_CHARGER_SYNC_TIME] ?: 0L
-    }
-
-    val lastChargerSyncStatusFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_LAST_CHARGER_SYNC_STATUS]
-    }
-
-    // Work Charging Automation & Optional Work GPS Flows
-    val workChargingSyncEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_WORK_CHARGING_SYNC_ENABLED] ?: true
-    }
-
-    val workChargingWindowStartHourFlow: Flow<Int> = dataStore.data.map { prefs ->
-        (prefs[KEY_WORK_CHARGING_WINDOW_START_HOUR] ?: DEFAULT_WORK_CHARGING_WINDOW_START_HOUR).coerceIn(0, 23)
-    }
-
-    val workChargingWindowStartMinuteFlow: Flow<Int> = dataStore.data.map { prefs ->
-        (prefs[KEY_WORK_CHARGING_WINDOW_START_MINUTE] ?: DEFAULT_WORK_CHARGING_WINDOW_START_MINUTE).coerceIn(0, 59)
-    }
-
-    val workChargingWindowEndHourFlow: Flow<Int> = dataStore.data.map { prefs ->
-        (prefs[KEY_WORK_CHARGING_WINDOW_END_HOUR] ?: DEFAULT_WORK_CHARGING_WINDOW_END_HOUR).coerceIn(0, 23)
-    }
-
-    val workChargingWindowEndMinuteFlow: Flow<Int> = dataStore.data.map { prefs ->
-        (prefs[KEY_WORK_CHARGING_WINDOW_END_MINUTE] ?: DEFAULT_WORK_CHARGING_WINDOW_END_MINUTE).coerceIn(0, 59)
-    }
-
-    val workChargingWeekdaysOnlyFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_WORK_CHARGING_WEEKDAYS_ONLY] ?: true
-    }
-
-    val lastWorkChargingSyncTimeFlow: Flow<Long> = dataStore.data.map { prefs ->
-        prefs[KEY_LAST_WORK_CHARGING_SYNC_TIME] ?: 0L
-    }
-
-    val lastWorkChargingSyncStatusFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_LAST_WORK_CHARGING_SYNC_STATUS]
-    }
-
-    val workLocationLatFlow: Flow<Double?> = dataStore.data.map { prefs ->
-        prefs[KEY_WORK_LOCATION_LAT]
-    }
-
-    val workLocationLngFlow: Flow<Double?> = dataStore.data.map { prefs ->
-        prefs[KEY_WORK_LOCATION_LNG]
-    }
-
-    val workLocationRadiusMetersFlow: Flow<Int> = dataStore.data.map { prefs ->
-        (prefs[KEY_WORK_LOCATION_RADIUS_METERS] ?: DEFAULT_WORK_LOCATION_RADIUS_METERS).coerceIn(100, 2000)
-    }
-
-    // Paid Tesla Supercharger Sync Flows
-    val superchargerSyncEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_SUPERCHARGER_SYNC_ENABLED] ?: true
-    }
-
-    val lastSuperchargerSyncTimeFlow: Flow<Long> = dataStore.data.map { prefs ->
-        prefs[KEY_LAST_SUPERCHARGER_SYNC_TIME] ?: 0L
-    }
-
-    val lastSuperchargerSyncStatusFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_LAST_SUPERCHARGER_SYNC_STATUS]
-    }
-
-    // Smartcar v3 DC Charging Flows
-    val smartcarDcSyncEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_SMARTCAR_DC_SYNC_ENABLED] ?: true
-    }
-
-    val smartcarDcCapabilityFlow: Flow<String> = dataStore.data.map { prefs ->
-        prefs[KEY_SMARTCAR_DC_CAPABILITY] ?: SMARTCAR_CAPABILITY_UNKNOWN
-    }
-
-    val lastSmartcarDcSyncTimeFlow: Flow<Long> = dataStore.data.map { prefs ->
-        prefs[KEY_LAST_SMARTCAR_DC_SYNC_TIME] ?: 0L
-    }
-
-    val lastSmartcarDcSyncStatusFlow: Flow<String?> = dataStore.data.map { prefs ->
-        prefs[KEY_LAST_SMARTCAR_DC_SYNC_STATUS]
-    }
-
-    val smartcarClientIdFlow: Flow<String?> = dataStore.data.map { it[KEY_SMARTCAR_CLIENT_ID] }
-    val smartcarConnectedFlow: Flow<Boolean> = dataStore.data.map {
-        !it[KEY_SMARTCAR_VEHICLE_ID].isNullOrBlank() ||
-            !it[KEY_SMARTCAR_USER_ID].isNullOrBlank() ||
-            !it[KEY_SMARTCAR_REFRESH_TOKEN].isNullOrBlank()
-    }
-
-    val teslaClientIdFlow: Flow<String?> = dataStore.data.map { it[KEY_TESLA_CLIENT_ID] }
-    val teslaConnectedFlow: Flow<Boolean> = dataStore.data.map {
-        !it[KEY_TESLA_ACCESS_TOKEN].isNullOrBlank()
-    }
-    val teslaAccessTokenFlow: Flow<String?> = dataStore.data.map { it[KEY_TESLA_ACCESS_TOKEN] }
-
-    suspend fun getWakePolicy(): WakeProtectionPolicy = wakePolicyFlow.first()
-    suspend fun getSyncCooldownHours(): Int = syncCooldownHoursFlow.first()
-
-    suspend fun setWakePolicy(policy: WakeProtectionPolicy) {
-        dataStore.edit { prefs ->
-            prefs[KEY_WAKE_POLICY] = policy.key
-        }
-    }
-
-    suspend fun setSyncCooldownHours(hours: Int) {
-        dataStore.edit { prefs ->
-            prefs[KEY_SYNC_COOLDOWN_HOURS] = hours
-        }
-    }
-
-    suspend fun getDailyPollEnabled(): Boolean = dailyPollEnabledFlow.first()
-
-    suspend fun setDailyPollEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_DAILY_POLL_ENABLED] = enabled
-        }
-    }
-
-    suspend fun recordDailyPollResult(timestampMs: Long, status: String) {
-        dataStore.edit { prefs ->
-            prefs[KEY_LAST_DAILY_POLL_TIME] = timestampMs
-            prefs[KEY_LAST_DAILY_POLL_STATUS] = status
-        }
-    }
-
-    suspend fun getWallConnectorCarMapping(): Pair<String?, String?> = dataStore.data.map {
-        Pair(it[KEY_WALL_CONNECTOR_GEN3_CAR_ID], it[KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID])
-    }.first()
-
-    suspend fun setWallConnectorCarMapping(gen3CarId: String?, universalCarId: String?) {
-        dataStore.edit { prefs ->
-            if (gen3CarId.isNullOrBlank()) {
-                prefs.remove(KEY_WALL_CONNECTOR_GEN3_CAR_ID)
-            } else {
-                prefs[KEY_WALL_CONNECTOR_GEN3_CAR_ID] = gen3CarId.trim()
-            }
-            if (universalCarId.isNullOrBlank()) {
-                prefs.remove(KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID)
-            } else {
-                prefs[KEY_WALL_CONNECTOR_UNIVERSAL_CAR_ID] = universalCarId.trim()
-            }
-        }
-    }
-
-    suspend fun getChargerSyncEnabled(): Boolean = chargerSyncEnabledFlow.first()
-
-    suspend fun getChargerSyncHour(): Int = chargerSyncHourFlow.first()
-
-    suspend fun getChargerSyncMinute(): Int = chargerSyncMinuteFlow.first()
-
-    suspend fun setChargerSyncEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_CHARGER_SYNC_ENABLED] = enabled
-        }
-    }
-
-    suspend fun setChargerSyncTime(hour: Int, minute: Int) {
-        dataStore.edit { prefs ->
-            prefs[KEY_CHARGER_SYNC_HOUR] = hour.coerceIn(0, 23)
-            prefs[KEY_CHARGER_SYNC_MINUTE] = minute.coerceIn(0, 59)
-        }
-    }
-
-    suspend fun getLastChargerSyncTime(): Long = lastChargerSyncTimeFlow.first()
-
-    suspend fun recordChargerSyncResult(timestampMs: Long, status: String) {
-        dataStore.edit { prefs ->
-            prefs[KEY_LAST_CHARGER_SYNC_TIME] = timestampMs
-            prefs[KEY_LAST_CHARGER_SYNC_STATUS] = status
-        }
-    }
-
-    // Work Charging Accessors
-    suspend fun getWorkChargingSyncEnabled(): Boolean = workChargingSyncEnabledFlow.first()
-
-    suspend fun getWorkChargingWindowStartHour(): Int = workChargingWindowStartHourFlow.first()
-
-    suspend fun getWorkChargingWindowStartMinute(): Int = workChargingWindowStartMinuteFlow.first()
-
-    suspend fun getWorkChargingWindowEndHour(): Int = workChargingWindowEndHourFlow.first()
-
-    suspend fun getWorkChargingWindowEndMinute(): Int = workChargingWindowEndMinuteFlow.first()
-
-    suspend fun getWorkChargingWeekdaysOnly(): Boolean = workChargingWeekdaysOnlyFlow.first()
-
-    suspend fun setWorkChargingSyncEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_WORK_CHARGING_SYNC_ENABLED] = enabled
-        }
-    }
-
-    suspend fun setWorkChargingWindow(startHour: Int, startMinute: Int, endHour: Int, endMinute: Int) {
-        val startH = startHour.coerceIn(0, 23)
-        val startM = startMinute.coerceIn(0, 59)
-        val endH = endHour.coerceIn(0, 23)
-        val endM = endMinute.coerceIn(0, 59)
-        val startTotal = startH * 60 + startM
-        val endTotal = endH * 60 + endM
-        val (normStartH, normStartM, normEndH, normEndM) = if (endTotal < startTotal) {
-            listOf(endH, endM, startH, startM)
-        } else {
-            listOf(startH, startM, endH, endM)
-        }
-        dataStore.edit { prefs ->
-            prefs[KEY_WORK_CHARGING_WINDOW_START_HOUR] = normStartH
-            prefs[KEY_WORK_CHARGING_WINDOW_START_MINUTE] = normStartM
-            prefs[KEY_WORK_CHARGING_WINDOW_END_HOUR] = normEndH
-            prefs[KEY_WORK_CHARGING_WINDOW_END_MINUTE] = normEndM
-        }
-    }
-
-    suspend fun setWorkChargingWeekdaysOnly(weekdaysOnly: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_WORK_CHARGING_WEEKDAYS_ONLY] = weekdaysOnly
-        }
-    }
-
-    suspend fun recordWorkChargingSyncResult(timestampMs: Long, status: String) {
-        dataStore.edit { prefs ->
-            prefs[KEY_LAST_WORK_CHARGING_SYNC_TIME] = timestampMs
-            prefs[KEY_LAST_WORK_CHARGING_SYNC_STATUS] = status
-        }
-    }
-
-    suspend fun getWorkLocation(): Triple<Double?, Double?, Int> = dataStore.data.map { prefs ->
-        Triple(
-            prefs[KEY_WORK_LOCATION_LAT],
-            prefs[KEY_WORK_LOCATION_LNG],
-            (prefs[KEY_WORK_LOCATION_RADIUS_METERS] ?: DEFAULT_WORK_LOCATION_RADIUS_METERS).coerceIn(100, 2000)
-        )
-    }.first()
-
-    suspend fun setWorkLocation(lat: Double, lng: Double, radiusMeters: Int = DEFAULT_WORK_LOCATION_RADIUS_METERS) {
-        dataStore.edit { prefs ->
-            prefs[KEY_WORK_LOCATION_LAT] = lat
-            prefs[KEY_WORK_LOCATION_LNG] = lng
-            prefs[KEY_WORK_LOCATION_RADIUS_METERS] = radiusMeters.coerceIn(100, 2000)
-        }
-    }
-
-    suspend fun clearWorkLocation() {
-        dataStore.edit { prefs ->
-            prefs.remove(KEY_WORK_LOCATION_LAT)
-            prefs.remove(KEY_WORK_LOCATION_LNG)
-        }
-    }
-
-    suspend fun getTeslaChargeWatermark(): Triple<Double, String?, String?> = dataStore.data.map { prefs ->
-        Triple(
-            prefs[KEY_TESLA_LAST_CHARGE_ENERGY_ADDED] ?: -1.0,
-            prefs[KEY_TESLA_LAST_CHARGE_SEEN_DATE],
-            prefs[KEY_TESLA_LAST_CHARGE_SEEN_VENUE]
-        )
-    }.first()
-
-    suspend fun setTeslaChargeWatermark(energyAddedKwh: Double, dateIso: String, venue: String) {
-        dataStore.edit { prefs ->
-            prefs[KEY_TESLA_LAST_CHARGE_ENERGY_ADDED] = energyAddedKwh
-            prefs[KEY_TESLA_LAST_CHARGE_SEEN_DATE] = dateIso
-            prefs[KEY_TESLA_LAST_CHARGE_SEEN_VENUE] = venue
-        }
-    }
-
-    // Supercharger Sync Accessors
-    suspend fun getSuperchargerSyncEnabled(): Boolean = superchargerSyncEnabledFlow.first()
-
-    suspend fun setSuperchargerSyncEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_SUPERCHARGER_SYNC_ENABLED] = enabled
-        }
-    }
-
-    suspend fun getLastSuperchargerSyncTime(): Long = lastSuperchargerSyncTimeFlow.first()
-
-    suspend fun recordSuperchargerSyncResult(timestampMs: Long, status: String) {
-        dataStore.edit { prefs ->
-            prefs[KEY_LAST_SUPERCHARGER_SYNC_TIME] = timestampMs
-            prefs[KEY_LAST_SUPERCHARGER_SYNC_STATUS] = status
-        }
-    }
-
-    // Smartcar DC Charging Accessors
-    suspend fun getSmartcarDcSyncEnabled(): Boolean = smartcarDcSyncEnabledFlow.first()
-
-    suspend fun setSmartcarDcSyncEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_SMARTCAR_DC_SYNC_ENABLED] = enabled
-        }
-    }
-
-    suspend fun getSmartcarDcCapability(): String = smartcarDcCapabilityFlow.first()
-
-    suspend fun setSmartcarDcCapability(capability: String) {
-        dataStore.edit { prefs ->
-            prefs[KEY_SMARTCAR_DC_CAPABILITY] = capability
-        }
-    }
-
-    suspend fun recordSmartcarDcSyncResult(timestampMs: Long, status: String, capability: String? = null) {
-        dataStore.edit { prefs ->
-            prefs[KEY_LAST_SMARTCAR_DC_SYNC_TIME] = timestampMs
-            prefs[KEY_LAST_SMARTCAR_DC_SYNC_STATUS] = status
-            if (!capability.isNullOrBlank()) {
-                prefs[KEY_SMARTCAR_DC_CAPABILITY] = capability
-            }
-        }
-    }
-
-    suspend fun getSmartcarCredentials(): Pair<String?, String?> = dataStore.data.map {
-        Pair(it[KEY_SMARTCAR_CLIENT_ID], it[KEY_SMARTCAR_CLIENT_SECRET])
-    }.first()
-
-    suspend fun setSmartcarCredentials(clientId: String?, clientSecret: String?, accessToken: String? = null) {
-        dataStore.edit { prefs ->
-            if (clientId.isNullOrBlank()) prefs.remove(KEY_SMARTCAR_CLIENT_ID)
-            else prefs[KEY_SMARTCAR_CLIENT_ID] = clientId.trim()
-
-            if (clientSecret.isNullOrBlank()) prefs.remove(KEY_SMARTCAR_CLIENT_SECRET)
-            else prefs[KEY_SMARTCAR_CLIENT_SECRET] = clientSecret.trim()
-
-            if (accessToken != null) {
-                val trimmedToken = accessToken.trim()
-                if (trimmedToken.isEmpty()) {
-                    prefs.remove(KEY_SMARTCAR_ACCESS_TOKEN)
-                    prefs.remove(KEY_SMARTCAR_TOKEN_EXPIRY)
-                } else if (trimmedToken != prefs[KEY_SMARTCAR_ACCESS_TOKEN]) {
-                    prefs[KEY_SMARTCAR_ACCESS_TOKEN] = trimmedToken
-                    prefs.remove(KEY_SMARTCAR_TOKEN_EXPIRY)
-                }
-            }
-        }
-    }
-
-    suspend fun saveSmartcarTokens(accessToken: String, refreshToken: String?, expiresInSeconds: Long, vehicleId: String? = null) {
-        val expiryMs = System.currentTimeMillis() + (expiresInSeconds * 1000L)
-        dataStore.edit { prefs ->
-            prefs[KEY_SMARTCAR_ACCESS_TOKEN] = accessToken
-            if (!refreshToken.isNullOrBlank()) prefs[KEY_SMARTCAR_REFRESH_TOKEN] = refreshToken
-            prefs[KEY_SMARTCAR_TOKEN_EXPIRY] = expiryMs
-            if (!vehicleId.isNullOrBlank()) prefs[KEY_SMARTCAR_VEHICLE_ID] = vehicleId
-        }
-    }
-
-    suspend fun getSmartcarTokens(): Triple<String?, String?, Long> = dataStore.data.map {
-        Triple(it[KEY_SMARTCAR_ACCESS_TOKEN], it[KEY_SMARTCAR_REFRESH_TOKEN], it[KEY_SMARTCAR_TOKEN_EXPIRY] ?: 0L)
-    }.first()
-
-    suspend fun getSmartcarVehicleId(): String? = dataStore.data.map { it[KEY_SMARTCAR_VEHICLE_ID] }.first()
-
-    suspend fun setSmartcarVehicleId(vehicleId: String, userId: String? = null) {
-        dataStore.edit { prefs ->
-            prefs[KEY_SMARTCAR_VEHICLE_ID] = vehicleId
-            if (!userId.isNullOrBlank()) {
-                prefs[KEY_SMARTCAR_USER_ID] = userId
-            }
-        }
-    }
-
-    suspend fun getSmartcarUserId(): String? = dataStore.data.map { it[KEY_SMARTCAR_USER_ID] }.first()
-
-    suspend fun setSmartcarUserId(userId: String) {
-        dataStore.edit { prefs ->
-            prefs[KEY_SMARTCAR_USER_ID] = userId
-        }
-    }
-
-    suspend fun getSmartcarApplicationId(): String? = dataStore.data.map { it[KEY_SMARTCAR_APPLICATION_ID] }.first()
-
-    suspend fun setSmartcarApplicationId(appId: String) {
-        dataStore.edit { prefs ->
-            prefs[KEY_SMARTCAR_APPLICATION_ID] = appId
-        }
-    }
-
-    suspend fun clearSmartcarVehicleConnection() {
-        dataStore.edit { prefs ->
-            prefs.remove(KEY_SMARTCAR_VEHICLE_ID)
-            prefs.remove(KEY_SMARTCAR_USER_ID)
-            prefs.remove(KEY_SMARTCAR_DC_CAPABILITY)
-        }
-    }
-
-    suspend fun disconnectSmartcar() {
-        dataStore.edit { prefs ->
-            prefs.remove(KEY_SMARTCAR_ACCESS_TOKEN)
-            prefs.remove(KEY_SMARTCAR_REFRESH_TOKEN)
-            prefs.remove(KEY_SMARTCAR_TOKEN_EXPIRY)
-            prefs.remove(KEY_SMARTCAR_VEHICLE_ID)
-            prefs.remove(KEY_SMARTCAR_USER_ID)
-            prefs.remove(KEY_SMARTCAR_DC_CAPABILITY)
-            prefs.remove(KEY_LAST_SMARTCAR_DC_SYNC_STATUS)
-        }
-    }
-
-    suspend fun getTeslaCredentials(): Pair<String?, String?> = dataStore.data.map {
-        Pair(it[KEY_TESLA_CLIENT_ID], it[KEY_TESLA_CLIENT_SECRET])
-    }.first()
-
-    suspend fun setTeslaCredentials(clientId: String?, clientSecret: String?, accessToken: String? = null) {
-        dataStore.edit { prefs ->
-            if (clientId.isNullOrBlank()) prefs.remove(KEY_TESLA_CLIENT_ID)
-            else prefs[KEY_TESLA_CLIENT_ID] = clientId.trim()
-
-            if (clientSecret.isNullOrBlank()) prefs.remove(KEY_TESLA_CLIENT_SECRET)
-            else prefs[KEY_TESLA_CLIENT_SECRET] = clientSecret.trim()
-
-            if (accessToken != null) {
-                val trimmedToken = accessToken.trim()
-                if (trimmedToken.isEmpty()) {
-                    prefs.remove(KEY_TESLA_ACCESS_TOKEN)
-                    prefs.remove(KEY_TESLA_REFRESH_TOKEN)
-                    prefs.remove(KEY_TESLA_TOKEN_EXPIRY)
-                } else if (trimmedToken != prefs[KEY_TESLA_ACCESS_TOKEN]) {
-                    prefs[KEY_TESLA_ACCESS_TOKEN] = trimmedToken
-                    prefs.remove(KEY_TESLA_REFRESH_TOKEN)
-                    prefs.remove(KEY_TESLA_TOKEN_EXPIRY)
-                }
-            }
-        }
-    }
-
-    suspend fun saveTeslaTokens(accessToken: String, refreshToken: String?, expiresInSeconds: Long) {
-        val expiryMs = System.currentTimeMillis() + (expiresInSeconds * 1000L)
-        dataStore.edit { prefs ->
-            prefs[KEY_TESLA_ACCESS_TOKEN] = accessToken
-            if (!refreshToken.isNullOrBlank()) prefs[KEY_TESLA_REFRESH_TOKEN] = refreshToken
-            prefs[KEY_TESLA_TOKEN_EXPIRY] = expiryMs
-        }
-    }
-
-    suspend fun getTeslaTokens(): Triple<String?, String?, Long> = dataStore.data.map {
-        Triple(it[KEY_TESLA_ACCESS_TOKEN], it[KEY_TESLA_REFRESH_TOKEN], it[KEY_TESLA_TOKEN_EXPIRY] ?: 0L)
-    }.first()
-
-    suspend fun disconnectTesla() {
-        dataStore.edit { prefs ->
-            prefs.remove(KEY_TESLA_ACCESS_TOKEN)
-            prefs.remove(KEY_TESLA_REFRESH_TOKEN)
-            prefs.remove(KEY_TESLA_TOKEN_EXPIRY)
-        }
-    }
-
-    suspend fun setGasPrice(price: Float) {
-        dataStore.edit { prefs ->
-            prefs[KEY_GAS_PRICE] = price
-        }
-    }
-
-    suspend fun setBaselineMpg(mpg: Float) {
-        dataStore.edit { prefs ->
-            prefs[KEY_BASELINE_MPG] = mpg
-        }
-    }
-
-    suspend fun setDefaultElectricityRate(rate: Float) {
-        dataStore.edit { prefs ->
-            prefs[KEY_DEFAULT_ELECTRICITY_RATE] = rate
-        }
-    }
-
-    suspend fun setCustomElectricityRate(rate: Float) {
-        dataStore.edit { prefs ->
-            prefs[KEY_DEFAULT_ELECTRICITY_RATE] = rate
-            prefs[KEY_USE_CUSTOM_ELECTRICITY_RATE] = true
-        }
-    }
-
-    suspend fun setUseCustomElectricityRate(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_USE_CUSTOM_ELECTRICITY_RATE] = enabled
-        }
-    }
+    // Pricing
+    val gasPriceFlow: Flow<Float> get() = pricingStore.gasPriceFlow
+    val baselineMpgFlow: Flow<Float> get() = pricingStore.baselineMpgFlow
+    val defaultElectricityRateFlow: Flow<Float> get() = pricingStore.defaultElectricityRateFlow
+    val useCustomElectricityRateFlow: Flow<Boolean> get() = pricingStore.useCustomElectricityRateFlow
+    suspend fun setGasPrice(price: Float) = pricingStore.setGasPrice(price)
+    suspend fun setBaselineMpg(mpg: Float) = pricingStore.setBaselineMpg(mpg)
+    suspend fun setDefaultElectricityRate(rate: Float) = pricingStore.setDefaultElectricityRate(rate)
+    suspend fun setCustomElectricityRate(rate: Float) = pricingStore.setCustomElectricityRate(rate)
+    suspend fun setUseCustomElectricityRate(enabled: Boolean) = pricingStore.setUseCustomElectricityRate(enabled)
+
+    // General
+    val garageNameFlow: Flow<String> get() = generalStore.garageNameFlow
+    val syncFolderIdFlow: Flow<String?> get() = generalStore.syncFolderIdFlow
+    val syncFolderNameFlow: Flow<String?> get() = generalStore.syncFolderNameFlow
+    val geminiApiKeyFlow: Flow<String?> get() = generalStore.geminiApiKeyFlow
+    val autoDevApiKeyFlow: Flow<String?> get() = generalStore.autoDevApiKeyFlow
+    val importedFileIdsFlow: Flow<Set<String>> get() = generalStore.importedFileIdsFlow
+    val isMigrationCompleteFlow: Flow<Boolean> get() = generalStore.isMigrationCompleteFlow
+    val isMigrationV2CompleteFlow: Flow<Boolean> get() = generalStore.isMigrationV2CompleteFlow
+    val isMigrationV3CompleteFlow: Flow<Boolean> get() = generalStore.isMigrationV3CompleteFlow
+    suspend fun getGarageName(): String = generalStore.getGarageName()
+    suspend fun getSyncFolderId(): String? = generalStore.getSyncFolderId()
+    suspend fun getSyncFolderName(): String? = generalStore.getSyncFolderName()
+    suspend fun getGeminiApiKey(): String? = generalStore.getGeminiApiKey()
+    suspend fun getAutoDevApiKey(): String? = generalStore.getAutoDevApiKey()
+    suspend fun getImportedFileIds(): Set<String> = generalStore.getImportedFileIds()
+    suspend fun isMigrationComplete(): Boolean = generalStore.isMigrationComplete()
+    suspend fun isMigrationV2Complete(): Boolean = generalStore.isMigrationV2Complete()
+    suspend fun isMigrationV3Complete(): Boolean = generalStore.isMigrationV3Complete()
+    suspend fun setGarageName(name: String) = generalStore.setGarageName(name)
+    suspend fun setSyncFolder(folderId: String?, folderName: String?) = generalStore.setSyncFolder(folderId, folderName)
+    suspend fun setGeminiApiKey(key: String?) = generalStore.setGeminiApiKey(key)
+    suspend fun setAutoDevApiKey(key: String?) = generalStore.setAutoDevApiKey(key)
+    suspend fun markFileAsImported(fileId: String) = generalStore.markFileAsImported(fileId)
+    suspend fun unmarkFileAsImported(fileId: String) = generalStore.unmarkFileAsImported(fileId)
+    suspend fun setImportedFileIds(fileIds: Set<String>) = generalStore.setImportedFileIds(fileIds)
+    suspend fun setMigrationComplete(complete: Boolean = true) = generalStore.setMigrationComplete(complete)
+    suspend fun setMigrationV2Complete(complete: Boolean = true) = generalStore.setMigrationV2Complete(complete)
+    suspend fun setMigrationV3Complete(complete: Boolean = true) = generalStore.setMigrationV3Complete(complete)
+
+    // Telemetry & OAuth
+    val wakePolicyFlow: Flow<WakeProtectionPolicy> get() = telemetryStore.wakePolicyFlow
+    val syncCooldownHoursFlow: Flow<Int> get() = telemetryStore.syncCooldownHoursFlow
+    val dailyPollEnabledFlow: Flow<Boolean> get() = telemetryStore.dailyPollEnabledFlow
+    val lastDailyPollTimeFlow: Flow<Long> get() = telemetryStore.lastDailyPollTimeFlow
+    val lastDailyPollStatusFlow: Flow<String?> get() = telemetryStore.lastDailyPollStatusFlow
+    val smartcarClientIdFlow: Flow<String?> get() = telemetryStore.smartcarClientIdFlow
+    val smartcarConnectedFlow: Flow<Boolean> get() = telemetryStore.smartcarConnectedFlow
+    val teslaClientIdFlow: Flow<String?> get() = telemetryStore.teslaClientIdFlow
+    val teslaConnectedFlow: Flow<Boolean> get() = telemetryStore.teslaConnectedFlow
+    val teslaAccessTokenFlow: Flow<String?> get() = telemetryStore.teslaAccessTokenFlow
+    suspend fun getWakePolicy(): WakeProtectionPolicy = telemetryStore.getWakePolicy()
+    suspend fun getSyncCooldownHours(): Int = telemetryStore.getSyncCooldownHours()
+    suspend fun setWakePolicy(policy: WakeProtectionPolicy) = telemetryStore.setWakePolicy(policy)
+    suspend fun setSyncCooldownHours(hours: Int) = telemetryStore.setSyncCooldownHours(hours)
+    suspend fun getDailyPollEnabled(): Boolean = telemetryStore.getDailyPollEnabled()
+    suspend fun setDailyPollEnabled(enabled: Boolean) = telemetryStore.setDailyPollEnabled(enabled)
+    suspend fun recordDailyPollResult(timestampMs: Long, status: String) = telemetryStore.recordDailyPollResult(timestampMs, status)
+    suspend fun getSmartcarCredentials(): Pair<String?, String?> = telemetryStore.getSmartcarCredentials()
+    suspend fun setSmartcarCredentials(clientId: String?, clientSecret: String?, accessToken: String? = null) =
+        telemetryStore.setSmartcarCredentials(clientId, clientSecret, accessToken)
+    suspend fun saveSmartcarTokens(accessToken: String, refreshToken: String?, expiresInSeconds: Long, vehicleId: String? = null) =
+        telemetryStore.saveSmartcarTokens(accessToken, refreshToken, expiresInSeconds, vehicleId)
+    suspend fun getSmartcarTokens(): Triple<String?, String?, Long> = telemetryStore.getSmartcarTokens()
+    suspend fun getSmartcarVehicleId(): String? = telemetryStore.getSmartcarVehicleId()
+    suspend fun setSmartcarVehicleId(vehicleId: String, userId: String? = null) = telemetryStore.setSmartcarVehicleId(vehicleId, userId)
+    suspend fun getSmartcarUserId(): String? = telemetryStore.getSmartcarUserId()
+    suspend fun setSmartcarUserId(userId: String) = telemetryStore.setSmartcarUserId(userId)
+    suspend fun getSmartcarApplicationId(): String? = telemetryStore.getSmartcarApplicationId()
+    suspend fun setSmartcarApplicationId(appId: String) = telemetryStore.setSmartcarApplicationId(appId)
+    suspend fun clearSmartcarVehicleConnection() = telemetryStore.clearSmartcarVehicleConnection()
+    suspend fun disconnectSmartcar() = telemetryStore.disconnectSmartcar()
+    suspend fun getTeslaCredentials(): Pair<String?, String?> = telemetryStore.getTeslaCredentials()
+    suspend fun setTeslaCredentials(clientId: String?, clientSecret: String?, accessToken: String? = null) =
+        telemetryStore.setTeslaCredentials(clientId, clientSecret, accessToken)
+    suspend fun saveTeslaTokens(accessToken: String, refreshToken: String?, expiresInSeconds: Long) =
+        telemetryStore.saveTeslaTokens(accessToken, refreshToken, expiresInSeconds)
+    suspend fun getTeslaTokens(): Triple<String?, String?, Long> = telemetryStore.getTeslaTokens()
+    suspend fun disconnectTesla() = telemetryStore.disconnectTesla()
+
+    // Charging Sync
+    val wallConnectorGen3CarIdFlow: Flow<String?> get() = chargingSyncStore.wallConnectorGen3CarIdFlow
+    val wallConnectorUniversalCarIdFlow: Flow<String?> get() = chargingSyncStore.wallConnectorUniversalCarIdFlow
+    val chargerSyncEnabledFlow: Flow<Boolean> get() = chargingSyncStore.chargerSyncEnabledFlow
+    val chargerSyncHourFlow: Flow<Int> get() = chargingSyncStore.chargerSyncHourFlow
+    val chargerSyncMinuteFlow: Flow<Int> get() = chargingSyncStore.chargerSyncMinuteFlow
+    val lastChargerSyncTimeFlow: Flow<Long> get() = chargingSyncStore.lastChargerSyncTimeFlow
+    val lastChargerSyncStatusFlow: Flow<String?> get() = chargingSyncStore.lastChargerSyncStatusFlow
+    val workChargingSyncEnabledFlow: Flow<Boolean> get() = chargingSyncStore.workChargingSyncEnabledFlow
+    val workChargingWindowStartHourFlow: Flow<Int> get() = chargingSyncStore.workChargingWindowStartHourFlow
+    val workChargingWindowStartMinuteFlow: Flow<Int> get() = chargingSyncStore.workChargingWindowStartMinuteFlow
+    val workChargingWindowEndHourFlow: Flow<Int> get() = chargingSyncStore.workChargingWindowEndHourFlow
+    val workChargingWindowEndMinuteFlow: Flow<Int> get() = chargingSyncStore.workChargingWindowEndMinuteFlow
+    val workChargingWeekdaysOnlyFlow: Flow<Boolean> get() = chargingSyncStore.workChargingWeekdaysOnlyFlow
+    val lastWorkChargingSyncTimeFlow: Flow<Long> get() = chargingSyncStore.lastWorkChargingSyncTimeFlow
+    val lastWorkChargingSyncStatusFlow: Flow<String?> get() = chargingSyncStore.lastWorkChargingSyncStatusFlow
+    val workLocationLatFlow: Flow<Double?> get() = chargingSyncStore.workLocationLatFlow
+    val workLocationLngFlow: Flow<Double?> get() = chargingSyncStore.workLocationLngFlow
+    val workLocationRadiusMetersFlow: Flow<Int> get() = chargingSyncStore.workLocationRadiusMetersFlow
+    val superchargerSyncEnabledFlow: Flow<Boolean> get() = chargingSyncStore.superchargerSyncEnabledFlow
+    val lastSuperchargerSyncTimeFlow: Flow<Long> get() = chargingSyncStore.lastSuperchargerSyncTimeFlow
+    val lastSuperchargerSyncStatusFlow: Flow<String?> get() = chargingSyncStore.lastSuperchargerSyncStatusFlow
+    val smartcarDcSyncEnabledFlow: Flow<Boolean> get() = chargingSyncStore.smartcarDcSyncEnabledFlow
+    val smartcarDcCapabilityFlow: Flow<String> get() = chargingSyncStore.smartcarDcCapabilityFlow
+    val lastSmartcarDcSyncTimeFlow: Flow<Long> get() = chargingSyncStore.lastSmartcarDcSyncTimeFlow
+    val lastSmartcarDcSyncStatusFlow: Flow<String?> get() = chargingSyncStore.lastSmartcarDcSyncStatusFlow
+    suspend fun getWallConnectorCarMapping(): Pair<String?, String?> = chargingSyncStore.getWallConnectorCarMapping()
+    suspend fun setWallConnectorCarMapping(gen3CarId: String?, universalCarId: String?) =
+        chargingSyncStore.setWallConnectorCarMapping(gen3CarId, universalCarId)
+    suspend fun getChargerSyncEnabled(): Boolean = chargingSyncStore.getChargerSyncEnabled()
+    suspend fun getChargerSyncHour(): Int = chargingSyncStore.getChargerSyncHour()
+    suspend fun getChargerSyncMinute(): Int = chargingSyncStore.getChargerSyncMinute()
+    suspend fun setChargerSyncEnabled(enabled: Boolean) = chargingSyncStore.setChargerSyncEnabled(enabled)
+    suspend fun setChargerSyncTime(hour: Int, minute: Int) = chargingSyncStore.setChargerSyncTime(hour, minute)
+    suspend fun getLastChargerSyncTime(): Long = chargingSyncStore.getLastChargerSyncTime()
+    suspend fun recordChargerSyncResult(timestampMs: Long, status: String) = chargingSyncStore.recordChargerSyncResult(timestampMs, status)
+    suspend fun getWorkChargingSyncEnabled(): Boolean = chargingSyncStore.getWorkChargingSyncEnabled()
+    suspend fun getWorkChargingWindowStartHour(): Int = chargingSyncStore.getWorkChargingWindowStartHour()
+    suspend fun getWorkChargingWindowStartMinute(): Int = chargingSyncStore.getWorkChargingWindowStartMinute()
+    suspend fun getWorkChargingWindowEndHour(): Int = chargingSyncStore.getWorkChargingWindowEndHour()
+    suspend fun getWorkChargingWindowEndMinute(): Int = chargingSyncStore.getWorkChargingWindowEndMinute()
+    suspend fun getWorkChargingWeekdaysOnly(): Boolean = chargingSyncStore.getWorkChargingWeekdaysOnly()
+    suspend fun setWorkChargingSyncEnabled(enabled: Boolean) = chargingSyncStore.setWorkChargingSyncEnabled(enabled)
+    suspend fun setWorkChargingWindow(startHour: Int, startMinute: Int, endHour: Int, endMinute: Int) =
+        chargingSyncStore.setWorkChargingWindow(startHour, startMinute, endHour, endMinute)
+    suspend fun setWorkChargingWeekdaysOnly(weekdaysOnly: Boolean) = chargingSyncStore.setWorkChargingWeekdaysOnly(weekdaysOnly)
+    suspend fun recordWorkChargingSyncResult(timestampMs: Long, status: String) =
+        chargingSyncStore.recordWorkChargingSyncResult(timestampMs, status)
+    suspend fun getWorkLocation(): Triple<Double?, Double?, Int> = chargingSyncStore.getWorkLocation()
+    suspend fun setWorkLocation(lat: Double, lng: Double, radiusMeters: Int = DEFAULT_WORK_LOCATION_RADIUS_METERS) =
+        chargingSyncStore.setWorkLocation(lat, lng, radiusMeters)
+    suspend fun clearWorkLocation() = chargingSyncStore.clearWorkLocation()
+    suspend fun getTeslaChargeWatermark(): Triple<Double, String?, String?> = chargingSyncStore.getTeslaChargeWatermark()
+    suspend fun setTeslaChargeWatermark(energyAddedKwh: Double, dateIso: String, venue: String) =
+        chargingSyncStore.setTeslaChargeWatermark(energyAddedKwh, dateIso, venue)
+    suspend fun getSuperchargerSyncEnabled(): Boolean = chargingSyncStore.getSuperchargerSyncEnabled()
+    suspend fun setSuperchargerSyncEnabled(enabled: Boolean) = chargingSyncStore.setSuperchargerSyncEnabled(enabled)
+    suspend fun getLastSuperchargerSyncTime(): Long = chargingSyncStore.getLastSuperchargerSyncTime()
+    suspend fun recordSuperchargerSyncResult(timestampMs: Long, status: String) =
+        chargingSyncStore.recordSuperchargerSyncResult(timestampMs, status)
+    suspend fun getSmartcarDcSyncEnabled(): Boolean = chargingSyncStore.getSmartcarDcSyncEnabled()
+    suspend fun setSmartcarDcSyncEnabled(enabled: Boolean) = chargingSyncStore.setSmartcarDcSyncEnabled(enabled)
+    suspend fun getSmartcarDcCapability(): String = chargingSyncStore.getSmartcarDcCapability()
+    suspend fun setSmartcarDcCapability(capability: String) = chargingSyncStore.setSmartcarDcCapability(capability)
+    suspend fun recordSmartcarDcSyncResult(timestampMs: Long, status: String, capability: String? = null) =
+        chargingSyncStore.recordSmartcarDcSyncResult(timestampMs, status, capability)
 }
