@@ -1,6 +1,5 @@
 package com.example.car_logger.ui.screens.home.tabs.insights
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -63,6 +62,7 @@ import com.example.car_logger.data.insights.PeriodChargingLogItem
 import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.services.ElectricityImportParser
+import com.example.car_logger.ui.theme.ExpressiveThemeTokens
 import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.time.Instant
 import java.time.ZoneId
@@ -92,9 +92,8 @@ fun PeriodChargingLogsSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val topInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding()
     val topClearance = maxOf(topInset + 8.dp, 72.dp)
-    val isDark = isSystemInDarkTheme()
-    val workContainerColor = if (isDark) Color(0xFF0F4020) else Color(0xFFD3F5DC)
-    val workAccentColor = if (isDark) Color(0xFF81E6A1) else Color(0xFF0B5F2A)
+    val workContainerColor = ExpressiveThemeTokens.savingsContainer
+    val workAccentColor = ExpressiveThemeTokens.savingsAccent
 
     val isHome = venue == ChargingVenue.HOME
     val isWork = venue == ChargingVenue.WORK

@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,7 +56,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +68,7 @@ import com.example.car_logger.services.ParsedChargerImportResult
 import com.example.car_logger.services.ParsedChargingSessionDraft
 import com.example.car_logger.ui.theme.AmberUrgent
 import com.example.car_logger.ui.theme.ExpressiveMotionTokens
+import com.example.car_logger.ui.theme.ExpressiveThemeTokens
 import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.time.LocalDate
 import java.time.YearMonth
@@ -99,9 +98,8 @@ fun ChargerUsageReviewSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val activeCars = remember(cars) { cars.filter { !it.isArchived }.ifEmpty { cars } }
-    val isDark = isSystemInDarkTheme()
-    val workChipBg = if (isDark) Color(0xFF0F4020) else Color(0xFFD3F5DC)
-    val workChipFg = if (isDark) Color(0xFF81E6A1) else Color(0xFF0B5F2A)
+    val workChipBg = ExpressiveThemeTokens.savingsContainer
+    val workChipFg = ExpressiveThemeTokens.savingsAccent
 
     // Default vehicle assignment: active filter carId if set, or single car id, or All (null)
     var selectedCarId by remember(activeCars, initialSelectedCarId) {

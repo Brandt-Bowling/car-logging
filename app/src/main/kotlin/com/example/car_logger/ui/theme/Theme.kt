@@ -9,7 +9,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
@@ -69,7 +71,14 @@ private val DarkColorScheme = darkColorScheme(
     outlineVariant = md_theme_dark_outlineVariant
 )
 
+private val LocalDarkTheme = staticCompositionLocalOf<Boolean?> { null }
+
 object ExpressiveThemeTokens {
+    private val isDark: Boolean
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalDarkTheme.current ?: isSystemInDarkTheme()
+
     val shellColor: Color
         @Composable
         @ReadOnlyComposable
@@ -79,6 +88,31 @@ object ExpressiveThemeTokens {
         @Composable
         @ReadOnlyComposable
         get() = MaterialTheme.colorScheme.surface
+
+    val savingsContainer: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isDark) SavingsContainerDark else SavingsContainerLight
+
+    val savingsAccent: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isDark) SavingsAccentDark else SavingsAccentLight
+
+    val savingsText: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isDark) SavingsTextDark else SavingsTextLight
+
+    val workIconContainer: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isDark) WorkIconContainerDark else WorkIconContainerLight
+
+    val workIconTint: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isDark) WorkIconTintDark else WorkIconTintLight
 }
 
 @Composable
@@ -96,10 +130,12 @@ fun CarLoggerTheme(
         else -> LightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = Shapes,
-        content = content
-    )
+    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = Shapes,
+            content = content
+        )
+    }
 }

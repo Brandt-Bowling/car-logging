@@ -3,6 +3,8 @@ package com.example.car_logger.data.vehicle
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import com.example.car_logger.data.local.AndroidUriContentReader
+import com.example.car_logger.data.local.UriContentReader
 import com.example.car_logger.data.local.dao.CarDao
 import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.model.Car
@@ -10,21 +12,31 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class VehicleImageRepository(
-    private val context: Context,
+class VehicleImageRepository internal constructor(
+    private val imagesDir: File,
+    private val uriContentReader: UriContentReader,
     private val carDao: CarDao
 ) {
+    constructor(
+        context: Context,
+        carDao: CarDao,
+        uriContentReader: UriContentReader = AndroidUriContentReader(context.applicationContext ?: context)
+    ) : this(
+        imagesDir = File((context.applicationContext ?: context).filesDir, DIR_NAME),
+        uriContentReader = uriContentReader,
+        carDao = carDao
+    )
+
     companion object {
         private const val TAG = "VehicleImageRepository"
-        private const val DIR_NAME = "vehicle_images"
+        internal const val DIR_NAME = "vehicle_images"
     }
 
     private fun getVehicleImagesDir(): File {
-        val dir = File(context.filesDir, DIR_NAME)
-        if (!dir.exists()) {
-            dir.mkdirs()
+        if (!imagesDir.exists()) {
+            imagesDir.mkdirs()
         }
-        return dir
+        return imagesDir
     }
 
     suspend fun saveCustomImage(car: Car, imageBytes: ByteArray): Result<Car> = withContext(Dispatchers.IO) {
@@ -49,15 +61,14 @@ class VehicleImageRepository(
 
     suspend fun saveImageFromUri(car: Car, uri: Uri): Result<Car> = withContext(Dispatchers.IO) {
         try {
+            val imageBytes = uriContentReader.readBytes(uri)
+                ?: return@withContext Result.failure(IllegalStateException("Could not open input stream from URI"))
+
             val dir = getVehicleImagesDir()
             deleteOldImageFiles(car.id)
 
             val file = File(dir, "${car.id}_${System.currentTimeMillis()}.jpg")
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                file.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            } ?: return@withContext Result.failure(IllegalStateException("Could not open input stream from URI"))
+            file.writeBytes(imageBytes)
 
             val updatedCar = car.copy(
                 localImagePath = file.absolutePath,

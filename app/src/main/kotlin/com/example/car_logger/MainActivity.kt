@@ -13,17 +13,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.car_logger.data.model.MaintenanceRecord
+import com.example.car_logger.di.AppViewModelFactories
 import com.example.car_logger.ui.components.DriveAttachmentViewerSheet
 import com.example.car_logger.ui.components.VehicleContainerTransformHost
 import com.example.car_logger.ui.screens.addcar.AddCarModalSheet
@@ -39,7 +38,11 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    private val homeViewModel: HomeViewModel by viewModels()
+    private val appContainer get() = (application as CarLoggerApplication).container
+
+    private val homeViewModel: HomeViewModel by viewModels {
+        AppViewModelFactories.home(appContainer)
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -69,7 +72,7 @@ class MainActivity : ComponentActivity() {
                     contentColor = MaterialTheme.colorScheme.onBackground
                 ) {
                     val coroutineScope = rememberCoroutineScope()
-                    val cars by homeViewModel.cars.collectAsState()
+                    val cars by homeViewModel.cars.collectAsStateWithLifecycle()
 
                     LaunchedEffect(homeViewModel) {
                         homeViewModel.toastMessage.collect { msg ->
@@ -124,12 +127,7 @@ class MainActivity : ComponentActivity() {
                         },
                         detailContent = { carId, initialCar, onNavigateBack ->
                             val detailsViewModel: VehicleDetailsViewModel = viewModel(
-                                factory = object : ViewModelProvider.Factory {
-                                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                                        @Suppress("UNCHECKED_CAST")
-                                        return VehicleDetailsViewModel(application, carId, initialCar) as T
-                                    }
-                                }
+                                factory = AppViewModelFactories.vehicleDetails(appContainer, carId, initialCar)
                             )
 
                             VehicleDetailsScreen(
@@ -156,7 +154,9 @@ class MainActivity : ComponentActivity() {
 
                     // Add Car Modal Sheet
                     if (showAddCarSheet) {
-                        val addCarViewModel: AddCarViewModel = viewModel()
+                        val addCarViewModel: AddCarViewModel = viewModel(
+                            factory = AppViewModelFactories.addCar(appContainer)
+                        )
                         AddCarModalSheet(
                             sheetState = addCarSheetState,
                             viewModel = addCarViewModel,

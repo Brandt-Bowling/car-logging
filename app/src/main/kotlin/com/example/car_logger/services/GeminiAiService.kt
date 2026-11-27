@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
 import com.example.car_logger.data.local.PreferencesManager
+import com.example.car_logger.di.AppContainer
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
@@ -31,7 +32,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 @Serializable
@@ -47,10 +47,10 @@ data class ParsedReceiptResult(
 
 class GeminiAiService(
     private val preferencesManager: PreferencesManager? = null,
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .build()
+    internal val client: OkHttpClient = AppContainer.newSharedHttpClient(
+        connectTimeoutSeconds = AppContainer.GEMINI_CONNECT_TIMEOUT_SECONDS,
+        readTimeoutSeconds = AppContainer.READ_TIMEOUT_SECONDS
+    )
 ) {
     companion object {
         private const val TAG = "GeminiAiService"

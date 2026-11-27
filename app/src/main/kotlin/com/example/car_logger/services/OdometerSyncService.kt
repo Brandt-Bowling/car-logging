@@ -12,6 +12,7 @@ import com.example.car_logger.data.local.dao.OdometerLogDao
 import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import com.example.car_logger.data.local.entity.OdometerLogEntity
 import com.example.car_logger.data.model.Car
+import com.example.car_logger.di.AppContainer
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -46,7 +47,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URLEncoder
-import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.ceil
@@ -227,10 +227,7 @@ class OdometerSyncService(
     private val carDao: CarDao,
     private val odometerLogDao: OdometerLogDao? = null,
     private val chargingSessionDao: ChargingSessionDao? = null,
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .build()
+    internal val client: OkHttpClient = AppContainer.defaultHttpClient
 ) {
     internal suspend fun recordOdometerReading(carId: String, odometer: Int, provider: String, syncTime: Long) {
         recordOdometerReading(carDao, odometerLogDao, carId, odometer, provider, syncTime)

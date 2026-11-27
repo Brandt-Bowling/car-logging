@@ -1,16 +1,20 @@
 package com.example.car_logger.ui.screens.home
 
-import android.app.Application
 import android.net.Uri
-import android.provider.OpenableColumns
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.car_logger.data.insights.ChargingVenue
 import com.example.car_logger.data.insights.InsightsCalculationEngine
 import com.example.car_logger.data.insights.InsightsTimeGranularity
 import com.example.car_logger.data.insights.InsightsUiState
-import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
+import com.example.car_logger.data.local.UriContentReader
+import com.example.car_logger.data.local.dao.CarDao
+import com.example.car_logger.data.local.dao.ChargingSessionDao
+import com.example.car_logger.data.local.dao.MaintenanceRecordDao
+import com.example.car_logger.data.local.dao.OdometerLogDao
+import com.example.car_logger.data.local.dao.TireDao
+import com.example.car_logger.data.local.dao.UtilityBillDao
 import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import com.example.car_logger.data.local.entity.MaintenanceRecordEntity
@@ -37,6 +41,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,27 +57,31 @@ data class ScheduledServiceItem(
     val isUrgent: Boolean // <= 500 miles
 )
 
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
+class HomeViewModel(
+    private val carDao: CarDao,
+    private val recordDao: MaintenanceRecordDao,
+    private val tireDao: TireDao,
+    val odometerLogDao: OdometerLogDao,
+    val utilityBillDao: UtilityBillDao,
+    val chargingSessionDao: ChargingSessionDao,
+    val preferencesManager: PreferencesManager,
+    val googleDriveService: GoogleDriveService,
+    val odometerSyncService: OdometerSyncService,
+    val vehicleImageRepository: VehicleImageRepository,
+    val geminiAiService: GeminiAiService,
+    private val uriContentReader: UriContentReader
+) : ViewModel() {
 
-    private val database = AppDatabase.getInstance(application)
-    private val carDao = database.carDao()
-    private val recordDao = database.maintenanceRecordDao()
-    private val tireDao = database.tireDao()
-    val odometerLogDao = database.odometerLogDao()
-    val utilityBillDao = database.utilityBillDao()
-    val chargingSessionDao = database.chargingSessionDao()
-    val preferencesManager = PreferencesManager(application)
-    val googleDriveService = GoogleDriveService(application)
-    val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao, chargingSessionDao)
-    val vehicleImageRepository = VehicleImageRepository(application, carDao)
-    val geminiAiService = GeminiAiService(preferencesManager)
     private var initialTelemetryChecked = false
 
     private val _toastMessage = MutableSharedFlow<String>(extraBufferCapacity = 2)
     val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
 
-    val currentTab = MutableStateFlow(GarageNavigationTab.GARAGE)
-    val isSpeedDialOpen = MutableStateFlow(false)
+    private val _currentTab = MutableStateFlow(GarageNavigationTab.GARAGE)
+    val currentTab: StateFlow<GarageNavigationTab> = _currentTab.asStateFlow()
+
+    private val _isSpeedDialOpen = MutableStateFlow(false)
+    val isSpeedDialOpen: StateFlow<Boolean> = _isSpeedDialOpen.asStateFlow()
 
     val garageName: StateFlow<String> = preferencesManager.garageNameFlow.stateIn(
         viewModelScope,
@@ -80,7 +89,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         PreferencesManager.DEFAULT_GARAGE_NAME
     )
 
-    val cars: StateFlow<List<Car>> = carDao.getAllCars().combine(currentTab) { entities, _ ->
+    val cars: StateFlow<List<Car>> = carDao.getAllCars().map { entities ->
         val models = entities.map { it.toModel() }
         if (!initialTelemetryChecked && models.isNotEmpty()) {
             initialTelemetryChecked = true
@@ -96,7 +105,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         emptyList()
     )
 
-    val allRecords: StateFlow<List<MaintenanceRecord>> = recordDao.getAllRecords().combine(currentTab) { entities, _ ->
+    val allRecords: StateFlow<List<MaintenanceRecord>> = recordDao.getAllRecords().map { entities ->
         entities.map { it.toModel() }
     }.stateIn(
         viewModelScope,
@@ -159,7 +168,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         emptyList()
     )
 
-    val hasUrgentService: StateFlow<Boolean> = scheduledServices.combine(currentTab) { services, _ ->
+    val hasUrgentService: StateFlow<Boolean> = scheduledServices.map { services ->
         services.any { it.isUrgent }
     }.stateIn(
         viewModelScope,
@@ -167,10 +176,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         false
     )
 
-    val insightsVehicleFilter = MutableStateFlow<String?>(null)
-    val insightsGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
-    val insightsPeriodOffset = MutableStateFlow(0)
-    val insightsChargingVenue = MutableStateFlow(ChargingVenue.HOME)
+    private val _insightsVehicleFilter = MutableStateFlow<String?>(null)
+    val insightsVehicleFilter: StateFlow<String?> = _insightsVehicleFilter.asStateFlow()
+
+    private val _insightsGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
+    val insightsGranularity: StateFlow<InsightsTimeGranularity> = _insightsGranularity.asStateFlow()
+
+    private val _insightsPeriodOffset = MutableStateFlow(0)
+    val insightsPeriodOffset: StateFlow<Int> = _insightsPeriodOffset.asStateFlow()
+
+    private val _insightsChargingVenue = MutableStateFlow(ChargingVenue.HOME)
+    val insightsChargingVenue: StateFlow<ChargingVenue> = _insightsChargingVenue.asStateFlow()
 
     private val _isParsingElectricityFile = MutableStateFlow(false)
     val isParsingElectricityFile: StateFlow<Boolean> = _isParsingElectricityFile.asStateFlow()
@@ -227,7 +243,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     fun setInsightsChargingVenue(venue: ChargingVenue) {
-        insightsChargingVenue.value = venue
+        _insightsChargingVenue.value = venue
     }
 
     fun openManualUtilityBillSheet() {
@@ -263,10 +279,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun readAndParseUtilityBill(uri: Uri): ParsedUtilityBillDraft {
-        val resolver = getApplication<Application>().contentResolver
-        val fileName = resolveFileName(uri) ?: "utility_bill"
-        val mimeType = resolveMimeType(uri, fileName)
-        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+        val fileName = uriContentReader.resolveFileName(uri) ?: "utility_bill"
+        val mimeType = uriContentReader.resolveMimeType(uri, fileName)
+        val bytes = uriContentReader.readBytes(uri)
             ?: return ParsedUtilityBillDraft(
                 providerName = "",
                 startDateIso = "",
@@ -299,10 +314,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun readAndParseChargerUsage(uri: Uri): ParsedChargerImportResult {
-        val resolver = getApplication<Application>().contentResolver
-        val fileName = resolveFileName(uri) ?: "charger_export"
-        val mimeType = resolveMimeType(uri, fileName)
-        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+        val fileName = uriContentReader.resolveFileName(uri) ?: "charger_export"
+        val mimeType = uriContentReader.resolveMimeType(uri, fileName)
+        val bytes = uriContentReader.readBytes(uri)
             ?: return ParsedChargerImportResult(
                 sessions = emptyList(),
                 fileName = fileName,
@@ -339,31 +353,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             mimeType = mimeType,
             fileBytes = bytes
         )
-    }
-
-    private fun resolveFileName(uri: Uri): String? {
-        val resolver = getApplication<Application>().contentResolver
-        return resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (idx >= 0 && cursor.moveToFirst()) cursor.getString(idx) else null
-        } ?: uri.lastPathSegment
-    }
-
-    private fun resolveMimeType(uri: Uri, fileName: String): String {
-        val resolver = getApplication<Application>().contentResolver
-        val reported = resolver.getType(uri)
-        if (!reported.isNullOrBlank() && reported != "application/octet-stream") {
-            return reported
-        }
-        val lower = fileName.lowercase(Locale.US)
-        return when {
-            lower.endsWith(".pdf") -> "application/pdf"
-            lower.endsWith(".csv") -> "text/csv"
-            lower.endsWith(".png") -> "image/png"
-            lower.endsWith(".webp") -> "image/webp"
-            lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
-            else -> "application/octet-stream"
-        }
     }
 
     fun saveUtilityBill(
@@ -520,26 +509,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setInsightsVehicleFilter(carId: String?) {
-        insightsVehicleFilter.value = carId
+        _insightsVehicleFilter.value = carId
     }
 
     fun setInsightsGranularity(granularity: InsightsTimeGranularity) {
-        insightsGranularity.value = granularity
-        insightsPeriodOffset.value = 0
+        _insightsGranularity.value = granularity
+        _insightsPeriodOffset.value = 0
     }
 
     fun navigateInsightsPreviousPeriod() {
-        insightsPeriodOffset.value -= 1
+        _insightsPeriodOffset.value -= 1
     }
 
     fun navigateInsightsNextPeriod() {
-        if (insightsPeriodOffset.value < 0) {
-            insightsPeriodOffset.value += 1
+        if (_insightsPeriodOffset.value < 0) {
+            _insightsPeriodOffset.value += 1
         }
     }
 
     fun resetInsightsPeriod() {
-        insightsPeriodOffset.value = 0
+        _insightsPeriodOffset.value = 0
     }
 
     fun updateComparisonGasPrice(price: Float) {
@@ -555,16 +544,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setTab(tab: GarageNavigationTab) {
-        currentTab.value = tab
-        isSpeedDialOpen.value = false
+        _currentTab.value = tab
+        _isSpeedDialOpen.value = false
     }
 
     fun toggleSpeedDial() {
-        isSpeedDialOpen.value = !isSpeedDialOpen.value
+        _isSpeedDialOpen.value = !_isSpeedDialOpen.value
     }
 
     fun closeSpeedDial() {
-        isSpeedDialOpen.value = false
+        _isSpeedDialOpen.value = false
     }
 
     fun updateGarageName(newName: String) {

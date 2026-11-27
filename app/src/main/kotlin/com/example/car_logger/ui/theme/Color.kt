@@ -62,3 +62,16 @@ val CanvasLight = Color(0xFFFFFFFF)
 val CanvasDark = Color(0xFF101216)
 
 val AmberUrgent = Color(0xFFFFB703)
+
+// Semantic EV Savings & Workplace Tokens
+val SavingsContainerLight = Color(0xFFD3F5DC)
+val SavingsContainerDark = Color(0xFF0F4020)
+val SavingsAccentLight = Color(0xFF0B5F2A)
+val SavingsAccentDark = Color(0xFF81E6A1)
+val SavingsTextLight = Color(0xFF072711)
+val SavingsTextDark = Color(0xFFC6F7D4)
+
+val WorkIconContainerLight = Color(0xFFDFF7E8)
+val WorkIconContainerDark = Color(0xFF0A2E1A)
+val WorkIconTintLight = Color(0xFF15803D)
+val WorkIconTintDark = Color(0xFF4ADE80)

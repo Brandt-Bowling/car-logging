@@ -50,7 +50,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +62,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.vehicle.VehicleData
@@ -77,18 +77,18 @@ fun AddCarModalSheet(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = VIN, 1 = Manual
 
-    val vinInput by viewModel.vinInput.collectAsState()
-    val isLoadingVin by viewModel.isLoadingVin.collectAsState()
-    val vinError by viewModel.vinError.collectAsState()
-    val decodedInfo by viewModel.decodedInfo.collectAsState()
+    val vinInput by viewModel.vinInput.collectAsStateWithLifecycle()
+    val isLoadingVin by viewModel.isLoadingVin.collectAsStateWithLifecycle()
+    val vinError by viewModel.vinError.collectAsStateWithLifecycle()
+    val decodedInfo by viewModel.decodedInfo.collectAsStateWithLifecycle()
 
-    val selectedMake by viewModel.selectedMake.collectAsState()
-    val selectedModel by viewModel.selectedModel.collectAsState()
-    val selectedYear by viewModel.selectedYear.collectAsState()
-    val selectedOdometer by viewModel.selectedOdometer.collectAsState()
-    val licensePlate by viewModel.licensePlate.collectAsState()
-    val isEv by viewModel.isEv.collectAsState()
-    val selectedImageUrl by viewModel.selectedImageUrl.collectAsState()
+    val selectedMake by viewModel.selectedMake.collectAsStateWithLifecycle()
+    val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
+    val selectedYear by viewModel.selectedYear.collectAsStateWithLifecycle()
+    val selectedOdometer by viewModel.selectedOdometer.collectAsStateWithLifecycle()
+    val licensePlate by viewModel.licensePlate.collectAsStateWithLifecycle()
+    val isEv by viewModel.isEv.collectAsStateWithLifecycle()
+    val selectedImageUrl by viewModel.selectedImageUrl.collectAsStateWithLifecycle()
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -205,7 +205,7 @@ fun AddCarModalSheet(
                                             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                                             shape = RoundedCornerShape(12.dp)
                                         )
-                                        .clickable { viewModel.selectedImageUrl.value = photoUrl }
+                                        .clickable { viewModel.onImageUrlSelected(photoUrl) }
                                 ) {
                                     AsyncImage(
                                         model = photoUrl,
@@ -317,7 +317,7 @@ fun AddCarModalSheet(
                     value = yearInput,
                     onValueChange = {
                         yearInput = it
-                        it.toIntOrNull()?.let { y -> viewModel.selectedYear.value = y }
+                        it.toIntOrNull()?.let { y -> viewModel.onYearChange(y) }
                     },
                     label = { Text("Year") },
                     singleLine = true,
@@ -333,7 +333,7 @@ fun AddCarModalSheet(
                 value = odoText,
                 onValueChange = {
                     odoText = it
-                    viewModel.selectedOdometer.value = it.toIntOrNull()
+                    viewModel.onOdometerChange(it.toIntOrNull())
                 },
                 label = { Text("Current odometer (miles)") },
                 singleLine = true,
@@ -347,7 +347,7 @@ fun AddCarModalSheet(
                 value = plateText,
                 onValueChange = {
                     plateText = it
-                    viewModel.licensePlate.value = it
+                    viewModel.onLicensePlateChange(it)
                 },
                 label = { Text("License plate (optional)") },
                 singleLine = true,
@@ -371,20 +371,22 @@ fun AddCarModalSheet(
                 }
                 Switch(
                     checked = isEv,
-                    onCheckedChange = { viewModel.isEv.value = it }
+                    onCheckedChange = { viewModel.onIsEvChange(it) }
                 )
             }
 
             if (isEv) {
                 Spacer(modifier = Modifier.height(12.dp))
-                val rotationInterval by viewModel.tireRotationInterval.collectAsState()
+                val rotationInterval by viewModel.tireRotationInterval.collectAsStateWithLifecycle()
                 var intervalText by remember { mutableStateOf((rotationInterval ?: 7500).toString()) }
 
                 OutlinedTextField(
                     value = intervalText,
                     onValueChange = {
                         intervalText = it
-                        viewModel.tireRotationInterval.value = it.replace(",", "").trim().toIntOrNull() ?: 7500
+                        viewModel.onTireRotationIntervalChange(
+                            it.replace(",", "").trim().toIntOrNull() ?: 7500
+                        )
                     },
                     label = { Text("Tire rotation interval (miles)") },
                     suffix = { Text("mi") },

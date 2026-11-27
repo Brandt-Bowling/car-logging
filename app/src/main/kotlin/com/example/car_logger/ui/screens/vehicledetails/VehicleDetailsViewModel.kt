@@ -1,12 +1,17 @@
 package com.example.car_logger.ui.screens.vehicledetails
 
-import android.app.Application
 import android.net.Uri
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.car_logger.data.insights.InsightsTimeGranularity
-import com.example.car_logger.data.local.AppDatabase
 import com.example.car_logger.data.local.PreferencesManager
+import com.example.car_logger.data.local.dao.CarDao
+import com.example.car_logger.data.local.dao.ChargingSessionDao
+import com.example.car_logger.data.local.dao.GloveboxDao
+import com.example.car_logger.data.local.dao.MaintenanceRecordDao
+import com.example.car_logger.data.local.dao.OdometerLogDao
+import com.example.car_logger.data.local.dao.TireDao
+import com.example.car_logger.data.local.dao.UtilityBillDao
 import com.example.car_logger.data.local.entity.CarEntity
 import com.example.car_logger.data.local.entity.GloveboxEntity
 import com.example.car_logger.data.local.entity.MaintenanceRecordEntity
@@ -38,23 +43,21 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 class VehicleDetailsViewModel(
-    application: Application,
     val carId: String,
-    initialCar: Car? = null
-) : AndroidViewModel(application) {
+    initialCar: Car? = null,
+    private val carDao: CarDao,
+    private val recordDao: MaintenanceRecordDao,
+    private val tireDao: TireDao,
+    private val gloveboxDao: GloveboxDao,
+    private val odometerLogDao: OdometerLogDao,
+    private val utilityBillDao: UtilityBillDao,
+    private val chargingSessionDao: ChargingSessionDao,
+    private val preferencesManager: PreferencesManager,
+    val odometerSyncService: OdometerSyncService,
+    val vehicleImageRepository: VehicleImageRepository,
+    val geminiAiService: GeminiAiService
+) : ViewModel() {
 
-    private val database = AppDatabase.getInstance(application)
-    private val carDao = database.carDao()
-    private val recordDao = database.maintenanceRecordDao()
-    private val tireDao = database.tireDao()
-    private val gloveboxDao = database.gloveboxDao()
-    private val odometerLogDao = database.odometerLogDao()
-    private val utilityBillDao = database.utilityBillDao()
-    private val chargingSessionDao = database.chargingSessionDao()
-    private val preferencesManager = PreferencesManager(application)
-    val odometerSyncService = OdometerSyncService(preferencesManager, carDao, odometerLogDao, chargingSessionDao)
-    val vehicleImageRepository = VehicleImageRepository(application, carDao)
-    val geminiAiService = GeminiAiService(preferencesManager)
     val isSyncingOdometer: StateFlow<Boolean> = odometerSyncService.isSyncing
     val cooldownHoursFlow: StateFlow<Int> = preferencesManager.syncCooldownHoursFlow.stateIn(
         viewModelScope,
@@ -62,11 +65,17 @@ class VehicleDetailsViewModel(
         PreferencesManager.DEFAULT_COOLDOWN_HOURS
     )
 
-    val currentSubView = MutableStateFlow(VehicleSubView.VEHICLE)
-    val bentoGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
+    private val _currentSubView = MutableStateFlow(VehicleSubView.VEHICLE)
+    val currentSubView: StateFlow<VehicleSubView> = _currentSubView.asStateFlow()
 
-    val searchQuery = MutableStateFlow("")
-    val selectedYearFilter = MutableStateFlow<Int?>(null)
+    private val _bentoGranularity = MutableStateFlow(InsightsTimeGranularity.WEEKLY)
+    val bentoGranularity: StateFlow<InsightsTimeGranularity> = _bentoGranularity.asStateFlow()
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _selectedYearFilter = MutableStateFlow<Int?>(null)
+    val selectedYearFilter: StateFlow<Int?> = _selectedYearFilter.asStateFlow()
 
     private val _isSyncingDrive = MutableStateFlow(false)
     val isSyncingDrive: StateFlow<Boolean> = _isSyncingDrive.asStateFlow()
@@ -169,7 +178,7 @@ class VehicleDetailsViewModel(
     )
 
     fun setBentoGranularity(granularity: InsightsTimeGranularity) {
-        bentoGranularity.value = granularity
+        _bentoGranularity.value = granularity
     }
 
     val filteredRecords: StateFlow<List<MaintenanceRecord>> = combine(records, searchQuery, selectedYearFilter) { recs, query, year ->
@@ -188,11 +197,11 @@ class VehicleDetailsViewModel(
     )
 
     fun setSearchQuery(query: String) {
-        searchQuery.value = query
+        _searchQuery.value = query
     }
 
     fun setSelectedYearFilter(year: Int?) {
-        selectedYearFilter.value = year
+        _selectedYearFilter.value = year
     }
 
     suspend fun generateVehicleAiImage(
@@ -249,7 +258,7 @@ class VehicleDetailsViewModel(
     )
 
     fun setSubView(subView: VehicleSubView) {
-        currentSubView.value = subView
+        _currentSubView.value = subView
     }
 
     fun toggleArchive() {
@@ -344,12 +353,11 @@ class VehicleDetailsViewModel(
                 val files = googleDriveService.listFiles(targetFolderId)
                 val importedIds = preferencesManager.getImportedFileIds()
                 val existingDriveFileIds = records.value.mapNotNull { it.driveFileId }.toSet()
-                val geminiService = GeminiAiService(preferencesManager)
 
                 for (file in files) {
                     if (file.id in importedIds || file.id in existingDriveFileIds) continue
                     val bytes = googleDriveService.downloadFileBytes(file.id)
-                    val parsed = geminiService.parseReceipt(
+                    val parsed = geminiAiService.parseReceipt(
                         fileName = file.name,
                         mimeType = file.mimeType,
                         fileBytes = bytes

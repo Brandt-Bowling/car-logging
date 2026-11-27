@@ -40,7 +40,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.ui.components.EnvelopedBodyCanvas
@@ -79,20 +79,20 @@ fun HomeScreen(
     cardBoundsRegistry: VehicleCardBoundsRegistry? = null,
     modifier: Modifier = Modifier
 ) {
-    val currentTab by viewModel.currentTab.collectAsState()
-    val isSpeedDialOpen by viewModel.isSpeedDialOpen.collectAsState()
-    val garageName by viewModel.garageName.collectAsState()
-    val cars by viewModel.cars.collectAsState()
-    val allRecords by viewModel.allRecords.collectAsState()
-    val scheduledServices by viewModel.scheduledServices.collectAsState()
-    val hasUrgentService by viewModel.hasUrgentService.collectAsState()
-    val insightsUiState by viewModel.insightsUiState.collectAsState()
-    val insightsChargingVenue by viewModel.insightsChargingVenue.collectAsState()
-    val isParsingElectricityFile by viewModel.isParsingElectricityFile.collectAsState()
-    val pendingUtilityBillDraft by viewModel.pendingUtilityBillDraft.collectAsState()
-    val showUtilityBillSheet by viewModel.showUtilityBillSheet.collectAsState()
-    val pendingChargerImport by viewModel.pendingChargerImport.collectAsState()
-    val showChargerUsageSheet by viewModel.showChargerUsageSheet.collectAsState()
+    val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
+    val isSpeedDialOpen by viewModel.isSpeedDialOpen.collectAsStateWithLifecycle()
+    val garageName by viewModel.garageName.collectAsStateWithLifecycle()
+    val cars by viewModel.cars.collectAsStateWithLifecycle()
+    val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
+    val scheduledServices by viewModel.scheduledServices.collectAsStateWithLifecycle()
+    val hasUrgentService by viewModel.hasUrgentService.collectAsStateWithLifecycle()
+    val insightsUiState by viewModel.insightsUiState.collectAsStateWithLifecycle()
+    val insightsChargingVenue by viewModel.insightsChargingVenue.collectAsStateWithLifecycle()
+    val isParsingElectricityFile by viewModel.isParsingElectricityFile.collectAsStateWithLifecycle()
+    val pendingUtilityBillDraft by viewModel.pendingUtilityBillDraft.collectAsStateWithLifecycle()
+    val showUtilityBillSheet by viewModel.showUtilityBillSheet.collectAsStateWithLifecycle()
+    val pendingChargerImport by viewModel.pendingChargerImport.collectAsStateWithLifecycle()
+    val showChargerUsageSheet by viewModel.showChargerUsageSheet.collectAsStateWithLifecycle()
 
     var showRenameDialog by remember { mutableStateOf(false) }
     var showArchivedOnly by remember { mutableStateOf(false) }
