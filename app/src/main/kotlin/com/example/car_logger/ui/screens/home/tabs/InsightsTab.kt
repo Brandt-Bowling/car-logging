@@ -1,459 +1,343 @@
 package com.example.car_logger.ui.screens.home.tabs
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.BarChart
-import androidx.compose.material.icons.outlined.Speed
-import androidx.compose.material.icons.rounded.ChevronLeft
-import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.car_logger.data.insights.ChargingVenue
 import com.example.car_logger.data.insights.InsightsCalculationEngine
-import com.example.car_logger.data.insights.InsightsTimeGranularity
 import com.example.car_logger.data.insights.InsightsUiState
 import com.example.car_logger.data.local.entity.ChargingSessionEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.services.ElectricityImportParser
-import com.example.car_logger.services.ParsedChargerImportResult
-import com.example.car_logger.services.ParsedUtilityBillDraft
 import com.example.car_logger.ui.screens.home.tabs.insights.ChargerUsageReviewSheet
+import com.example.car_logger.ui.screens.home.tabs.insights.CompactElectricityPeriodBar
 import com.example.car_logger.ui.screens.home.tabs.insights.DrivingActivityCard
 import com.example.car_logger.ui.screens.home.tabs.insights.EditGasComparisonSheet
 import com.example.car_logger.ui.screens.home.tabs.insights.EvElectricityCostCard
 import com.example.car_logger.ui.screens.home.tabs.insights.FleetShareCard
 import com.example.car_logger.ui.screens.home.tabs.insights.GasComparisonCard
+import com.example.car_logger.ui.screens.home.tabs.insights.InsightsActions
+import com.example.car_logger.ui.screens.home.tabs.insights.InsightsElectricityImportState
+import com.example.car_logger.ui.screens.home.tabs.insights.InsightsVehicleFilterRow
 import com.example.car_logger.ui.screens.home.tabs.insights.ManageElectricityDataSheet
+import com.example.car_logger.ui.screens.home.tabs.insights.NoVehiclesInsightsEmptyState
 import com.example.car_logger.ui.screens.home.tabs.insights.PeriodChargingLogsSheet
 import com.example.car_logger.ui.screens.home.tabs.insights.UtilityBillReviewSheet
-import com.example.car_logger.ui.theme.ExpressiveMotionTokens
-import com.example.car_logger.ui.theme.expressiveBounceClick
+import com.example.car_logger.ui.screens.home.tabs.insights.WaitingForMileageCard
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InsightsTab(
     state: InsightsUiState,
     cars: List<Car>,
-    onSelectVehicle: (String?) -> Unit,
-    onSelectGranularity: (InsightsTimeGranularity) -> Unit,
-    onPreviousPeriod: () -> Unit = {},
-    onNextPeriod: () -> Unit = {},
-    onResetPeriod: () -> Unit = {},
-    onUpdateGasPrice: (Float) -> Unit,
-    onUpdateBaselineMpg: (Float) -> Unit,
-    selectedVenue: ChargingVenue = ChargingVenue.HOME,
-    onSelectVenue: (ChargingVenue) -> Unit = {},
-    isParsingElectricityFile: Boolean = false,
-    pendingUtilityBillDraft: ParsedUtilityBillDraft? = null,
-    showUtilityBillSheet: Boolean = false,
-    pendingChargerImport: ParsedChargerImportResult? = null,
-    showChargerUsageSheet: Boolean = false,
-    onUploadUtilityBillUri: (Uri) -> Unit = {},
-    onUploadChargerUsageUri: (Uri) -> Unit = {},
-    onOpenManualUtilityBillSheet: () -> Unit = {},
-    onDismissUtilityBillSheet: () -> Unit = {},
-    onSaveUtilityBill: (String, Long, Long, Double, Double, Double, Double?, String?) -> Unit = { _, _, _, _, _, _, _, _ -> },
-    onOpenManualChargerUsageSheet: () -> Unit = {},
-    onDismissChargerUsageSheet: () -> Unit = {},
-    onSaveChargingSessions: (List<ChargingSessionEntity>, Int) -> Unit = { _, _ -> },
-    onUndoLastChargingUpload: () -> Unit = {},
-    onUndoAndRetagChargingUpload: () -> Unit = {},
-    onDeleteUtilityBill: (String) -> Unit = {},
-    onDeleteChargingSession: (String) -> Unit = {},
-    onUpdateChargingSessionCost: (String, Double) -> Unit = { _, _ -> },
-    onUpdateDefaultElectricityRate: (Float) -> Unit = {},
-    onUseSavedBillRate: () -> Unit = {},
-    onSyncWallConnectors: () -> Unit = {},
-    onSyncWorkCharging: () -> Unit = {},
-    onSyncPublicCharging: () -> Unit = {},
-    modifier: Modifier = Modifier
+    actions: InsightsActions,
+    modifier: Modifier = Modifier,
+    importState: InsightsElectricityImportState = InsightsElectricityImportState()
 ) {
+    if (cars.isEmpty()) {
+        NoVehiclesInsightsEmptyState(modifier = modifier)
+        return
+    }
+
     var showEditSheet by remember { mutableStateOf(false) }
     var showManageElectricitySheet by remember { mutableStateOf(false) }
     var openManageSessionsDirectly by remember { mutableStateOf(false) }
     var periodLogsVenue by remember { mutableStateOf<ChargingVenue?>(null) }
-    val activeCars = cars.filter { !it.isArchived }.ifEmpty { cars }
+
+    val activeCars = remember(cars) { cars.filter { !it.isArchived }.ifEmpty { cars } }
     val lastUploadBatch = remember(state.chargingSessions) {
         ElectricityImportParser.resolveLastUploadBatch(state.chargingSessions)
     }
 
-    val billFilePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) onUploadUtilityBillUri(uri)
+    val billFilePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) actions.onUploadUtilityBillUri(uri)
+    }
+    val chargerFilePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) actions.onUploadChargerUsageUri(uri)
     }
 
-    val chargerFilePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) onUploadChargerUsageUri(uri)
-    }
-
-    val launchBillPicker = {
-        billFilePickerLauncher.launch(arrayOf("application/pdf", "image/*"))
-    }
+    val launchBillPicker = { billFilePickerLauncher.launch(arrayOf("application/pdf", "image/*")) }
     val launchChargerPicker = {
         chargerFilePickerLauncher.launch(
-            arrayOf(
-                "text/csv",
-                "text/comma-separated-values",
-                "application/csv",
-                "text/plain",
-                "application/pdf",
-                "image/*"
-            )
+            arrayOf("text/csv", "text/comma-separated-values", "application/csv", "text/plain", "application/pdf", "image/*")
         )
     }
 
-    if (cars.isEmpty()) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.BarChart,
-                    contentDescription = null,
-                    modifier = Modifier.size(56.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-                Text(
-                    text = "No vehicles yet",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Add a vehicle to see mileage and charging insights.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        return
-    }
+    InsightsTabLazyContent(
+        state = state,
+        activeCars = activeCars,
+        importState = importState,
+        actions = actions,
+        onLaunchChargerPicker = launchChargerPicker,
+        onOpenEditGasSheet = { showEditSheet = true },
+        onOpenManageElectricity = { showManageElectricitySheet = true },
+        onOpenPeriodLogs = { periodLogsVenue = it },
+        modifier = modifier
+    )
 
+    InsightsTabSheetsHost(
+        state = state,
+        activeCars = activeCars,
+        importState = importState,
+        actions = actions,
+        lastUploadBatch = lastUploadBatch,
+        showEditSheet = showEditSheet,
+        showManageElectricitySheet = showManageElectricitySheet,
+        openManageSessionsDirectly = openManageSessionsDirectly,
+        periodLogsVenue = periodLogsVenue,
+        onDismissEditSheet = { showEditSheet = false },
+        onDismissManageSheet = {
+            showManageElectricitySheet = false
+            openManageSessionsDirectly = false
+        },
+        onOpenManageAllSessions = {
+            periodLogsVenue = null
+            openManageSessionsDirectly = true
+            showManageElectricitySheet = true
+        },
+        onDismissPeriodLogs = { periodLogsVenue = null },
+        onLaunchBillPicker = launchBillPicker,
+        onLaunchChargerPicker = launchChargerPicker
+    )
+}
+
+@Composable
+private fun InsightsTabLazyContent(
+    state: InsightsUiState,
+    activeCars: List<Car>,
+    importState: InsightsElectricityImportState,
+    actions: InsightsActions,
+    onLaunchChargerPicker: () -> Unit,
+    onOpenEditGasSheet: () -> Unit,
+    onOpenManageElectricity: () -> Unit,
+    onOpenPeriodLogs: (ChargingVenue) -> Unit,
+    modifier: Modifier = Modifier
+) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Vehicle Selection Controls (M3 Expressive Connected Button Group)
         if (activeCars.size > 1) {
             item {
-                val vehicleOptions = listOf("All" to null) + activeCars.map {
-                    (it.model.ifBlank { it.displayName }) to it.id
-                }
-
-                if (vehicleOptions.size <= 3) {
-                    VehicleFilterConnectedButtonGroup(
-                        options = vehicleOptions,
-                        selectedCarId = state.selectedCarId,
-                        onSelectVehicle = onSelectVehicle
-                    )
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        vehicleOptions.forEach { (label, carId) ->
-                            val selected = state.selectedCarId == carId
-                            FilterChip(
-                                selected = selected,
-                                onClick = { onSelectVehicle(carId) },
-                                label = {
-                                    Text(
-                                        text = label,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                },
-                                shape = RoundedCornerShape(14.dp),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                ),
-                                modifier = Modifier.expressiveBounceClick()
-                            )
-                        }
-                    }
-                }
+                InsightsVehicleFilterRow(
+                    activeCars = activeCars,
+                    selectedCarId = state.selectedCarId,
+                    onSelectVehicle = actions.onSelectVehicle
+                )
             }
         }
 
         if (state.hasOdometerData) {
-            // Card 1: Fleet Share & Overall Miles
+            item { FleetShareSection(state = state, onSelectVehicle = actions.onSelectVehicle) }
+            item { DrivingActivitySection(state = state, actions = actions) }
             item {
-                FleetShareCard(
-                    totalMiles = state.fleetTotalMiles,
-                    car1Id = state.car1Id,
-                    car1Name = state.car1Name,
-                    car1Miles = state.car1Miles,
-                    car1SharePct = state.car1SharePct,
-                    car1DailyRate = state.car1DailyRate,
-                    car2Id = state.car2Id,
-                    car2Name = state.car2Name,
-                    car2Miles = state.car2Miles,
-                    car2SharePct = state.car2SharePct,
-                    car2DailyRate = state.car2DailyRate,
-                    selectedCarId = state.selectedCarId,
-                    onSelectVehicle = onSelectVehicle
+                ElectricityCostSection(
+                    state = state,
+                    importState = importState,
+                    actions = actions,
+                    onLaunchChargerPicker = onLaunchChargerPicker,
+                    onOpenManageElectricity = onOpenManageElectricity,
+                    onOpenPeriodLogs = onOpenPeriodLogs
                 )
             }
-
-            // Card 2: Driving Activity Bar Chart (Google Health Steps view layout)
-            item {
-                val activeDailyRate = when (state.selectedCarId) {
-                    state.car1Id -> state.car1DailyRate
-                    state.car2Id -> state.car2DailyRate
-                    else -> state.car1DailyRate + state.car2DailyRate
-                }
-
-                DrivingActivityCard(
-                    granularity = state.granularity,
-                    activityBars = state.activityBars,
-                    observationWindowText = state.observationWindowText,
-                    totalMiles = state.totalMiles,
-                    dailyRate = activeDailyRate,
-                    canGoPrevious = state.canGoPrevious,
-                    canGoNext = state.canGoNext,
-                    canReset = state.canGoNext,
-                    onSelectGranularity = onSelectGranularity,
-                    onPreviousPeriod = onPreviousPeriod,
-                    onNextPeriod = onNextPeriod,
-                    onResetPeriod = onResetPeriod,
-                    car1Name = state.car1Name,
-                    car2Name = state.car2Name,
-                    selectedCarId = state.selectedCarId,
-                    car1Id = state.car1Id,
-                    car2Id = state.car2Id
-                )
-            }
-
-            // Card 3: EV Charging Costs Card
-            item {
-                EvElectricityCostCard(
-                    data = state.electricityCost,
-                    selectedVenue = selectedVenue,
-                    onSelectVenue = onSelectVenue,
-                    selectedCarId = state.selectedCarId,
-                    car1Id = state.car1Id,
-                    car1Name = state.car1Name,
-                    car2Id = state.car2Id,
-                    car2Name = state.car2Name,
-                    isParsingFile = isParsingElectricityFile,
-                    billCount = state.utilityBills.size,
-                    sessionCount = state.chargingSessions.size,
-                    onUploadChargerUsage = launchChargerPicker,
-                    onOpenManualChargerSheet = onOpenManualChargerUsageSheet,
-                    onOpenManualBillSheet = onOpenManualUtilityBillSheet,
-                    onOpenManageSheet = { showManageElectricitySheet = true },
-                    onSaveCustomRate = onUpdateDefaultElectricityRate,
-                    onSyncWallConnectors = onSyncWallConnectors,
-                    onSyncWorkCharging = onSyncWorkCharging,
-                    onSyncPublicCharging = onSyncPublicCharging,
-                    onOpenPeriodLogs = { periodLogsVenue = it }
-                )
-            }
-
-            // Card 4: Gas Comparison Card (includes Saved vs. Gas when EV charging data exists)
-            item {
-                GasComparisonCard(
-                    gasComparison = state.gasComparison,
-                    gasPrice = state.gasPrice,
-                    baselineMpg = state.baselineMpg,
-                    car1Name = state.car1Name,
-                    car1Miles = state.car1Miles,
-                    car2Name = state.car2Name,
-                    car2Miles = state.car2Miles,
-                    selectedCarId = state.selectedCarId,
-                    car1Id = state.car1Id,
-                    car2Id = state.car2Id,
-                    onOpenEditSheet = { showEditSheet = true }
-                )
-            }
+            item { GasComparisonSection(state = state, onOpenEditSheet = onOpenEditGasSheet) }
         } else {
-            // Allow switching Week/Month/Year when electricity data exists even before telemetry syncs
             if (state.electricityCost.hasAnyData) {
                 item {
                     CompactElectricityPeriodBar(
                         granularity = state.granularity,
-                        periodText = InsightsCalculationEngine.formatObservationWindowText(
-                            state.granularity,
-                            state.periodOffset
-                        ),
+                        periodText = InsightsCalculationEngine.formatObservationWindowText(state.granularity, state.periodOffset),
                         canGoPrevious = state.canGoPrevious,
                         canGoNext = state.canGoNext,
-                        onSelectGranularity = onSelectGranularity,
-                        onPreviousPeriod = onPreviousPeriod,
-                        onNextPeriod = onNextPeriod
+                        onSelectGranularity = actions.onSelectGranularity,
+                        onPreviousPeriod = actions.onPreviousPeriod,
+                        onNextPeriod = actions.onNextPeriod
                     )
                 }
             }
-
-            // Always show EV Charging Costs card even before 2+ odometer telemetry syncs exist
             item {
-                EvElectricityCostCard(
-                    data = state.electricityCost,
-                    selectedVenue = selectedVenue,
-                    onSelectVenue = onSelectVenue,
-                    selectedCarId = state.selectedCarId,
-                    car1Id = state.car1Id,
-                    car1Name = state.car1Name,
-                    car2Id = state.car2Id,
-                    car2Name = state.car2Name,
-                    isParsingFile = isParsingElectricityFile,
-                    billCount = state.utilityBills.size,
-                    sessionCount = state.chargingSessions.size,
-                    onUploadChargerUsage = launchChargerPicker,
-                    onOpenManualChargerSheet = onOpenManualChargerUsageSheet,
-                    onOpenManualBillSheet = onOpenManualUtilityBillSheet,
-                    onOpenManageSheet = { showManageElectricitySheet = true },
-                    onSaveCustomRate = onUpdateDefaultElectricityRate,
-                    onSyncWallConnectors = onSyncWallConnectors,
-                    onSyncWorkCharging = onSyncWorkCharging,
-                    onSyncPublicCharging = onSyncPublicCharging,
-                    onOpenPeriodLogs = { periodLogsVenue = it }
+                ElectricityCostSection(
+                    state = state,
+                    importState = importState,
+                    actions = actions,
+                    onLaunchChargerPicker = onLaunchChargerPicker,
+                    onOpenManageElectricity = onOpenManageElectricity,
+                    onOpenPeriodLogs = onOpenPeriodLogs
                 )
             }
-
-            // Empty / Initial telemetry state card
-            item {
-                Card(
-                    shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Speed,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                        }
-                        Text(
-                            text = "Waiting for more mileage data",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Charts appear automatically after a few odometer updates.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+            item { WaitingForMileageCard() }
         }
 
-        // Bottom spacer for comfortable navigation clearance
-        item {
-            Spacer(modifier = Modifier.height(88.dp))
-        }
+        item { Spacer(modifier = Modifier.height(88.dp)) }
     }
+}
 
+@Composable
+private fun FleetShareSection(state: InsightsUiState, onSelectVehicle: (String?) -> Unit) {
+    FleetShareCard(
+        totalMiles = state.fleetTotalMiles,
+        car1Id = state.car1Id,
+        car1Name = state.car1Name,
+        car1Miles = state.car1Miles,
+        car1SharePct = state.car1SharePct,
+        car1DailyRate = state.car1DailyRate,
+        car2Id = state.car2Id,
+        car2Name = state.car2Name,
+        car2Miles = state.car2Miles,
+        car2SharePct = state.car2SharePct,
+        car2DailyRate = state.car2DailyRate,
+        selectedCarId = state.selectedCarId,
+        onSelectVehicle = onSelectVehicle
+    )
+}
+
+@Composable
+private fun DrivingActivitySection(state: InsightsUiState, actions: InsightsActions) {
+    val activeDailyRate = when (state.selectedCarId) {
+        state.car1Id -> state.car1DailyRate
+        state.car2Id -> state.car2DailyRate
+        else -> state.car1DailyRate + state.car2DailyRate
+    }
+    DrivingActivityCard(
+        granularity = state.granularity,
+        activityBars = state.activityBars,
+        observationWindowText = state.observationWindowText,
+        totalMiles = state.totalMiles,
+        dailyRate = activeDailyRate,
+        canGoPrevious = state.canGoPrevious,
+        canGoNext = state.canGoNext,
+        canReset = state.canGoNext,
+        onSelectGranularity = actions.onSelectGranularity,
+        onPreviousPeriod = actions.onPreviousPeriod,
+        onNextPeriod = actions.onNextPeriod,
+        onResetPeriod = actions.onResetPeriod,
+        car1Name = state.car1Name,
+        car2Name = state.car2Name,
+        selectedCarId = state.selectedCarId,
+        car1Id = state.car1Id,
+        car2Id = state.car2Id
+    )
+}
+
+@Composable
+private fun ElectricityCostSection(
+    state: InsightsUiState,
+    importState: InsightsElectricityImportState,
+    actions: InsightsActions,
+    onLaunchChargerPicker: () -> Unit,
+    onOpenManageElectricity: () -> Unit,
+    onOpenPeriodLogs: (ChargingVenue) -> Unit
+) {
+    EvElectricityCostCard(
+        data = state.electricityCost,
+        selectedVenue = importState.selectedVenue,
+        onSelectVenue = actions.onSelectVenue,
+        selectedCarId = state.selectedCarId,
+        car1Id = state.car1Id,
+        car1Name = state.car1Name,
+        car2Id = state.car2Id,
+        car2Name = state.car2Name,
+        isParsingFile = importState.isParsingElectricityFile,
+        billCount = state.utilityBills.size,
+        sessionCount = state.chargingSessions.size,
+        onUploadChargerUsage = onLaunchChargerPicker,
+        onOpenManualChargerSheet = actions.onOpenManualChargerUsageSheet,
+        onOpenManualBillSheet = actions.onOpenManualUtilityBillSheet,
+        onOpenManageSheet = onOpenManageElectricity,
+        onSaveCustomRate = actions.onUpdateDefaultElectricityRate,
+        onSyncWallConnectors = actions.onSyncWallConnectors,
+        onSyncWorkCharging = actions.onSyncWorkCharging,
+        onSyncPublicCharging = actions.onSyncPublicCharging,
+        onOpenPeriodLogs = onOpenPeriodLogs
+    )
+}
+
+@Composable
+private fun GasComparisonSection(state: InsightsUiState, onOpenEditSheet: () -> Unit) {
+    GasComparisonCard(
+        gasComparison = state.gasComparison,
+        gasPrice = state.gasPrice,
+        baselineMpg = state.baselineMpg,
+        car1Name = state.car1Name,
+        car1Miles = state.car1Miles,
+        car2Name = state.car2Name,
+        car2Miles = state.car2Miles,
+        selectedCarId = state.selectedCarId,
+        car1Id = state.car1Id,
+        car2Id = state.car2Id,
+        onOpenEditSheet = onOpenEditSheet
+    )
+}
+
+@Composable
+private fun InsightsTabSheetsHost(
+    state: InsightsUiState,
+    activeCars: List<Car>,
+    importState: InsightsElectricityImportState,
+    actions: InsightsActions,
+    lastUploadBatch: List<ChargingSessionEntity>,
+    showEditSheet: Boolean,
+    showManageElectricitySheet: Boolean,
+    openManageSessionsDirectly: Boolean,
+    periodLogsVenue: ChargingVenue?,
+    onDismissEditSheet: () -> Unit,
+    onDismissManageSheet: () -> Unit,
+    onOpenManageAllSessions: () -> Unit,
+    onDismissPeriodLogs: () -> Unit,
+    onLaunchBillPicker: () -> Unit,
+    onLaunchChargerPicker: () -> Unit
+) {
     if (showEditSheet) {
         EditGasComparisonSheet(
             currentGasPrice = state.gasPrice,
             currentBaselineMpg = state.baselineMpg,
-            onDismiss = { showEditSheet = false },
+            onDismiss = onDismissEditSheet,
             onSave = { price, mpg ->
-                onUpdateGasPrice(price)
-                onUpdateBaselineMpg(mpg)
-                showEditSheet = false
+                actions.onUpdateGasPrice(price)
+                actions.onUpdateBaselineMpg(mpg)
+                onDismissEditSheet()
             }
         )
     }
 
-    if (showUtilityBillSheet) {
+    if (importState.showUtilityBillSheet) {
         UtilityBillReviewSheet(
-            initialDraft = pendingUtilityBillDraft,
+            initialDraft = importState.pendingUtilityBillDraft,
             existingBills = state.utilityBills,
-            onUploadDifferentFile = launchBillPicker,
-            onDismiss = onDismissUtilityBillSheet,
-            onSave = onSaveUtilityBill
+            onUploadDifferentFile = onLaunchBillPicker,
+            onDismiss = actions.onDismissUtilityBillSheet,
+            onSave = actions.onSaveUtilityBill
         )
     }
 
-    if (showChargerUsageSheet) {
+    if (importState.showChargerUsageSheet) {
         val fingerprints = remember(state.chargingSessions) {
             state.chargingSessions.map { it.fingerprint }.toSet()
         }
         ChargerUsageReviewSheet(
-            initialImport = pendingChargerImport,
+            initialImport = importState.pendingChargerImport,
             cars = activeCars,
             existingFingerprints = fingerprints,
-            onUploadFile = launchChargerPicker,
-            onDismiss = onDismissChargerUsageSheet,
-            onSaveSessions = onSaveChargingSessions,
+            onUploadFile = onLaunchChargerPicker,
+            onDismiss = actions.onDismissChargerUsageSheet,
+            onSaveSessions = actions.onSaveChargingSessions,
             initialSelectedCarId = state.selectedCarId,
-            initialVenue = selectedVenue,
+            initialVenue = importState.selectedVenue,
             lastUploadBatch = lastUploadBatch,
-            onUndoLastUpload = onUndoLastChargingUpload,
-            onUndoAndRetagLastUpload = onUndoAndRetagChargingUpload
+            onUndoLastUpload = actions.onUndoLastChargingUpload,
+            onUndoAndRetagLastUpload = actions.onUndoAndRetagChargingUpload
         )
     }
 
@@ -463,40 +347,31 @@ fun InsightsTab(
             chargingSessions = state.chargingSessions,
             cars = activeCars,
             currentDefaultRate = state.defaultElectricityRate,
-            onUpdateDefaultRate = onUpdateDefaultElectricityRate,
-            onDeleteBill = onDeleteUtilityBill,
-            onDeleteSession = onDeleteChargingSession,
-            onUndoLastChargerUpload = onUndoLastChargingUpload,
+            onUpdateDefaultRate = actions.onUpdateDefaultElectricityRate,
+            onDeleteBill = actions.onDeleteUtilityBill,
+            onDeleteSession = actions.onDeleteChargingSession,
+            onUndoLastChargerUpload = actions.onUndoLastChargingUpload,
             onUndoAndRetagLastChargerUpload = {
-                showManageElectricitySheet = false
-                openManageSessionsDirectly = false
-                onUndoAndRetagChargingUpload()
+                onDismissManageSheet()
+                actions.onUndoAndRetagChargingUpload()
             },
             onOpenAddBill = {
-                showManageElectricitySheet = false
-                openManageSessionsDirectly = false
-                onOpenManualUtilityBillSheet()
+                onDismissManageSheet()
+                actions.onOpenManualUtilityBillSheet()
             },
             onOpenAddCharger = {
-                showManageElectricitySheet = false
-                openManageSessionsDirectly = false
-                onOpenManualChargerUsageSheet()
+                onDismissManageSheet()
+                actions.onOpenManualChargerUsageSheet()
             },
-            onDismiss = {
-                showManageElectricitySheet = false
-                openManageSessionsDirectly = false
-            },
+            onDismiss = onDismissManageSheet,
             initialShowSessionsTab = openManageSessionsDirectly,
             useCustomRate = state.useCustomElectricityRate,
-            onUseSavedBillRate = onUseSavedBillRate
+            onUseSavedBillRate = actions.onUseSavedBillRate
         )
     }
 
     periodLogsVenue?.let { activeVenue ->
-        val periodText = InsightsCalculationEngine.formatObservationWindowText(
-            state.granularity,
-            state.periodOffset
-        )
+        val periodText = InsightsCalculationEngine.formatObservationWindowText(state.granularity, state.periodOffset)
         PeriodChargingLogsSheet(
             venue = activeVenue,
             data = state.electricityCost,
@@ -506,199 +381,16 @@ fun InsightsTab(
             canGoNext = state.canGoNext,
             selectedCarId = state.selectedCarId,
             cars = activeCars,
-            onPreviousPeriod = onPreviousPeriod,
-            onNextPeriod = onNextPeriod,
-            onDeleteSession = onDeleteChargingSession,
-            onUpdateSessionCost = onUpdateChargingSessionCost,
+            onPreviousPeriod = actions.onPreviousPeriod,
+            onNextPeriod = actions.onNextPeriod,
+            onDeleteSession = actions.onDeleteChargingSession,
+            onUpdateSessionCost = actions.onUpdateChargingSessionCost,
             onOpenAddCharger = {
-                periodLogsVenue = null
-                onOpenManualChargerUsageSheet()
+                onDismissPeriodLogs()
+                actions.onOpenManualChargerUsageSheet()
             },
-            onOpenAllHistory = {
-                periodLogsVenue = null
-                openManageSessionsDirectly = true
-                showManageElectricitySheet = true
-            },
-            onDismiss = { periodLogsVenue = null }
+            onOpenAllHistory = onOpenManageAllSessions,
+            onDismiss = onDismissPeriodLogs
         )
     }
 }
-
-@Composable
-private fun VehicleFilterConnectedButtonGroup(
-    options: List<Pair<String, String?>>,
-    selectedCarId: String?,
-    onSelectVehicle: (String?) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        options.forEachIndexed { index, (label, carId) ->
-            val selected = selectedCarId == carId
-            val startTarget = if (index == 0 || selected) 24.dp else 6.dp
-            val endTarget = if (index == options.lastIndex || selected) 24.dp else 6.dp
-
-            val startRadius by animateDpAsState(
-                targetValue = startTarget,
-                animationSpec = spring(dampingRatio = 0.8f, stiffness = 380f),
-                label = "veh_start_$index"
-            )
-            val endRadius by animateDpAsState(
-                targetValue = endTarget,
-                animationSpec = spring(dampingRatio = 0.8f, stiffness = 380f),
-                label = "veh_end_$index"
-            )
-            val bg by animateColorAsState(
-                targetValue = if (selected) {
-                    MaterialTheme.colorScheme.secondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                },
-                animationSpec = ExpressiveMotionTokens.ColorSpring,
-                label = "veh_bg_$index"
-            )
-            val fg by animateColorAsState(
-                targetValue = if (selected) {
-                    MaterialTheme.colorScheme.onSecondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                animationSpec = ExpressiveMotionTokens.ColorSpring,
-                label = "veh_fg_$index"
-            )
-
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .expressiveBounceClick { onSelectVehicle(carId) },
-                shape = RoundedCornerShape(
-                    topStart = startRadius,
-                    bottomStart = startRadius,
-                    topEnd = endRadius,
-                    bottomEnd = endRadius
-                ),
-                color = bg,
-                contentColor = fg
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompactElectricityPeriodBar(
-    granularity: InsightsTimeGranularity,
-    periodText: String,
-    canGoPrevious: Boolean,
-    canGoNext: Boolean,
-    onSelectGranularity: (InsightsTimeGranularity) -> Unit,
-    onPreviousPeriod: () -> Unit,
-    onNextPeriod: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                InsightsTimeGranularity.entries.forEachIndexed { index, gran ->
-                    val selected = gran == granularity
-                    val startR by animateDpAsState(
-                        if (index == 0 || selected) 20.dp else 6.dp,
-                        spring(dampingRatio = 0.8f, stiffness = 380f),
-                        label = "c_s_$index"
-                    )
-                    val endR by animateDpAsState(
-                        if (index == InsightsTimeGranularity.entries.lastIndex || selected) 20.dp else 6.dp,
-                        spring(dampingRatio = 0.8f, stiffness = 380f),
-                        label = "c_e_$index"
-                    )
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .expressiveBounceClick { onSelectGranularity(gran) },
-                        shape = RoundedCornerShape(
-                            topStart = startR,
-                            bottomStart = startR,
-                            topEnd = endR,
-                            bottomEnd = endR
-                        ),
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                        },
-                        contentColor = if (selected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    ) {
-                        Text(
-                            text = gran.label,
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                            ),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = onPreviousPeriod,
-                    enabled = canGoPrevious
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ChevronLeft,
-                        contentDescription = "Previous period"
-                    )
-                }
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Text(
-                        text = periodText,
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                    )
-                }
-                IconButton(
-                    onClick = onNextPeriod,
-                    enabled = canGoNext
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ChevronRight,
-                        contentDescription = "Next period"
-                    )
-                }
-            }
-        }
-    }
-}
-
