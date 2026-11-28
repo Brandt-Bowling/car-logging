@@ -140,8 +140,6 @@ class MainActivity : ComponentActivity() {
 
                             VehicleDetailsScreen(
                                 viewModel = detailsViewModel,
-                                googleDriveService = homeViewModel.googleDriveService,
-                                preferencesManager = homeViewModel.preferencesManager,
                                 onNavigateBack = onNavigateBack,
                                 onOpenAddRecordDialog = { targetId ->
                                     targetCarIdForRecord = targetId

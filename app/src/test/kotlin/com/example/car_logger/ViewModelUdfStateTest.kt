@@ -27,6 +27,7 @@ import com.example.car_logger.data.local.entity.UtilityBillEntity
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.vehicle.VehicleImageRepository
 import com.example.car_logger.services.AutoDevService
+import com.example.car_logger.services.DriveReceiptSyncUseCase
 import com.example.car_logger.services.GeminiAiService
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncService
@@ -318,6 +319,9 @@ class ViewModelUdfStateTest {
             )
         )
 
+        val googleDriveService = GoogleDriveService(initialUser = null)
+        val geminiAiService = GeminiAiService(prefs)
+
         val vm = registerInStore("details_udf", VehicleDetailsViewModel::class.java) {
             VehicleDetailsViewModel(
                 carId = "car-1",
@@ -330,13 +334,22 @@ class ViewModelUdfStateTest {
                 utilityBillDao = NoOpUtilityBillDao(),
                 chargingSessionDao = chargingSessionDao,
                 preferencesManager = prefs,
+                googleDriveService = googleDriveService,
                 odometerSyncService = OdometerSyncService(prefs, carDao, odometerLogDao, chargingSessionDao),
                 vehicleImageRepository = VehicleImageRepository(
                     imagesDir = tempFolder.newFolder("details_images"),
                     uriContentReader = uriContentReader,
                     carDao = carDao
                 ),
-                geminiAiService = GeminiAiService(prefs)
+                geminiAiService = geminiAiService,
+                driveReceiptSyncUseCase = DriveReceiptSyncUseCase(
+                    googleDriveService = googleDriveService,
+                    preferencesManager = prefs,
+                    geminiAiService = geminiAiService,
+                    recordDao = recordDao,
+                    carDao = carDao,
+                    odometerLogDao = odometerLogDao
+                )
             )
         }
 

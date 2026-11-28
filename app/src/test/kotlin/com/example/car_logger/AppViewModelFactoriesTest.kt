@@ -144,6 +144,7 @@ class AppViewModelFactoriesTest {
         assertSame(container.odometerSyncService, detailsVm.odometerSyncService)
         assertSame(container.vehicleImageRepository, detailsVm.vehicleImageRepository)
         assertSame(container.geminiAiService, detailsVm.geminiAiService)
+        assertSame(container.driveReceiptSyncUseCase, detailsVm.driveReceiptSyncUseCase)
 
         assertNotNull(addCarVm)
         assertNotNull(settingsVm)

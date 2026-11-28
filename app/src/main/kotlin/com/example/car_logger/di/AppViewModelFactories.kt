@@ -54,9 +54,11 @@ object AppViewModelFactories {
                         utilityBillDao = container.utilityBillDao,
                         chargingSessionDao = container.chargingSessionDao,
                         preferencesManager = container.preferencesManager,
+                        googleDriveService = container.googleDriveService,
                         odometerSyncService = container.odometerSyncService,
                         vehicleImageRepository = container.vehicleImageRepository,
-                        geminiAiService = container.geminiAiService
+                        geminiAiService = container.geminiAiService,
+                        driveReceiptSyncUseCase = container.driveReceiptSyncUseCase
                     ) as T
                 }
                 throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
