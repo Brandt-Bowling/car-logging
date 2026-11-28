@@ -111,7 +111,7 @@ private val sampleUiState = InsightsUiState(
 
 @Preview(name = "Insights Tab - Light", showBackground = true)
 @Composable
-fun InsightsTabLightPreview() {
+private fun InsightsTabLightPreview() {
     CarLoggerTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -120,12 +120,7 @@ fun InsightsTabLightPreview() {
             InsightsTab(
                 state = sampleUiState,
                 cars = sampleCars,
-                onSelectVehicle = {},
-                onSelectGranularity = {},
-                onPreviousPeriod = {},
-                onNextPeriod = {},
-                onUpdateGasPrice = {},
-                onUpdateBaselineMpg = {}
+                actions = InsightsActions()
             )
         }
     }
@@ -133,7 +128,7 @@ fun InsightsTabLightPreview() {
 
 @Preview(name = "Insights Tab - Dark", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
-fun InsightsTabDarkPreview() {
+private fun InsightsTabDarkPreview() {
     CarLoggerTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -142,12 +137,7 @@ fun InsightsTabDarkPreview() {
             InsightsTab(
                 state = sampleUiState,
                 cars = sampleCars,
-                onSelectVehicle = {},
-                onSelectGranularity = {},
-                onPreviousPeriod = {},
-                onNextPeriod = {},
-                onUpdateGasPrice = {},
-                onUpdateBaselineMpg = {}
+                actions = InsightsActions()
             )
         }
     }
@@ -155,7 +145,7 @@ fun InsightsTabDarkPreview() {
 
 @Preview(name = "Insights Tab - Single Vehicle", showBackground = true)
 @Composable
-fun InsightsTabSingleVehiclePreview() {
+private fun InsightsTabSingleVehiclePreview() {
     CarLoggerTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -172,12 +162,7 @@ fun InsightsTabSingleVehiclePreview() {
                     )
                 ),
                 cars = sampleCars,
-                onSelectVehicle = {},
-                onSelectGranularity = {},
-                onPreviousPeriod = {},
-                onNextPeriod = {},
-                onUpdateGasPrice = {},
-                onUpdateBaselineMpg = {}
+                actions = InsightsActions()
             )
         }
     }
@@ -185,7 +170,7 @@ fun InsightsTabSingleVehiclePreview() {
 
 @Preview(name = "Driving Activity Card - Google Health Style", showBackground = true)
 @Composable
-fun DrivingActivityCardGoogleHealthPreview() {
+private fun DrivingActivityCardGoogleHealthPreview() {
     CarLoggerTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -215,7 +200,7 @@ fun DrivingActivityCardGoogleHealthPreview() {
 
 @Preview(name = "Insights Tab - Empty State", showBackground = true)
 @Composable
-fun InsightsTabEmptyPreview() {
+private fun InsightsTabEmptyPreview() {
     CarLoggerTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -227,12 +212,7 @@ fun InsightsTabEmptyPreview() {
                     observationWindowText = "Initial reading logged on Oct 29 (more readings needed for activity)"
                 ),
                 cars = sampleCars,
-                onSelectVehicle = {},
-                onSelectGranularity = {},
-                onPreviousPeriod = {},
-                onNextPeriod = {},
-                onUpdateGasPrice = {},
-                onUpdateBaselineMpg = {}
+                actions = InsightsActions()
             )
         }
     }

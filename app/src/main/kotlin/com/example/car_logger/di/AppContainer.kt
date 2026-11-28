@@ -15,6 +15,7 @@ import com.example.car_logger.data.local.dao.UtilityBillDao
 import com.example.car_logger.data.vehicle.VehicleImageRepository
 import com.example.car_logger.services.AndroidSyncSchedulerController
 import com.example.car_logger.services.AutoDevService
+import com.example.car_logger.services.DriveReceiptSyncUseCase
 import com.example.car_logger.services.GeminiAiService
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncService
@@ -35,7 +36,8 @@ class AppContainer private constructor(
     odometerLogDaoOverride: OdometerLogDao? = null,
     utilityBillDaoOverride: UtilityBillDao? = null,
     chargingSessionDaoOverride: ChargingSessionDao? = null,
-    vehicleImageRepositoryOverride: VehicleImageRepository? = null
+    vehicleImageRepositoryOverride: VehicleImageRepository? = null,
+    driveReceiptSyncUseCaseOverride: DriveReceiptSyncUseCase? = null
 ) {
     constructor(context: Context) : this(context = context, preferencesManagerOverride = null)
 
@@ -121,6 +123,17 @@ class AppContainer private constructor(
             odometerLogDao = odometerLogDao,
             chargingSessionDao = chargingSessionDao,
             client = httpClient
+        )
+    }
+
+    val driveReceiptSyncUseCase: DriveReceiptSyncUseCase by lazy {
+        driveReceiptSyncUseCaseOverride ?: DriveReceiptSyncUseCase(
+            googleDriveService = googleDriveService,
+            preferencesManager = preferencesManager,
+            geminiAiService = geminiAiService,
+            recordDao = maintenanceRecordDao,
+            carDao = carDao,
+            odometerLogDao = odometerLogDao
         )
     }
 

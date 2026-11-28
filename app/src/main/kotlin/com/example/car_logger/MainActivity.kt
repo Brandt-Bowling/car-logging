@@ -140,8 +140,6 @@ class MainActivity : ComponentActivity() {
 
                             VehicleDetailsScreen(
                                 viewModel = detailsViewModel,
-                                googleDriveService = homeViewModel.googleDriveService,
-                                preferencesManager = homeViewModel.preferencesManager,
                                 onNavigateBack = onNavigateBack,
                                 onOpenAddRecordDialog = { targetId ->
                                     targetCarIdForRecord = targetId
@@ -190,14 +188,19 @@ class MainActivity : ComponentActivity() {
                             cars = cars,
                             initialCarId = targetCarIdForRecord,
                             record = activeRecordForDialog,
-                            onDismissRequest = { showRecordDialog = false },
+                            onDismissRequest = {
+                                showRecordDialog = false
+                                activeRecordForDialog = null
+                            },
                             onSave = { record ->
                                 homeViewModel.addMaintenanceRecord(record)
                                 showRecordDialog = false
+                                activeRecordForDialog = null
                             },
                             onDelete = { recordId ->
-                                // Handled via homeViewModel or detailsViewModel
+                                homeViewModel.deleteMaintenanceRecord(recordId)
                                 showRecordDialog = false
+                                activeRecordForDialog = null
                             }
                         )
                     }

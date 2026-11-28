@@ -314,11 +314,11 @@ flowchart TD
 - Create: `app/src/test/kotlin/com/example/car_logger/ScheduledServiceCalculatorTest.kt`
 
 **Steps:**
-- [ ] Extract EV tire rotation vs. ICE oil-change service due math into pure `ScheduledServiceCalculator.kt` and add `ScheduledServiceCalculatorTest.kt`.
-- [ ] Extract utility bill & charger file parsing, persistence, undo-batch, deletion, and rate updates into `ElectricityImportController.kt`.
-- [ ] Extract OAuth post-connect sync & manual car/Wall Connector/work/public charging sync orchestration into `HomeTelemetryController.kt`.
-- [ ] Add `deleteMaintenanceRecord(recordId: String)` (calling `recordDao.deleteRecordById(recordId)`) to `HomeViewModel` and wire `MaintenanceRecordDialog`'s `onDelete` callback in `MainActivity.kt` (lines 190–193) to call `homeViewModel.deleteMaintenanceRecord(recordId)` before closing the dialog.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug`.
+- [x] Extract EV tire rotation vs. ICE oil-change service due math into pure `ScheduledServiceCalculator.kt` and add `ScheduledServiceCalculatorTest.kt`.
+- [x] Extract utility bill & charger file parsing, persistence, undo-batch, deletion, and rate updates into `ElectricityImportController.kt`.
+- [x] Extract OAuth post-connect sync & manual car/Wall Connector/work/public charging sync orchestration into `HomeTelemetryController.kt`.
+- [x] Add `deleteMaintenanceRecord(recordId: String)` (calling `recordDao.deleteRecordById(recordId)`) to `HomeViewModel` and wire `MaintenanceRecordDialog`'s `onDelete` callback in `MainActivity.kt` (lines 190–193) to call `homeViewModel.deleteMaintenanceRecord(recordId)` before closing the dialog.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug`.
 
 ---
 
@@ -334,11 +334,11 @@ flowchart TD
 - Modify: `app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/UtilityBillReviewSheet.kt` (847 → ~280 lines)
 
 **Steps:**
-- [ ] Extract `ChargerUsageReviewState` (`rememberChargerUsageReviewState` + `buildEntitiesFromDrafts`), `ChargerImportReviewContent`, and `ChargerManualEntryContent` (including `VehicleAssignmentGroup` and `ManualModeConnectedGroup`).
-- [ ] Slim `ChargerUsageReviewSheet.kt` to a ~210-line `ModalBottomSheet` shell.
-- [ ] Extract `UtilityBillReviewState` (`rememberUtilityBillReviewState` + live rate & overlap state) and `UtilityBillBreakdownCard` (`BillBreakdownCard` + `breakdownCategoryLabel`).
-- [ ] Slim `UtilityBillReviewSheet.kt` to a ~280-line `ModalBottomSheet` shell.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug`.
+- [x] Extract `ChargerUsageReviewState` (`rememberChargerUsageReviewState` + `buildEntitiesFromDrafts`), `ChargerImportReviewContent`, and `ChargerManualEntryContent` (including `VehicleAssignmentGroup` and `ManualModeConnectedGroup`).
+- [x] Slim `ChargerUsageReviewSheet.kt` to a ~210-line `ModalBottomSheet` shell.
+- [x] Extract `UtilityBillReviewState` (`rememberUtilityBillReviewState` + live rate & overlap state) and `UtilityBillBreakdownCard` (`BillBreakdownCard` + `breakdownCategoryLabel`).
+- [x] Slim `UtilityBillReviewSheet.kt` to a ~280-line `ModalBottomSheet` shell.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug`.
 
 ---
 
@@ -370,10 +370,10 @@ flowchart TD
 - Create: `app/src/test/kotlin/com/example/car_logger/VehicleCostHistoryCalculatorTest.kt`
 
 **Steps:**
-- [ ] Extract all 6 inline `AlertDialog`s from `VehicleDetailsScreen.kt` into `VehicleDetailsDialogs.kt`.
-- [ ] Extract lifetime & yearly cost-per-mile calculation into `VehicleCostHistoryCalculator.kt` and add `VehicleCostHistoryCalculatorTest.kt`.
-- [ ] Extract Drive folder receipt syncing into `DriveReceiptSyncUseCase.kt` (using the injected `GoogleDriveService`, `GeminiAiService`, `PreferencesManager`, and DAOs — removing the duplicate `GeminiAiService` instantiation and removing `googleDriveService`/`preferencesManager` parameters drilled through `MainActivity` → `VehicleDetailsScreen` → `VehicleDetailsViewModel`).
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug`.
+- [x] Extract all 6 inline `AlertDialog`s from `VehicleDetailsScreen.kt` into `VehicleDetailsDialogs.kt`.
+- [x] Extract lifetime & yearly cost-per-mile calculation into `VehicleCostHistoryCalculator.kt` and add `VehicleCostHistoryCalculatorTest.kt`.
+- [x] Extract Drive folder receipt syncing into `DriveReceiptSyncUseCase.kt` (using the injected `GoogleDriveService`, `GeminiAiService`, `PreferencesManager`, and DAOs — removing the duplicate `GeminiAiService` instantiation and removing `googleDriveService`/`preferencesManager` parameters drilled through `MainActivity` → `VehicleDetailsScreen` → `VehicleDetailsViewModel`).
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug`.
 
 ---
 
@@ -410,10 +410,10 @@ flowchart TD
 - Modify: `app/src/main/kotlin/com/example/car_logger/ui/screens/home/HomeScreen.kt`
 
 **Steps:**
-- [ ] Create `@Immutable data class InsightsActions(...)` grouping the ~25 callback lambdas passed from `HomeScreen` to `InsightsTab`.
-- [ ] Extract `VehicleFilterConnectedButtonGroup` and `CompactElectricityPeriodBar` into `InsightsHeaderControls.kt`.
-- [ ] Update `InsightsTab.kt` and `HomeScreen.kt` to pass `InsightsActions`.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug`.
+- [x] Create `@Immutable data class InsightsActions(...)` grouping the ~25 callback lambdas passed from `HomeScreen` to `InsightsTab`.
+- [x] Extract `VehicleFilterConnectedButtonGroup` and `CompactElectricityPeriodBar` into `InsightsHeaderControls.kt`.
+- [x] Update `InsightsTab.kt` and `HomeScreen.kt` to pass `InsightsActions`.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug`.
 
 ---
 

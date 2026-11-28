@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.car_logger.data.insights.InsightsTimeGranularity
+import com.example.car_logger.data.insights.VehicleCostHistoryCalculator
 import com.example.car_logger.data.local.PreferencesManager
 import com.example.car_logger.data.local.dao.CarDao
 import com.example.car_logger.data.local.dao.ChargingSessionDao
@@ -23,6 +24,8 @@ import com.example.car_logger.data.model.MaintenanceRecord
 import com.example.car_logger.data.model.Tire
 import com.example.car_logger.data.model.TireRotationCalculator
 import com.example.car_logger.data.vehicle.VehicleImageRepository
+import com.example.car_logger.services.DriveFileItem
+import com.example.car_logger.services.DriveReceiptSyncUseCase
 import com.example.car_logger.services.GeminiAiService
 import com.example.car_logger.services.GoogleDriveService
 import com.example.car_logger.services.OdometerSyncResult
@@ -31,7 +34,6 @@ import com.example.car_logger.ui.components.VehicleSubView
 import com.example.car_logger.ui.screens.vehicledetails.components.VehicleCostHistory
 import com.example.car_logger.ui.screens.vehicledetails.components.VehicleInsightsBentoCalculator
 import com.example.car_logger.ui.screens.vehicledetails.components.VehicleInsightsBentoState
-import com.example.car_logger.ui.screens.vehicledetails.components.YearlyCostSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -53,12 +55,18 @@ class VehicleDetailsViewModel(
     private val utilityBillDao: UtilityBillDao,
     private val chargingSessionDao: ChargingSessionDao,
     private val preferencesManager: PreferencesManager,
+    private val googleDriveService: GoogleDriveService,
     val odometerSyncService: OdometerSyncService,
     val vehicleImageRepository: VehicleImageRepository,
-    val geminiAiService: GeminiAiService
+    val geminiAiService: GeminiAiService,
+    val driveReceiptSyncUseCase: DriveReceiptSyncUseCase
 ) : ViewModel() {
 
     val isSyncingOdometer: StateFlow<Boolean> = odometerSyncService.isSyncing
+    val isDriveSignedIn: StateFlow<Boolean> = googleDriveService.currentUser
+        .map { it != null }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     val cooldownHoursFlow: StateFlow<Int> = preferencesManager.syncCooldownHoursFlow.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
@@ -88,51 +96,11 @@ class VehicleDetailsViewModel(
 
     val records: StateFlow<List<MaintenanceRecord>> = recordDao.getRecordsForCar(carId).map { list ->
         list.map { it.toModel() }
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
-    )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val costHistory: StateFlow<VehicleCostHistory> = combine(records, car) { recordsList, carItem ->
-        val validRecords = recordsList.filter { it.cost != null && it.cost > 0.0 }
-        val lifetimeTotal = validRecords.sumOf { it.cost ?: 0.0 }
-        val recordsByYear = validRecords.groupBy { rec ->
-            rec.date.take(4).toIntOrNull() ?: 0
-        }.filterKeys { it > 0 }
-
-        val yearlySummaries = recordsByYear.map { (year, recs) ->
-            val yearTotal = recs.sumOf { it.cost ?: 0.0 }
-            val minOdo = recs.minOfOrNull { it.odometer }
-            val maxOdo = recs.maxOfOrNull { it.odometer }
-            val miles = if (maxOdo != null && minOdo != null && maxOdo > minOdo) maxOdo - minOdo else null
-            val cpm = if (miles != null && miles > 0 && yearTotal > 0) yearTotal / miles.toDouble() else null
-            YearlyCostSummary(
-                year = year,
-                totalCost = yearTotal,
-                recordCount = recs.size,
-                milesDriven = miles,
-                costPerMile = cpm
-            )
-        }.sortedByDescending { it.year }
-
-        val currentOdo = carItem?.odometer ?: validRecords.maxOfOrNull { it.odometer } ?: 0
-        val minOverallOdo = validRecords.minOfOrNull { it.odometer }
-        val lifetimeMiles = if (minOverallOdo != null && currentOdo > minOverallOdo) currentOdo - minOverallOdo else currentOdo
-        val lifetimeCpm = if (lifetimeMiles > 0 && lifetimeTotal > 0) lifetimeTotal / lifetimeMiles.toDouble() else null
-        val avgAnnual = if (yearlySummaries.isNotEmpty()) lifetimeTotal / yearlySummaries.size else 0.0
-
-        VehicleCostHistory(
-            lifetimeTotalCost = lifetimeTotal,
-            lifetimeCostPerMile = lifetimeCpm,
-            yearlyBreakdowns = yearlySummaries,
-            averageAnnualSpend = avgAnnual
-        )
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        VehicleCostHistory(0.0, null, emptyList(), 0.0)
-    )
+        VehicleCostHistoryCalculator.calculate(records = recordsList, car = carItem)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), VehicleCostHistory(0.0, null, emptyList(), 0.0))
 
     private data class BentoPricingPrefs(
         val gasPrice: Float,
@@ -171,30 +139,29 @@ class VehicleDetailsViewModel(
             defaultElectricityRate = pricing.defaultElectricityRate,
             useCustomElectricityRate = pricing.useCustomElectricityRate
         )
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        VehicleInsightsBentoState()
-    )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), VehicleInsightsBentoState())
+
+    val filteredRecords: StateFlow<List<MaintenanceRecord>> =
+        combine(records, searchQuery, selectedYearFilter) { recs, query, year ->
+            recs.filter { rec ->
+                val matchesSearch = query.isBlank() ||
+                    rec.title.contains(query, ignoreCase = true) ||
+                    rec.description?.contains(query, ignoreCase = true) == true
+                val recYear = rec.date.take(4).toIntOrNull()
+                val matchesYear = year == null || recYear == year
+                matchesSearch && matchesYear
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val activeTire: StateFlow<Tire?> = tireDao.getActiveTireForCar(carId).map { it?.toModel() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val glovebox: StateFlow<Glovebox?> = gloveboxDao.getGloveboxForCar(carId).map { it?.toModel() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun setBentoGranularity(granularity: InsightsTimeGranularity) {
         _bentoGranularity.value = granularity
     }
-
-    val filteredRecords: StateFlow<List<MaintenanceRecord>> = combine(records, searchQuery, selectedYearFilter) { recs, query, year ->
-        recs.filter { rec ->
-            val matchesSearch = query.isBlank() ||
-                    rec.title.contains(query, ignoreCase = true) ||
-                    rec.description?.contains(query, ignoreCase = true) == true
-            val recYear = rec.date.take(4).toIntOrNull()
-            val matchesYear = year == null || recYear == year
-            matchesSearch && matchesYear
-        }
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
-    )
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
@@ -202,6 +169,10 @@ class VehicleDetailsViewModel(
 
     fun setSelectedYearFilter(year: Int?) {
         _selectedYearFilter.value = year
+    }
+
+    fun setSubView(subView: VehicleSubView) {
+        _currentSubView.value = subView
     }
 
     suspend fun generateVehicleAiImage(
@@ -224,59 +195,35 @@ class VehicleDetailsViewModel(
     fun saveCustomVehicleImage(bytes: ByteArray, onComplete: ((Car) -> Unit)? = null) {
         val c = car.value ?: return
         viewModelScope.launch {
-            val result = vehicleImageRepository.saveCustomImage(c, bytes)
-            result.onSuccess { updated -> onComplete?.invoke(updated) }
+            vehicleImageRepository.saveCustomImage(c, bytes).onSuccess { onComplete?.invoke(it) }
         }
     }
 
     fun saveVehicleImageFromUri(uri: Uri, onComplete: ((Car) -> Unit)? = null) {
         val c = car.value ?: return
         viewModelScope.launch {
-            val result = vehicleImageRepository.saveImageFromUri(c, uri)
-            result.onSuccess { updated -> onComplete?.invoke(updated) }
+            vehicleImageRepository.saveImageFromUri(c, uri).onSuccess { onComplete?.invoke(it) }
         }
     }
 
     fun resetVehicleImage(onComplete: ((Car) -> Unit)? = null) {
         val c = car.value ?: return
         viewModelScope.launch {
-            val result = vehicleImageRepository.resetToDefaultImage(c)
-            result.onSuccess { updated -> onComplete?.invoke(updated) }
+            vehicleImageRepository.resetToDefaultImage(c).onSuccess { onComplete?.invoke(it) }
         }
-    }
-
-    val activeTire: StateFlow<Tire?> = tireDao.getActiveTireForCar(carId).map { it?.toModel() }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        null
-    )
-
-    val glovebox: StateFlow<Glovebox?> = gloveboxDao.getGloveboxForCar(carId).map { it?.toModel() }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        null
-    )
-
-    fun setSubView(subView: VehicleSubView) {
-        _currentSubView.value = subView
     }
 
     fun toggleArchive() {
-        viewModelScope.launch {
-            carDao.toggleArchive(carId)
-        }
+        viewModelScope.launch { carDao.toggleArchive(carId) }
     }
 
     fun updateCar(updatedCar: Car) {
-        viewModelScope.launch {
-            carDao.updateCar(CarEntity.fromModel(updatedCar))
-        }
+        viewModelScope.launch { carDao.updateCar(CarEntity.fromModel(updatedCar)) }
     }
 
     fun updateOdometer(newOdometer: Int) {
         viewModelScope.launch {
-            val existingCar = carDao.getCarById(carId)
-            val prevOdo = existingCar?.odometer
+            val prevOdo = carDao.getCarById(carId)?.odometer
             carDao.updateOdometer(carId, newOdometer)
             try {
                 val latest = odometerLogDao.getLatestLogForCar(carId)
@@ -325,86 +272,36 @@ class VehicleDetailsViewModel(
         }
     }
 
-    fun updateDriveFolder(
-        folderId: String?,
-        folderName: String?,
-        googleDriveService: GoogleDriveService? = null,
-        preferencesManager: PreferencesManager? = null
-    ) {
+    suspend fun listDriveFolders(parentId: String? = null, searchName: String? = null): List<DriveFileItem> {
+        return if (!searchName.isNullOrBlank()) {
+            googleDriveService.listFolders(searchName = searchName)
+        } else {
+            googleDriveService.listFolders(parentId = parentId ?: "root")
+        }
+    }
+
+    fun updateDriveFolder(folderId: String?, folderName: String?) {
         viewModelScope.launch {
             carDao.updateDriveFolder(carId, folderId, folderName)
-            if (!folderId.isNullOrBlank() && googleDriveService != null && preferencesManager != null) {
-                syncDriveFolder(googleDriveService, preferencesManager, folderIdOverride = folderId)
+            if (!folderId.isNullOrBlank()) {
+                syncDriveFolder(folderIdOverride = folderId)
             }
         }
     }
 
-    fun syncDriveFolder(
-        googleDriveService: GoogleDriveService,
-        preferencesManager: PreferencesManager,
-        folderIdOverride: String? = null
-    ) {
+    fun syncDriveFolder(folderIdOverride: String? = null) {
         val targetFolderId = folderIdOverride ?: car.value?.driveFolderId ?: return
         if (_isSyncingDrive.value) return
 
         viewModelScope.launch {
             _isSyncingDrive.value = true
             try {
-                val files = googleDriveService.listFiles(targetFolderId)
-                val importedIds = preferencesManager.getImportedFileIds()
-                val existingDriveFileIds = records.value.mapNotNull { it.driveFileId }.toSet()
-
-                for (file in files) {
-                    if (file.id in importedIds || file.id in existingDriveFileIds) continue
-                    val bytes = googleDriveService.downloadFileBytes(file.id)
-                    val parsed = geminiAiService.parseReceipt(
-                        fileName = file.name,
-                        mimeType = file.mimeType,
-                        fileBytes = bytes
-                    )
-                    val resolvedOdo = if (parsed.odometer > 0) {
-                        parsed.odometer
-                    } else {
-                        car.value?.odometer ?: 0
-                    }
-                    val newRecord = MaintenanceRecordEntity(
-                        id = UUID.randomUUID().toString(),
-                        carId = carId,
-                        title = parsed.title,
-                        date = parsed.date,
-                        odometer = resolvedOdo,
-                        description = parsed.description,
-                        receiptUrl = file.webViewLink,
-                        cost = parsed.cost,
-                        driveFileId = file.id
-                    )
-                    recordDao.insertRecord(newRecord)
-                    preferencesManager.markFileAsImported(file.id)
-
-                    val currentCarOdo = carDao.getCarById(carId)?.odometer
-                    if (resolvedOdo > 0 && (currentCarOdo == null || resolvedOdo > currentCarOdo)) {
-                        carDao.updateOdometer(carId, resolvedOdo)
-                    }
-                    if (resolvedOdo > 0) {
-                        val ts = try {
-                            java.time.LocalDate.parse(parsed.date.take(10))
-                                .atStartOfDay(java.time.ZoneId.systemDefault())
-                                .toInstant()
-                                .toEpochMilli()
-                        } catch (_: Exception) {
-                            System.currentTimeMillis()
-                        }
-                        odometerLogDao.insertLog(
-                            OdometerLogEntity(
-                                id = "rec_${newRecord.id}",
-                                carId = carId,
-                                odometer = resolvedOdo,
-                                timestamp = ts,
-                                source = "MAINTENANCE"
-                            )
-                        )
-                    }
-                }
+                driveReceiptSyncUseCase.syncFolder(
+                    carId = carId,
+                    folderId = targetFolderId,
+                    fallbackOdometer = car.value?.odometer,
+                    existingRecords = records.value
+                )
             } finally {
                 _isSyncingDrive.value = false
             }
@@ -412,38 +309,36 @@ class VehicleDetailsViewModel(
     }
 
     fun deleteRecord(recordId: String) {
-        viewModelScope.launch {
-            recordDao.deleteRecordById(recordId)
-        }
+        viewModelScope.launch { recordDao.deleteRecordById(recordId) }
     }
 
     fun logTireRotation(date: String, odometer: Int) {
         viewModelScope.launch {
             val current = activeTire.value
             if (current != null) {
-                val updated = current.copy(
-                    lastRotationDate = date,
-                    lastRotationOdometer = odometer
+                tireDao.updateTire(
+                    TireEntity.fromModel(current.copy(lastRotationDate = date, lastRotationOdometer = odometer))
                 )
-                tireDao.updateTire(TireEntity.fromModel(updated))
             } else {
-                val newTire = TireRotationCalculator.createDefaultTireForRotation(
-                    carId = carId,
-                    date = date,
-                    rotationOdometer = odometer
+                tireDao.insertTire(
+                    TireEntity.fromModel(
+                        TireRotationCalculator.createDefaultTireForRotation(
+                            carId = carId,
+                            date = date,
+                            rotationOdometer = odometer
+                        )
+                    )
                 )
-                tireDao.insertTire(TireEntity.fromModel(newTire))
             }
-
-            val rotationRecord = MaintenanceRecordEntity(
-                id = UUID.randomUUID().toString(),
-                carId = carId,
-                title = "Tire Rotation",
-                date = date,
-                odometer = odometer
+            recordDao.insertRecord(
+                MaintenanceRecordEntity(
+                    id = UUID.randomUUID().toString(),
+                    carId = carId,
+                    title = "Tire Rotation",
+                    date = date,
+                    odometer = odometer
+                )
             )
-            recordDao.insertRecord(rotationRecord)
-
             val currentCarOdo = carDao.getCarById(carId)?.odometer
             if (odometer > 0 && (currentCarOdo == null || odometer > currentCarOdo)) {
                 carDao.updateOdometer(carId, odometer)
@@ -452,21 +347,22 @@ class VehicleDetailsViewModel(
     }
 
     fun installNewTireSet(tire: Tire) {
-        viewModelScope.launch {
-            tireDao.insertTire(TireEntity.fromModel(tire))
-        }
+        viewModelScope.launch { tireDao.insertTire(TireEntity.fromModel(tire)) }
     }
 
     fun updateGloveboxDocument(registrationUrl: String? = null, insuranceUrl: String? = null, manualUrl: String? = null) {
         viewModelScope.launch {
             val existing = glovebox.value
-            val updated = Glovebox(
-                carId = carId,
-                registrationUrl = registrationUrl ?: existing?.registrationUrl,
-                insuranceUrl = insuranceUrl ?: existing?.insuranceUrl,
-                manualUrl = manualUrl ?: existing?.manualUrl
+            gloveboxDao.upsertGlovebox(
+                GloveboxEntity.fromModel(
+                    Glovebox(
+                        carId = carId,
+                        registrationUrl = registrationUrl ?: existing?.registrationUrl,
+                        insuranceUrl = insuranceUrl ?: existing?.insuranceUrl,
+                        manualUrl = manualUrl ?: existing?.manualUrl
+                    )
+                )
             )
-            gloveboxDao.upsertGlovebox(GloveboxEntity.fromModel(updated))
         }
     }
 }

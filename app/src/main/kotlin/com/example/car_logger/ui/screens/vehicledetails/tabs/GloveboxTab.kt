@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,7 +23,6 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.OpenInNew
@@ -39,7 +37,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,12 +51,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.car_logger.data.model.Car
 import com.example.car_logger.data.model.Glovebox
-import com.example.car_logger.services.GoogleDriveService
-import com.example.car_logger.ui.theme.expressiveBounceClick
 import com.example.car_logger.services.OdometerSyncService
+import com.example.car_logger.ui.theme.expressiveBounceClick
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -67,7 +62,7 @@ import java.util.Locale
 fun GloveboxTab(
     car: Car,
     glovebox: Glovebox?,
-    googleDriveService: GoogleDriveService,
+    isDriveSignedIn: Boolean,
     isSyncingDrive: Boolean,
     onOpenFolderPicker: () -> Unit,
     onSyncDriveFolder: () -> Unit,
@@ -76,10 +71,8 @@ fun GloveboxTab(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val currentUser by googleDriveService.currentUser.collectAsStateWithLifecycle()
     var showEditOdometerDialog by remember { mutableStateOf(false) }
 
-    // File pickers
     val regPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let { onUpdateDocument(it.toString(), null, null) }
     }
@@ -91,38 +84,19 @@ fun GloveboxTab(
     }
 
     if (showEditOdometerDialog) {
-        var tempOdo by remember { mutableStateOf((car.odometer ?: 0).toString()) }
-        AlertDialog(
-            onDismissRequest = { showEditOdometerDialog = false },
-            title = { Text("Edit odometer") },
-            text = {
-                OutlinedTextField(
-                    value = tempOdo,
-                    onValueChange = { tempOdo = it },
-                    label = { Text("Odometer (miles)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+        EditOdometerDialog(
+            initialOdometer = car.odometer ?: 0,
+            onSave = {
+                onUpdateOdometer(it)
+                showEditOdometerDialog = false
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val num = tempOdo.toIntOrNull()
-                        if (num != null && num >= 0) {
-                            onUpdateOdometer(num)
-                            showEditOdometerDialog = false
-                        }
-                    }
-                ) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditOdometerDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { showEditOdometerDialog = false }
         )
+    }
+
+    val openDoc: (String?) -> Unit = { url ->
+        val uri = Uri.parse(url)
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) })
     }
 
     LazyColumn(
@@ -130,116 +104,16 @@ fun GloveboxTab(
         contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 40.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Vehicle Odometer Card
+        item { OdometerGloveboxCard(car = car, onEditClick = { showEditOdometerDialog = true }) }
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp)),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("Odometer", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            val odoFormatted = if (car.odometer != null) {
-                                "${NumberFormat.getNumberInstance(Locale.US).format(car.odometer)} miles"
-                            } else {
-                                "No mileage"
-                            }
-                            Text(odoFormatted, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            val syncRel = OdometerSyncService.formatRelativeTime(car.lastOdometerSyncTime)
-                            if (syncRel != null) {
-                                Text(
-                                    text = "Synced $syncRel",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                    IconButton(onClick = { showEditOdometerDialog = true }) {
-                        Icon(Icons.Filled.Edit, contentDescription = "Edit odometer")
-                    }
-                }
-            }
+            DriveSyncGloveboxCard(
+                car = car,
+                isDriveSignedIn = isDriveSignedIn,
+                isSyncingDrive = isSyncingDrive,
+                onOpenFolderPicker = onOpenFolderPicker,
+                onSyncDriveFolder = onSyncDriveFolder
+            )
         }
-
-        // Google Drive Sync Card (Per-Car)
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp)),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (currentUser != null) Icons.Filled.CloudDone else Icons.Filled.CloudOff,
-                            contentDescription = null,
-                            tint = if (currentUser != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("Google Drive sync", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    if (currentUser != null) {
-                        val folderLabel = car.driveFolderName ?: "No folder selected"
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Folder: $folderLabel",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilledTonalButton(onClick = onOpenFolderPicker) {
-                                Icon(Icons.Filled.DriveFileMove, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Choose folder")
-                            }
-                            if (!car.driveFolderId.isNullOrBlank()) {
-                                OutlinedButton(
-                                    onClick = onSyncDriveFolder,
-                                    enabled = !isSyncingDrive
-                                ) {
-                                    Text(if (isSyncingDrive) "Syncing..." else "Sync now")
-                                }
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = "Sign in to Google Drive in Settings to import receipts automatically.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
-        // Glovebox Documents Header
         item {
             Text(
                 text = "Vehicle documents",
@@ -248,60 +122,172 @@ fun GloveboxTab(
                 modifier = Modifier.padding(top = 8.dp)
             )
         }
-
-        // Registration Card
         item {
             DocumentCard(
                 title = "Vehicle registration",
                 icon = Icons.Filled.Description,
                 documentUri = glovebox?.registrationUrl,
                 onUploadClick = { regPicker.launch(arrayOf("application/pdf", "image/*")) },
-                onViewClick = {
-                    val uri = Uri.parse(glovebox!!.registrationUrl)
-                    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(intent)
-                }
+                onViewClick = { openDoc(glovebox?.registrationUrl) }
             )
         }
-
-        // Insurance Card
         item {
             DocumentCard(
                 title = "Insurance card",
                 icon = Icons.Filled.HealthAndSafety,
                 documentUri = glovebox?.insuranceUrl,
                 onUploadClick = { insPicker.launch(arrayOf("application/pdf", "image/*")) },
-                onViewClick = {
-                    val uri = Uri.parse(glovebox!!.insuranceUrl)
-                    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(intent)
-                }
+                onViewClick = { openDoc(glovebox?.insuranceUrl) }
             )
         }
-
-        // Owner's Manual Card
         item {
             DocumentCard(
                 title = "Owner's manual",
                 icon = Icons.Filled.MenuBook,
                 documentUri = glovebox?.manualUrl,
                 onUploadClick = { manPicker.launch(arrayOf("application/pdf")) },
-                onViewClick = {
-                    val uri = Uri.parse(glovebox!!.manualUrl)
-                    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(intent)
-                }
+                onViewClick = { openDoc(glovebox?.manualUrl) }
             )
         }
+        item { Spacer(modifier = Modifier.height(100.dp)) }
+    }
+}
 
-        item {
-            Spacer(modifier = Modifier.height(100.dp)) // Space for floating toolbar
+@Composable
+private fun EditOdometerDialog(
+    initialOdometer: Int,
+    onSave: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var tempOdo by remember { mutableStateOf(initialOdometer.toString()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit odometer") },
+        text = {
+            OutlinedTextField(
+                value = tempOdo,
+                onValueChange = { tempOdo = it },
+                label = { Text("Odometer (miles)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { tempOdo.toIntOrNull()?.takeIf { it >= 0 }?.let(onSave) }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun OdometerGloveboxCard(
+    car: Car,
+    onEditClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text("Odometer", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val odoFormatted = if (car.odometer != null) {
+                        "${NumberFormat.getNumberInstance(Locale.US).format(car.odometer)} miles"
+                    } else {
+                        "No mileage"
+                    }
+                    Text(odoFormatted, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    OdometerSyncService.formatRelativeTime(car.lastOdometerSyncTime)?.let { syncRel ->
+                        Text(
+                            text = "Synced $syncRel",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            IconButton(onClick = onEditClick) {
+                Icon(Icons.Filled.Edit, contentDescription = "Edit odometer")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DriveSyncGloveboxCard(
+    car: Car,
+    isDriveSignedIn: Boolean,
+    isSyncingDrive: Boolean,
+    onOpenFolderPicker: () -> Unit,
+    onSyncDriveFolder: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (isDriveSignedIn) Icons.Filled.CloudDone else Icons.Filled.CloudOff,
+                    contentDescription = null,
+                    tint = if (isDriveSignedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("Google Drive sync", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (isDriveSignedIn) {
+                Text(
+                    text = "Folder: ${car.driveFolderName ?: "No folder selected"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(onClick = onOpenFolderPicker) {
+                        Icon(Icons.Filled.DriveFileMove, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Choose folder")
+                    }
+                    if (!car.driveFolderId.isNullOrBlank()) {
+                        OutlinedButton(onClick = onSyncDriveFolder, enabled = !isSyncingDrive) {
+                            Text(if (isSyncingDrive) "Syncing..." else "Sync now")
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    text = "Sign in to Google Drive in Settings to import receipts automatically.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -312,12 +298,13 @@ fun DocumentCard(
     icon: ImageVector,
     documentUri: String?,
     onUploadClick: () -> Unit,
-    onViewClick: () -> Unit
+    onViewClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val isPresent = !documentUri.isNullOrBlank()
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
             .expressiveBounceClick(pressedScale = 0.98f),
