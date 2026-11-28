@@ -10,9 +10,6 @@
 -keep class com.google.api.services.drive.** { *; }
 -dontwarn com.google.api.client.**
 
-# Google Gen AI
--keep class com.google.ai.client.generativeai.** { *; }
-
 # Kotlinx Serialization
 -keepattributes *Annotation*,InnerClasses
 -dontnote kotlinx.serialization.SerializationKt

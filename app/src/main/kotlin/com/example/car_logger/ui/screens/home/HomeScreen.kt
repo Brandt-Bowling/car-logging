@@ -62,7 +62,6 @@ import com.example.car_logger.ui.components.VehicleCardBoundsRegistry
 import com.example.car_logger.ui.screens.home.tabs.ActivityTab
 import com.example.car_logger.ui.screens.home.tabs.GarageTab
 import com.example.car_logger.ui.screens.home.tabs.InsightsTab
-import com.example.car_logger.ui.screens.home.tabs.SettingsTab
 import com.example.car_logger.ui.theme.ExpressiveMotionTokens
 import com.example.car_logger.ui.theme.ExpressiveThemeTokens
 import kotlinx.coroutines.CancellationException
@@ -76,6 +75,7 @@ fun HomeScreen(
     onOpenAddRecordDialog: (String?) -> Unit,
     onOpenRecordDialog: (MaintenanceRecord) -> Unit,
     onOpenAttachmentViewer: (MaintenanceRecord) -> Unit,
+    settingsContent: @Composable () -> Unit,
     cardBoundsRegistry: VehicleCardBoundsRegistry? = null,
     modifier: Modifier = Modifier
 ) {
@@ -348,12 +348,7 @@ fun HomeScreen(
                             )
                         }
                         GarageNavigationTab.SETTINGS -> {
-                            SettingsTab(
-                                preferencesManager = viewModel.preferencesManager,
-                                googleDriveService = viewModel.googleDriveService,
-                                odometerSyncService = viewModel.odometerSyncService,
-                                cars = cars
-                            )
+                            settingsContent()
                         }
                     }
                 }

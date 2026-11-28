@@ -89,15 +89,15 @@ Before each task, read its **Global Constraints** and the matching **Task** sect
 
 For each item: follow the matching Task in the source plan, verify, then commit.
 
-- [ ] 4. **Task 11**: `PreferencesManager` → 4 stores in `data/local/prefs/` (facade keeps every `KEY_*`/`DEFAULT_*`).
-- [ ] 5. **Task 4**: `OdometerSyncService` → `TelemetryModels.kt` + `services/telemetry/*`; split
+- [x] 4. **Task 11**: `PreferencesManager` → 4 stores in `data/local/prefs/` (facade keeps every `KEY_*`/`DEFAULT_*`).
+- [x] 5. **Task 4**: `OdometerSyncService` → `TelemetryModels.kt` + `services/telemetry/*`; split
       `OdometerSyncServiceTest`. This is the largest task. Spread it over several commits: models first,
       then one collaborator at a time.
-- [ ] 6. **Task 7**: `InsightsCalculationEngine` → pure calculators; split `EvElectricityCostAnalysisTest`.
-- [ ] 7. **Task 13**: `GeminiAiService` → `services/ai/*`; remove the `generativeai` SDK (Gradle, version catalog, ProGuard).
-- [ ] 8. **Task 5**: `SettingsTab` → `ui/screens/home/tabs/settings/*` + `SettingsViewModel`.
-- [ ] 9. **Task 6**: `VehicleInsightsBentoGrid` → `components/bento/*`.
-- [ ] 10. **Task 8**: `EvElectricityCostCard` → `insights/electricity/*`.
+- [x] 6. **Task 7**: `InsightsCalculationEngine` → pure calculators; split `EvElectricityCostAnalysisTest`.
+- [x] 7. **Task 13**: `GeminiAiService` → `services/ai/*`; remove the `generativeai` SDK (Gradle, version catalog, ProGuard).
+- [x] 8. **Task 5**: `SettingsTab` → `ui/screens/home/tabs/settings/*` + `SettingsViewModel`.
+- [x] 9. **Task 6**: `VehicleInsightsBentoGrid` → `components/bento/*`.
+- [x] 10. **Task 8**: `EvElectricityCostCard` → `insights/electricity/*`.
 - [ ] 11. **Task 9**: `HomeViewModel` split + `MaintenanceRecordDialog` delete fix.
 - [ ] 12. **Task 10**: `ChargerUsageReviewSheet` / `UtilityBillReviewSheet` → `insights/review/*`.
 - [ ] 13. **Task 12**: `VehicleDetailsScreen` / ViewModel split + `DriveReceiptSyncUseCase`.

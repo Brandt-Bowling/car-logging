@@ -30,7 +30,9 @@ import com.example.car_logger.ui.screens.addcar.AddCarViewModel
 import com.example.car_logger.ui.screens.dialogs.MaintenanceRecordDialog
 import com.example.car_logger.ui.screens.home.HomeScreen
 import com.example.car_logger.ui.screens.home.HomeViewModel
+import com.example.car_logger.ui.screens.home.tabs.SettingsTab
 import com.example.car_logger.ui.screens.home.tabs.VehicleCard
+import com.example.car_logger.ui.screens.home.tabs.settings.SettingsViewModel
 import com.example.car_logger.ui.screens.vehicledetails.VehicleDetailsScreen
 import com.example.car_logger.ui.screens.vehicledetails.VehicleDetailsViewModel
 import com.example.car_logger.ui.theme.CarLoggerTheme
@@ -73,6 +75,9 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val coroutineScope = rememberCoroutineScope()
                     val cars by homeViewModel.cars.collectAsStateWithLifecycle()
+                    val settingsViewModel: SettingsViewModel = viewModel(
+                        factory = AppViewModelFactories.settings(appContainer)
+                    )
 
                     LaunchedEffect(homeViewModel) {
                         homeViewModel.toastMessage.collect { msg ->
@@ -112,6 +117,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onOpenAttachmentViewer = { record ->
                                     activeRecordForAttachment = record
+                                },
+                                settingsContent = {
+                                    SettingsTab(viewModel = settingsViewModel)
                                 },
                                 cardBoundsRegistry = boundsRegistry
                             )
