@@ -195,15 +195,15 @@ flowchart TD
   - `app/src/test/kotlin/com/example/car_logger/telemetry/SmartcarDcChargingSyncTest.kt`
 
 **Steps:**
-- [ ] Extract all public data classes and sealed result hierarchies (lines 60–223) into `services/TelemetryModels.kt` (keeping `package com.example.car_logger.services` so no callers break).
-- [ ] Extract JSON helpers, JWT parsers (`parseJwtClaims`, `extractJwtExpiryMs`, `extractJwtScopes`, `hasTeslaLocationScope`, `hasTeslaChargingHistoryScope`), flexible timestamp/duration parsers, `haversineMeters`, cooldown math, `formatRelativeTime`, `shouldRecordOdometerLog`, `resolveProviderForCar`, and `recordOdometerReading` into `services/telemetry/TelemetryJsonUtils.kt`.
-- [ ] Extract `TeslaAuthClient` and `SmartcarAuthClient` (OAuth URLs, credentials, code exchange, token refresh, authenticated HTTP helpers, error parsers).
-- [ ] Extract `TeslaOdometerSyncer` and `SmartcarOdometerSyncer`.
-- [ ] Extract `WallConnectorParser` and `WallConnectorSyncer`.
-- [ ] Extract `TeslaWorkChargingSyncer`, `TeslaSuperchargerSyncer`, `SmartcarDcChargingSyncer`, and `TelemetryStatusFormatters`.
-- [ ] Slim `OdometerSyncService.kt` down to a ~240-line facade composing the collaborators with the injected `OkHttpClient`, owning `isSyncing`/`lastSyncMessage`, and keeping delegating `companion object` helpers for backwards compatibility.
-- [ ] Split `OdometerSyncServiceTest.kt` into `TelemetryTestFixtures.kt` + 7 domain test files with zero dropped test cases.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug` and check every new telemetry file is < 400 lines.
+- [x] Extract all public data classes and sealed result hierarchies (lines 60–223) into `services/TelemetryModels.kt` (keeping `package com.example.car_logger.services` so no callers break).
+- [x] Extract JSON helpers, JWT parsers (`parseJwtClaims`, `extractJwtExpiryMs`, `extractJwtScopes`, `hasTeslaLocationScope`, `hasTeslaChargingHistoryScope`), flexible timestamp/duration parsers, `haversineMeters`, cooldown math, `formatRelativeTime`, `shouldRecordOdometerLog`, `resolveProviderForCar`, and `recordOdometerReading` into `services/telemetry/TelemetryJsonUtils.kt`.
+- [x] Extract `TeslaAuthClient` and `SmartcarAuthClient` (OAuth URLs, credentials, code exchange, token refresh, authenticated HTTP helpers, error parsers).
+- [x] Extract `TeslaOdometerSyncer` and `SmartcarOdometerSyncer`.
+- [x] Extract `WallConnectorParser` and `WallConnectorSyncer`.
+- [x] Extract `TeslaWorkChargingSyncer`, `TeslaSuperchargerSyncer`, `SmartcarDcChargingSyncer`, and `TelemetryStatusFormatters`.
+- [x] Slim `OdometerSyncService.kt` down to a ~240-line facade composing the collaborators with the injected `OkHttpClient`, owning `isSyncing`/`lastSyncMessage`, and keeping delegating `companion object` helpers for backwards compatibility.
+- [x] Split `OdometerSyncServiceTest.kt` into `TelemetryTestFixtures.kt` + 7 domain test files with zero dropped test cases.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug` and check every new telemetry file is < 400 lines.
 
 ---
 
@@ -228,14 +228,14 @@ flowchart TD
 - Create: `app/src/test/kotlin/com/example/car_logger/SettingsViewModelTest.kt`
 
 **Steps:**
-- [ ] Extract formatting helpers into `SettingsSyncFormatters.kt` and update imports in `SettingsSyncFormattingTest.kt`.
-- [ ] Create immutable `SettingsUiState` (sub-states per section + sealed `SettingsDialogState` replacing 11 dialog booleans) and `SettingsViewModel` (injecting `preferencesManager`, `googleDriveService`, `odometerSyncService`, `syncSchedulerController` — zero `Context` held).
-- [ ] Extract shared UI primitives (`SettingsSectionHeader`, `SettingsGroupCard`, `SettingsRowItem`, `SettingsItemDivider`, `DashboardLinkButton`, `WallConnectorAssignmentTile`) and a reusable `SettingsTimePickerDialog` into `SettingsCommonComponents.kt` (removing duplicated `VibrantTimePickerDialog` code).
-- [ ] Extract credential dialogs into `SettingsCredentialDialogs.kt` and wake/scope/time-picker dialogs into `SettingsSyncDialogs.kt`.
-- [ ] Extract the 5 stateless section composable files (`VehicleSyncSettingsSection`, `HomeChargingSettingsSection`, `WorkChargingSettingsSection`, `PublicChargingSettingsSection`, `GeneralBackupApiSettingsSections`).
-- [ ] Rewrite `SettingsTab.kt` (~190 lines) to collect `SettingsViewModel.uiState` with `collectAsStateWithLifecycle()`, replace `DisposableEffect` + `LifecycleEventObserver` with `LifecycleResumeEffect`, host the Google Sign-In & OAuth browser launchers, render sections in `LazyColumn`, and render the active `SettingsDialogState`.
-- [ ] Add `SettingsViewModelTest.kt` covering preference updates, WorkManager scheduler delegation, and state production.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug`.
+- [x] Extract formatting helpers into `SettingsSyncFormatters.kt` and update imports in `SettingsSyncFormattingTest.kt`.
+- [x] Create immutable `SettingsUiState` (sub-states per section + sealed `SettingsDialogState` replacing 11 dialog booleans) and `SettingsViewModel` (injecting `preferencesManager`, `googleDriveService`, `odometerSyncService`, `syncSchedulerController` — zero `Context` held).
+- [x] Extract shared UI primitives (`SettingsSectionHeader`, `SettingsGroupCard`, `SettingsRowItem`, `SettingsItemDivider`, `DashboardLinkButton`, `WallConnectorAssignmentTile`) and a reusable `SettingsTimePickerDialog` into `SettingsCommonComponents.kt` (removing duplicated `VibrantTimePickerDialog` code).
+- [x] Extract credential dialogs into `SettingsCredentialDialogs.kt` and wake/scope/time-picker dialogs into `SettingsSyncDialogs.kt`.
+- [x] Extract the 5 stateless section composable files (`VehicleSyncSettingsSection`, `HomeChargingSettingsSection`, `WorkChargingSettingsSection`, `PublicChargingSettingsSection`, `GeneralBackupApiSettingsSections`).
+- [x] Rewrite `SettingsTab.kt` (~190 lines) to collect `SettingsViewModel.uiState` with `collectAsStateWithLifecycle()`, replace `DisposableEffect` + `LifecycleEventObserver` with `LifecycleResumeEffect`, host the Google Sign-In & OAuth browser launchers, render sections in `LazyColumn`, and render the active `SettingsDialogState`.
+- [x] Add `SettingsViewModelTest.kt` covering preference updates, WorkManager scheduler delegation, and state production.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug`.
 
 ---
 
@@ -250,10 +250,10 @@ flowchart TD
 - Modify: `app/src/main/kotlin/com/example/car_logger/ui/screens/vehicledetails/components/VehicleInsightsBentoGrid.kt` (1,462 → ~170 lines)
 
 **Steps:**
-- [ ] Extract `InDrawerPeriodConnectedToggle` and shared styling helpers into `BentoSharedControls.kt`.
-- [ ] Co-locate each bento tile with its drawer composable (`DrivingPaceBento`, `EvEfficiencyBento`, `SavedVsGasBento`, `TrueCostPerMileBento`), consuming `ExpressiveThemeTokens` for savings colors.
-- [ ] Slim `VehicleInsightsBentoGrid.kt` to the 2×2 grid + docked `AnimatedVisibility` / `AnimatedContent` drawer shell.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug`.
+- [x] Extract `InDrawerPeriodConnectedToggle` and shared styling helpers into `BentoSharedControls.kt`.
+- [x] Co-locate each bento tile with its drawer composable (`DrivingPaceBento`, `EvEfficiencyBento`, `SavedVsGasBento`, `TrueCostPerMileBento`), consuming `ExpressiveThemeTokens` for savings colors.
+- [x] Slim `VehicleInsightsBentoGrid.kt` to the 2×2 grid + docked `AnimatedVisibility` / `AnimatedContent` drawer shell.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug`.
 
 ---
 
@@ -272,13 +272,13 @@ flowchart TD
   - `app/src/test/kotlin/com/example/car_logger/insights/MultiVenueChargingAndSavingsTest.kt`
 
 **Steps:**
-- [ ] Extract `DateInterval`, `generateIntervals`, `formatObservationWindowText`, `normalizeSegmentBounds`, and `calculateMilesInWindow` into `InsightsDateIntervals.kt`.
-- [ ] Extract ADR 0001 bill matching (`ResolvedBillRate`, `resolveRateForTimestamp`, `buildHomeRateSourceLabel`) into `UtilityRateResolver.kt`.
-- [ ] Extract ADR 0002 & 3-venue cost calculation into `ElectricityCostCalculator.kt`, breaking the 520-line `computeElectricityCost` body into clean private sub-functions (`computeSharedAttributionWeights`, `sliceSummarySession`, `sliceSingleSession`, `aggregateVenueMetrics`, `combineVenueTotals`).
-- [ ] Extract `computeNetFuelSavings` into `FuelSavingsCalculator.kt`.
-- [ ] Slim `InsightsCalculationEngine.kt` to ~260 lines while preserving exact `computeUiState(...)` and `formatObservationWindowText(...)` public APIs.
-- [ ] Split `EvElectricityCostAnalysisTest.kt` into the 3 domain suites + shared fixtures with zero dropped assertions.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug`.
+- [x] Extract `DateInterval`, `generateIntervals`, `formatObservationWindowText`, `normalizeSegmentBounds`, and `calculateMilesInWindow` into `InsightsDateIntervals.kt`.
+- [x] Extract ADR 0001 bill matching (`ResolvedBillRate`, `resolveRateForTimestamp`, `buildHomeRateSourceLabel`) into `UtilityRateResolver.kt`.
+- [x] Extract ADR 0002 & 3-venue cost calculation into `ElectricityCostCalculator.kt`, breaking the 520-line `computeElectricityCost` body into clean private sub-functions (`computeSharedAttributionWeights`, `sliceSummarySession`, `sliceSingleSession`, `aggregateVenueMetrics`, `combineVenueTotals`).
+- [x] Extract `computeNetFuelSavings` into `FuelSavingsCalculator.kt`.
+- [x] Slim `InsightsCalculationEngine.kt` to ~260 lines while preserving exact `computeUiState(...)` and `formatObservationWindowText(...)` public APIs.
+- [x] Split `EvElectricityCostAnalysisTest.kt` into the 3 domain suites + shared fixtures with zero dropped assertions.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug`.
 
 ---
 
@@ -292,12 +292,12 @@ flowchart TD
 - Modify: `app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/EvElectricityCostCard.kt` (1,187 → ~190 lines)
 
 **Steps:**
-- [ ] Extract `VenueConnectedButtonGroup` into `VenueSegmentedSelector.kt`.
-- [ ] Extract `EmptyVenueState`, `PopulatedVenueContent`, `VehicleElectricitySubCard`, and `formatKwh` into `ElectricityVenueContent.kt` (split `EmptyVenueState` out if file exceeds ~380 lines).
-- [ ] Extract `RateChipsRow` + plain state holder `InlineRateEditorState` into `InlineRateEditorRow.kt`.
-- [ ] Extract `ExpressiveChargingSplitButton` into `ExpressiveChargingSplitButton.kt`.
-- [ ] Slim `EvElectricityCostCard.kt` to the card header, parsing progress banner, animated venue switcher, and split button wiring.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug`.
+- [x] Extract `VenueConnectedButtonGroup` into `VenueSegmentedSelector.kt`.
+- [x] Extract `EmptyVenueState`, `PopulatedVenueContent`, `VehicleElectricitySubCard`, and `formatKwh` into `ElectricityVenueContent.kt` (split `EmptyVenueState` out if file exceeds ~380 lines).
+- [x] Extract `RateChipsRow` + plain state holder `InlineRateEditorState` into `InlineRateEditorRow.kt`.
+- [x] Extract `ExpressiveChargingSplitButton` into `ExpressiveChargingSplitButton.kt`.
+- [x] Slim `EvElectricityCostCard.kt` to the card header, parsing progress banner, animated venue switcher, and split button wiring.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug`.
 
 ---
 
@@ -352,9 +352,9 @@ flowchart TD
 - Modify: `app/src/main/kotlin/com/example/car_logger/data/local/PreferencesManager.kt` (790 → ~200 lines facade)
 
 **Steps:**
-- [ ] Split preferences into the 4 cohesive stores sharing the single `DataStore<Preferences>` instance with **identical** key strings and defaults.
-- [ ] Keep `PreferencesManager` as a delegating facade preserving every existing public flow, suspend getter/setter, and `Companion` constant so all callers and `PreferencesManagerDailyPollTest` continue passing unchanged.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug`.
+- [x] Split preferences into the 4 cohesive stores sharing the single `DataStore<Preferences>` instance with **identical** key strings and defaults.
+- [x] Keep `PreferencesManager` as a delegating facade preserving every existing public flow, suspend getter/setter, and `Companion` constant so all callers and `PreferencesManagerDailyPollTest` continue passing unchanged.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug`.
 
 ---
 
@@ -391,13 +391,13 @@ flowchart TD
 - Create: `app/src/test/kotlin/com/example/car_logger/ReceiptParserServiceTest.kt`
 
 **Steps:**
-- [ ] Extract shared OkHttp REST transport (`executeMultimodalJsonRequest`, `executeImageRequest`, error parsing) into `GeminiHttpClient.kt`.
-- [ ] Extract `ReceiptParserService.kt`, migrating `parseWithGemini` from `com.google.ai.client.generativeai.GenerativeModel` + `BitmapFactory` onto `GeminiHttpClient.executeMultimodalJsonRequest` with `inlineData` (supporting both image and PDF receipts cleanly), plus pure `parseReceiptJsonResponse`.
-- [ ] Extract `VehicleImageGeneratorService.kt` and `ElectricityAiParserService.kt`.
-- [ ] Slim `GeminiAiService.kt` down to a ~130-line delegating facade preserving all existing public/`internal` methods used by tests.
-- [ ] Remove `implementation(libs.google.generativeai)` from `app/build.gradle.kts`, `googleGenerativeAi` & `google-generativeai` from `gradle/libs.versions.toml`, and `-keep class com.google.ai.client.generativeai.** { *; }` from `app/proguard-rules.pro`.
-- [ ] Add `ReceiptParserServiceTest.kt` testing REST JSON parsing, markdown fence stripping, and filename fallback.
-- [ ] Verify: `./gradlew testDebugUnitTest assembleDebug` and `rg -n "generativeai" app/ gradle/` returns zero matches.
+- [x] Extract shared OkHttp REST transport (`executeMultimodalJsonRequest`, `executeImageRequest`, error parsing) into `GeminiHttpClient.kt`.
+- [x] Extract `ReceiptParserService.kt`, migrating `parseWithGemini` from `com.google.ai.client.generativeai.GenerativeModel` + `BitmapFactory` onto `GeminiHttpClient.executeMultimodalJsonRequest` with `inlineData` (supporting both image and PDF receipts cleanly), plus pure `parseReceiptJsonResponse`.
+- [x] Extract `VehicleImageGeneratorService.kt` and `ElectricityAiParserService.kt`.
+- [x] Slim `GeminiAiService.kt` down to a ~130-line delegating facade preserving all existing public/`internal` methods used by tests.
+- [x] Remove `implementation(libs.google.generativeai)` from `app/build.gradle.kts`, `googleGenerativeAi` & `google-generativeai` from `gradle/libs.versions.toml`, and `-keep class com.google.ai.client.generativeai.** { *; }` from `app/proguard-rules.pro`.
+- [x] Add `ReceiptParserServiceTest.kt` testing REST JSON parsing, markdown fence stripping, and filename fallback.
+- [x] Verify: `./gradlew testDebugUnitTest assembleDebug` and `rg -n "generativeai" app/ gradle/` returns zero matches.
 
 ---
 
