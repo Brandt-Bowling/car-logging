@@ -6,3 +6,10 @@ plugins {
     alias(libs.plugins.google.services) apply false
     alias(libs.plugins.firebase.crashlytics) apply false
 }
+
+tasks.register<Exec>("checkArchitectureGates") {
+    group = "verification"
+    description = "Enforces file-size ceilings, composable length caps, and architecture invariants."
+    workingDir = rootDir
+    commandLine("bash", "scripts/check_architecture_gates.sh")
+}
