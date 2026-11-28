@@ -35,7 +35,9 @@ import com.example.car_logger.ui.components.VehicleSubView
 import com.example.car_logger.ui.screens.addcar.AddCarViewModel
 import com.example.car_logger.ui.screens.home.HomeViewModel
 import com.example.car_logger.ui.screens.vehicledetails.VehicleDetailsViewModel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -235,6 +237,60 @@ class ViewModelUdfStateTest {
     }
 
     @Test
+    fun homeViewModelDeleteMaintenanceRecordRemovesRecordAndEmitsToast() = runTest {
+        val prefs = createPrefs("home_delete_rec")
+        val carDao = MutableCarDao()
+        val recordDao = MutableRecordDao()
+        val odometerLogDao = NoOpOdometerLogDao()
+        val chargingSessionDao = NoOpChargingSessionDao()
+        val uriContentReader = NoOpUriContentReader()
+
+        recordDao.recordsFlow.value = listOf(
+            MaintenanceRecordEntity(
+                id = "rec-1",
+                carId = "car-1",
+                title = "Cabin Air Filter",
+                date = "2026-02-14",
+                odometer = 12_000
+            )
+        )
+
+        val vm = registerInStore("home_delete_rec", HomeViewModel::class.java) {
+            HomeViewModel(
+                carDao = carDao,
+                recordDao = recordDao,
+                tireDao = NoOpTireDao(),
+                odometerLogDao = odometerLogDao,
+                utilityBillDao = NoOpUtilityBillDao(),
+                chargingSessionDao = chargingSessionDao,
+                preferencesManager = prefs,
+                googleDriveService = GoogleDriveService(initialUser = null),
+                odometerSyncService = OdometerSyncService(prefs, carDao, odometerLogDao, chargingSessionDao),
+                vehicleImageRepository = VehicleImageRepository(
+                    imagesDir = tempFolder.newFolder("home_delete_images"),
+                    uriContentReader = uriContentReader,
+                    carDao = carDao
+                ),
+                geminiAiService = GeminiAiService(prefs),
+                uriContentReader = uriContentReader
+            )
+        }
+
+        val toastDeferred = CompletableDeferred<String>()
+        val collectorJob = backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            toastDeferred.complete(vm.toastMessage.first())
+        }
+
+        vm.deleteMaintenanceRecord("rec-1")
+
+        val toast = withTimeout(5_000) { toastDeferred.await() }
+        collectorJob.cancel()
+        assertEquals("Deleted maintenance record", toast)
+        assertEquals(listOf("rec-1"), recordDao.deletedIds)
+        assertTrue(recordDao.recordsFlow.value.isEmpty())
+    }
+
+    @Test
     fun vehicleDetailsViewModelEncapsulatedFlowsFilterRecordsAndUpdateSubView() = runTest {
         val prefs = createPrefs("details_udf")
         val carDao = MutableCarDao()
@@ -337,6 +393,7 @@ class ViewModelUdfStateTest {
 
     private class MutableRecordDao : MaintenanceRecordDao {
         val recordsFlow = MutableStateFlow<List<MaintenanceRecordEntity>>(emptyList())
+        val deletedIds = mutableListOf<String>()
         override fun getAllRecords(): Flow<List<MaintenanceRecordEntity>> = recordsFlow
         override suspend fun getAllRecordsList(): List<MaintenanceRecordEntity> = recordsFlow.value
         override fun getRecordsForCar(carId: String): Flow<List<MaintenanceRecordEntity>> = recordsFlow
@@ -347,7 +404,10 @@ class ViewModelUdfStateTest {
         override suspend fun insertRecords(records: List<MaintenanceRecordEntity>) = Unit
         override suspend fun updateRecord(record: MaintenanceRecordEntity) = Unit
         override suspend fun deleteRecord(record: MaintenanceRecordEntity) = Unit
-        override suspend fun deleteRecordById(id: String) = Unit
+        override suspend fun deleteRecordById(id: String) {
+            deletedIds.add(id)
+            recordsFlow.value = recordsFlow.value.filterNot { it.id == id }
+        }
         override suspend fun deleteRecordsForCar(carId: String) = Unit
     }
 

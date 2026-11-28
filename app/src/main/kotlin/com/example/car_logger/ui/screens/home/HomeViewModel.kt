@@ -317,6 +317,13 @@ class HomeViewModel(
         }
     }
 
+    fun deleteMaintenanceRecord(recordId: String) {
+        viewModelScope.launch {
+            recordDao.deleteRecordById(recordId)
+            _toastMessage.emit("Deleted maintenance record")
+        }
+    }
+
     fun syncCarOdometer(car: Car, forceWake: Boolean = false) = telemetryController.syncCarOdometer(car, forceWake)
     fun syncWallConnectorCharging() = telemetryController.syncWallConnectorCharging()
     fun syncWorkCharging() = telemetryController.syncWorkCharging()
