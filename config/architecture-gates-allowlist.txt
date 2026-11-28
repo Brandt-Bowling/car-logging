@@ -1,0 +1,40 @@
+# Architecture Gates Legacy Ratchet Allowlist
+#
+# Every newly added or refactored file must satisfy:
+#   - Production Kotlin file <= 450 lines (soft warning > 350 lines)
+#   - Test Kotlin file <= 650 lines
+#   - @Composable function <= 120 lines
+#
+# Entries below are exact line-count watermarks for untouched legacy files and
+# composables. They are permitted to shrink, never grow (+1 line fails CI).
+
+# Legacy production files > 450 lines
+app/src/main/kotlin/com/example/car_logger/services/ElectricityImportParser.kt=477
+app/src/main/kotlin/com/example/car_logger/ui/components/VehicleContainerTransformHost.kt=648
+app/src/main/kotlin/com/example/car_logger/ui/screens/dialogs/VehiclePhotoCustomizerSheet.kt=534
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/GarageTab.kt=581
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/DrivingActivityCard.kt=541
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/ManageElectricityDataSheet.kt=547
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/PeriodChargingLogsSheet.kt=650
+
+# Legacy @Composable functions > 120 lines
+app/src/main/kotlin/com/example/car_logger/ui/components/DriveAttachmentViewerSheet.kt::DriveAttachmentViewerSheet=160
+app/src/main/kotlin/com/example/car_logger/ui/components/FloatingToolbar.kt::VehicleFloatingToolbar=138
+app/src/main/kotlin/com/example/car_logger/ui/components/VehicleContainerTransformHost.kt::VehicleContainerTransformHost=480
+app/src/main/kotlin/com/example/car_logger/ui/screens/addcar/AddCarModalSheet.kt::AddCarModalSheet=345
+app/src/main/kotlin/com/example/car_logger/ui/screens/dialogs/MaintenanceRecordDialog.kt::MaintenanceRecordDialog=177
+app/src/main/kotlin/com/example/car_logger/ui/screens/dialogs/VehiclePhotoCustomizerSheet.kt::VehiclePhotoCustomizerSheet=460
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/ActivityTab.kt::ActivityTab=135
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/GarageTab.kt::GarageTab=156
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/GarageTab.kt::VehicleCard=345
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/DrivingActivityCard.kt::DrivingActivityCard=481
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/EditGasComparisonSheet.kt::EditGasComparisonSheet=157
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/FleetShareCard.kt::FleetShareCard=231
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/GasComparisonCard.kt::GasComparisonCard=317
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/ManageElectricityDataSheet.kt::ManageElectricityDataSheet=444
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/PeriodChargingLogsSheet.kt::PeriodChargingLogsSheet=413
+app/src/main/kotlin/com/example/car_logger/ui/screens/home/tabs/insights/PeriodChargingLogsSheet.kt::PeriodChargingLogRow=129
+app/src/main/kotlin/com/example/car_logger/ui/screens/vehicledetails/components/VehicleCostHistoryCard.kt::VehicleCostHistoryCard=298
+app/src/main/kotlin/com/example/car_logger/ui/screens/vehicledetails/components/VehicleHeroCard.kt::VehicleHeroCard=285
+app/src/main/kotlin/com/example/car_logger/ui/screens/vehicledetails/components/VehicleTireHealthCard.kt::VehicleTireHealthCard=301
+app/src/main/kotlin/com/example/car_logger/ui/screens/vehicledetails/tabs/VehicleOverviewTab.kt::VehicleOverviewTab=266

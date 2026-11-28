@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Built-in Jetpack Compose & Lifecycle rules -->
+    <issue id="FlowOperatorInvokedInComposition" severity="error" />
+    <issue id="StateFlowValueCalledInComposition" severity="error" />
+    <issue id="CoroutineCreationDuringComposition" severity="error" />
+    <issue id="UnrememberedMutableState" severity="error" />
+    <issue id="RememberReturnType" severity="error" />
+    <issue id="ProduceStateDoesNotAssignValue" severity="error" />
+    <issue id="MutableCollectionMutableState" severity="error" />
+    <issue id="UnusedMaterial3ScaffoldPaddingParameter" severity="error" />
+
+    <!-- Slack Compose Lint Checks (com.slack.lint.compose:compose-lint-checks) -->
+    <issue id="ComposeViewModelForwarding" severity="error" />
+    <issue id="ComposeViewModelInjection" severity="error" />
+    <issue id="ComposeMultipleContentEmitters" severity="error" />
+    <issue id="ComposeMutableParameters" severity="error" />
+    <issue id="ComposeModifierMissing" severity="error" />
+    <issue id="ComposeModifierReused" severity="error" />
+    <issue id="ComposeParameterOrder" severity="error" />
+    <issue id="ComposeNaming" severity="error" />
+    <issue id="ComposePreviewPublic" severity="error" />
+    <issue id="ComposeM2Api" severity="error" />
+</lint>

@@ -102,14 +102,14 @@ For each item: follow the matching Task in the source plan, verify, then commit.
 - [x] 12. **Task 10**: `ChargerUsageReviewSheet` / `UtilityBillReviewSheet` → `insights/review/*`.
 - [x] 13. **Task 12**: `VehicleDetailsScreen` / ViewModel split + `DriveReceiptSyncUseCase`.
 - [x] 14. **Task 14**: `InsightsTab` + `InsightsActions` + previews.
-- [ ] 15. **Task 15**: `scripts/check_architecture_gates.sh` + `checkArchitectureGates` Gradle task
+- [x] 15. **Task 15**: `scripts/check_architecture_gates.sh` + `checkArchitectureGates` Gradle task
       (includes the 120-line `@Composable` cap).
-- [ ] 16. **Task 16**: Lint hardening + Slack `compose-lint-checks`.
-- [ ] 17. **Task 17**: CI (`testDebugUnitTest lintDebug checkArchitectureGates`) + `AGENTS.md` guardrails.
+- [x] 16. **Task 16**: Lint hardening + Slack `compose-lint-checks`.
+- [x] 17. **Task 17**: CI (`testDebugUnitTest lintDebug checkArchitectureGates`) + `AGENTS.md` guardrails.
       **Detekt was dropped (2026-11-26) as redundant with Tasks 15/16. Do not add it.**
 - Advisory: `HomeViewModel` (12 deps) and `VehicleDetailsViewModel` (13) have long constructors. Consider
   grouping their DAOs during Tasks 9/12 (guidance only, not enforced).
 
 ### 18. Final
 
-- [ ] Run the source plan's **Final Verification Checklist**, then open a PR (`gh pr create`) for user review.
+- [x] Run the source plan's **Final Verification Checklist**, then open a PR (`gh pr create`) for user review.

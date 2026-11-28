@@ -87,6 +87,11 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 
+    lint {
+        abortOnError = true
+        lintConfig = file("lint.xml")
+    }
+
     packaging {
         resources {
             excludes += listOf(
@@ -165,4 +170,7 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+
+    // Compose Lint
+    lintChecks(libs.compose.lint.checks)
 }

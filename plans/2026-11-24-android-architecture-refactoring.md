@@ -440,10 +440,10 @@ To ensure new features cannot grow back into 1,000+ line files or reintroduce ar
 9. **Composable length cap**: Fail if any `@Composable` function under `app/src/main/kotlin/` exceeds **120 lines** (legacy offenders recorded as non-growing watermarks in the allowlist).
 
 **Steps:**
-- [ ] Write `scripts/check_architecture_gates.sh` (POSIX/Bash, `chmod +x`, prints clear file path + line count + remediation guidance on failure).
-- [ ] Add `config/architecture-gates-allowlist.txt` supporting per-file max-line ratchet entries (`path/to/File.kt=MAX_LINES`) for any untouched 450–650 line legacy files so they can never grow by even 1 line while every new/refactored file adheres strictly to `<= 450` lines.
-- [ ] Register `tasks.register<Exec>("checkArchitectureGates")` in root `build.gradle.kts`.
-- [ ] Verify: `./gradlew checkArchitectureGates`.
+- [x] Write `scripts/check_architecture_gates.sh` (POSIX/Bash, `chmod +x`, prints clear file path + line count + remediation guidance on failure).
+- [x] Add `config/architecture-gates-allowlist.txt` supporting per-file max-line ratchet entries (`path/to/File.kt=MAX_LINES`) for any untouched 450–650 line legacy files so they can never grow by even 1 line while every new/refactored file adheres strictly to `<= 450` lines.
+- [x] Register `tasks.register<Exec>("checkArchitectureGates")` in root `build.gradle.kts`.
+- [x] Verify: `./gradlew checkArchitectureGates`.
 
 ---
 
@@ -474,11 +474,11 @@ Android Lint already runs on every PR in `.github/workflows/ci.yml` (`./gradlew 
   - `ComposeM2Api` (prevents accidentally importing Material 2 instead of Material 3)
 
 **Steps:**
-- [ ] Add `com.slack.lint.compose:compose-lint-checks:1.6.1` to `gradle/libs.versions.toml` and `lintChecks(...)` in `app/build.gradle.kts`.
-- [ ] Add `android { lint { abortOnError = true; lintConfig = file("lint.xml"); baseline = file("lint-baseline.xml") /* only if needed for unrelated legacy warnings */ } }` in `app/build.gradle.kts`.
-- [ ] Create `app/lint.xml` enforcing the Compose & Lifecycle rules above as `error`.
-- [ ] Fix any newly surfaced Compose lint errors across the refactored files (avoid suppressing unless genuinely justified).
-- [ ] Verify: `./gradlew lintDebug`.
+- [x] Add `com.slack.lint.compose:compose-lint-checks:1.6.1` to `gradle/libs.versions.toml` and `lintChecks(...)` in `app/build.gradle.kts`.
+- [x] Add `android { lint { abortOnError = true; lintConfig = file("lint.xml"); baseline = file("lint-baseline.xml") /* only if needed for unrelated legacy warnings */ } }` in `app/build.gradle.kts`.
+- [x] Create `app/lint.xml` enforcing the Compose & Lifecycle rules above as `error`.
+- [x] Fix any newly surfaced Compose lint errors across the refactored files (avoid suppressing unless genuinely justified).
+- [x] Verify: `./gradlew lintDebug`.
 
 ---
 
@@ -491,40 +491,40 @@ Android Lint already runs on every PR in `.github/workflows/ci.yml` (`./gradlew 
 - Modify: `AGENTS.md`
 
 **Steps:**
-- [ ] Update `.github/workflows/ci.yml` step `Run Unit Tests and Lint` to run:
+- [x] Update `.github/workflows/ci.yml` step `Run Unit Tests and Lint` to run:
   ```bash
   ./gradlew testDebugUnitTest lintDebug checkArchitectureGates
   ```
-- [ ] Update `AGENTS.md` with a concise **Modularity & Architecture Guardrails** section documenting:
+- [x] Update `AGENTS.md` with a concise **Modularity & Architecture Guardrails** section documenting:
   - Enforced limits (`checkArchitectureGates`): `<= 450` lines/file production, `<= 650` lines/file tests, `<= 120` lines per `@Composable`.
   - Guidance (reviewed, not enforced): `<= 60` lines per logic function, `<= 7` params before grouping into an `@Immutable` state/actions class, nesting depth `<= 4`.
   - Architecture rules: inject via `AppContainer` (no `AndroidViewModel`, no ad-hoc `OkHttpClient.Builder()`), expose immutable `StateFlow`s, always use `collectAsStateWithLifecycle()`, place pure math in `data/` or domain calculators, and keep theme colors in `ExpressiveThemeTokens`.
   - Required pre-PR verification command: `./gradlew testDebugUnitTest lintDebug checkArchitectureGates assembleDebug`.
-- [ ] Verify: `./gradlew testDebugUnitTest lintDebug checkArchitectureGates assembleDebug`.
+- [x] Verify: `./gradlew testDebugUnitTest lintDebug checkArchitectureGates assembleDebug`.
 
 ---
 
 ## Final Verification Checklist
 
-- [ ] Full verification suite passes cleanly:
+- [x] Full verification suite passes cleanly:
   ```bash
   ./gradlew testDebugUnitTest lintDebug checkArchitectureGates assembleDebug
   ```
-- [ ] File-size audit confirms every refactored production `.kt` file is `<= 450` lines:
+- [x] File-size audit confirms every refactored production `.kt` file is `<= 450` lines:
   ```bash
   find app/src/main/kotlin -name '*.kt' -exec wc -l {} + | sort -rn | head -n 20
   ```
-- [ ] Zero lifecycle-unaware `collectAsState(` usages:
+- [x] Zero lifecycle-unaware `collectAsState(` usages:
   ```bash
   rg -n "collectAsState\(" app/src/main/kotlin
   ```
-- [ ] Zero `AndroidViewModel` usages:
+- [x] Zero `AndroidViewModel` usages:
   ```bash
   rg -n "AndroidViewModel" app/src/main/kotlin
   ```
-- [ ] Zero `generativeai` references:
+- [x] Zero `generativeai` references:
   ```bash
   rg -n "generativeai" app/ gradle/
   ```
-- [ ] `git branch --show-current` confirms changes are on `refactor/android-architecture-modularization` and `main` is completely unmodified (`git diff main..HEAD --stat`).
+- [x] `git branch --show-current` confirms changes are on `refactor/android-architecture-modularization` and `main` is completely unmodified (`git diff main..HEAD --stat`). *(Stacked across `refactor/android-architecture-modularization` -> `refactor/phase-1b-modularization` -> `refactor/phase-2-second-tier` -> `refactor/phase-3-gates` with `main` untouched.)*
 - [ ] Manual smoke verification on device/emulator (Light & Dark themes): Garage & predictive back transform, Vehicle Details Bento tiles/drawers & all 6 dialogs, Maintenance record edit & delete persistence, Drive folder sync (images + PDFs), Insights 3-venue card + bill/charger review sheets, Settings all 8 sections + time pickers + OAuth deep-link callback.
