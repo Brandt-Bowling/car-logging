@@ -98,10 +98,10 @@ For each item: follow the matching Task in the source plan, verify, then commit.
 - [x] 8. **Task 5**: `SettingsTab` → `ui/screens/home/tabs/settings/*` + `SettingsViewModel`.
 - [x] 9. **Task 6**: `VehicleInsightsBentoGrid` → `components/bento/*`.
 - [x] 10. **Task 8**: `EvElectricityCostCard` → `insights/electricity/*`.
-- [ ] 11. **Task 9**: `HomeViewModel` split + `MaintenanceRecordDialog` delete fix.
-- [ ] 12. **Task 10**: `ChargerUsageReviewSheet` / `UtilityBillReviewSheet` → `insights/review/*`.
-- [ ] 13. **Task 12**: `VehicleDetailsScreen` / ViewModel split + `DriveReceiptSyncUseCase`.
-- [ ] 14. **Task 14**: `InsightsTab` + `InsightsActions` + previews.
+- [x] 11. **Task 9**: `HomeViewModel` split + `MaintenanceRecordDialog` delete fix.
+- [x] 12. **Task 10**: `ChargerUsageReviewSheet` / `UtilityBillReviewSheet` → `insights/review/*`.
+- [x] 13. **Task 12**: `VehicleDetailsScreen` / ViewModel split + `DriveReceiptSyncUseCase`.
+- [x] 14. **Task 14**: `InsightsTab` + `InsightsActions` + previews.
 - [ ] 15. **Task 15**: `scripts/check_architecture_gates.sh` + `checkArchitectureGates` Gradle task
       (includes the 120-line `@Composable` cap).
 - [ ] 16. **Task 16**: Lint hardening + Slack `compose-lint-checks`.
